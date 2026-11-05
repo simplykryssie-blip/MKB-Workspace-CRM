@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { FileText, Lock, UploadCloud } from "lucide-react";
+import { AddressFields, DOBInput, EINInput, EmailInput, PhoneInput, TaxIdInput } from "@/components/ui/FormattedInputs";
+import { dobToIso, maskDOB, maskEIN, maskTaxId, normalizeEmail, validateAddress, validateDOB, validateEIN, validateEmail, validatePhone, validateTaxId, type Address, type TaxIdType } from "@/lib/validation";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Checkbox, SelectField, TextArea, TextField, Label } from "@/components/ui/Field";
@@ -38,83 +40,128 @@ export function EditClientDialog({ client: c, open, onClose }: DialogProps) {
   const store = useClients();
   const toast = useToast();
   const [f, setF] = useState(() => formFrom(c));
+  const [dob, setDob] = useState("");
+  const [taxId, setTaxId] = useState("");
+  const [taxIdType, setTaxIdType] = useState<TaxIdType>(c.taxIdType ?? "SSN");
+  const [ein, setEin] = useState("");
+  const [submitted, setSubmitted] = useState(false);
   useEffect(() => {
-    if (open) setF(formFrom(c));
-  }, [open, c]);
+    if (open) {
+      setF(formFrom(c));
+      setDob("");
+      setTaxId("");
+      setEin("");
+      setTaxIdType(c.taxIdType ?? "SSN");
+      setSubmitted(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF((x) => ({ ...x, [k]: e.target.value }));
   const toggleStaff = (id: string) => setF((x) => ({ ...x, staffIds: x.staffIds.includes(id) ? x.staffIds.filter((s) => s !== id) : [...x.staffIds, id] }));
-  const valid = f.name.trim() && f.email.includes("@") && f.staffIds.length > 0;
+  const errs = [
+    !f.name.trim(),
+    validateEmail(f.email, true),
+    validatePhone(f.phone),
+    Object.keys(validateAddress(f.address, false)).length > 0,
+    f.staffIds.length === 0,
+    c.type === "individual" && validateDOB(dob),
+    c.type === "individual" && validateTaxId(taxId, taxIdType),
+    c.type === "business" && validateEIN(ein),
+  ];
+  const valid = errs.every((x) => !x);
 
   const save = () => {
+    setSubmitted(true);
+    if (!valid) return;
     store.updateClient(c.id, {
       name: f.name.trim(),
       contactName: f.contactName.trim() || undefined,
-      email: f.email.trim(),
-      phone: f.phone.trim(),
+      email: normalizeEmail(f.email),
+      phone: f.phone,
       preferredContact: f.preferredContact as Client["preferredContact"],
-      address: { line1: f.line1, city: f.city, state: f.state, zip: f.zip },
+      address: { ...f.address, line2: f.address.line2 || undefined },
       status: f.status as Client["status"],
       staffIds: f.staffIds,
       tags: f.tags.split(",").map((t) => t.trim()).filter(Boolean),
-      business: c.business ? { ...c.business, legalName: f.legalName || c.business.legalName, entityType: f.entityType as NonNullable<Client["business"]>["entityType"], industry: f.industry } : undefined,
+      business: c.business ? { ...c.business, legalName: f.legalName || c.business.legalName, entityType: f.entityType as NonNullable<Client["business"]>["entityType"], industry: f.industry, state: f.address.state || c.business.state } : undefined,
     });
+    if (dob || taxId || ein) store.updateTaxIds(c.id, { dob: dob ? dobToIso(dob) ?? undefined : undefined, taxId: taxId || undefined, taxIdType, ein: ein || undefined });
     toast("Client details saved");
     onClose();
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Edit client" description={c.name} size="lg" footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!valid} onClick={save}>Save changes</Button></>}>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="sm:col-span-2"><TextField label={c.type === "business" ? "Business name" : "Full name"} required value={f.name} onChange={set("name")} /></div>
-        {c.type === "business" && (
-          <>
-            <TextField label="Legal name" value={f.legalName} onChange={set("legalName")} />
-            <TextField label="Primary contact" value={f.contactName} onChange={set("contactName")} />
-            <SelectField label="Entity type" value={f.entityType} onChange={set("entityType")} options={["LLC", "S-Corp", "C-Corp", "Sole Prop", "Partnership", "Nonprofit"].map((v) => [v, v])} />
-            <TextField label="Industry" value={f.industry} onChange={set("industry")} />
-          </>
-        )}
-        <TextField label="Email" type="email" required value={f.email} onChange={set("email")} />
-        <TextField label="Phone" type="tel" value={f.phone} onChange={set("phone")} />
-        <div className="sm:col-span-2"><TextField label="Street address" value={f.line1} onChange={set("line1")} /></div>
-        <TextField label="City" value={f.city} onChange={set("city")} />
-        <div className="grid grid-cols-2 gap-4">
-          <TextField label="State" value={f.state} onChange={set("state")} maxLength={2} />
-          <TextField label="ZIP" value={f.zip} onChange={set("zip")} inputMode="numeric" />
-        </div>
-        <SelectField label="Preferred contact" value={f.preferredContact} onChange={set("preferredContact")} options={["Email", "Phone", "Text", "Portal"].map((v) => [v, v])} />
-        <SelectField label="Status" value={f.status} onChange={set("status")} options={[["active", "Active"], ["onboarding", "Onboarding"], ["inactive", "Inactive"]]} />
-        <div className="sm:col-span-2"><TextField label="Tags" hint="Comma-separated" value={f.tags} onChange={set("tags")} /></div>
-        <fieldset className="sm:col-span-2">
-          <Label required>Assigned staff</Label>
-          <div className="flex flex-wrap gap-2">
-            {STAFF.map((s) => {
-              const on = f.staffIds.includes(s.id);
-              return (
-                <button key={s.id} type="button" aria-pressed={on} onClick={() => toggleStaff(s.id)} className={`rounded-full border px-3 py-1.5 text-[13px] font-medium ${on ? "border-accent bg-accent-soft text-accent-ink" : "border-line text-ink-2 hover:bg-surface-hover"}`}>
-                  {s.name}
-                </button>
-              );
-            })}
+    <Modal open={open} onClose={onClose} title="Edit client" description={c.name} size="lg" footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" onClick={save}>Save changes</Button></>}>
+      <div className="space-y-6">
+        <section className="grid gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <TextField label={c.type === "business" ? "Business name" : "Full legal name"} required value={f.name} onChange={set("name")} aria-invalid={submitted && !f.name.trim()} />
           </div>
-        </fieldset>
-        <p className="flex items-center gap-1.5 text-[12px] text-muted sm:col-span-2"><Lock size={12} /> SSN / EIN and date of birth are edited separately with the sensitive-data permission.</p>
+          {c.type === "business" && (
+            <>
+              <TextField label="Legal name" value={f.legalName} onChange={set("legalName")} />
+              <TextField label="Primary contact" value={f.contactName} onChange={set("contactName")} />
+              <SelectField label="Entity type" value={f.entityType} onChange={set("entityType")} options={["LLC", "S-Corp", "C-Corp", "Sole Prop", "Partnership", "Nonprofit"].map((v) => [v, v])} />
+              <TextField label="Industry" value={f.industry} onChange={set("industry")} />
+            </>
+          )}
+          <EmailInput id="ec-email" label="Email" required value={f.email} onChange={(v) => setF((x) => ({ ...x, email: v }))} showErrors={submitted} />
+          <PhoneInput id="ec-phone" label="Phone" value={f.phone} onChange={(v) => setF((x) => ({ ...x, phone: v }))} showErrors={submitted} />
+          <SelectField label="Preferred contact" value={f.preferredContact} onChange={set("preferredContact")} options={["Email", "Phone", "Text", "Portal"].map((v) => [v, v])} />
+          <SelectField label="Status" value={f.status} onChange={set("status")} options={[["active", "Active"], ["onboarding", "Onboarding"], ["inactive", "Inactive"]]} />
+        </section>
+
+        <section>
+          <h3 className="mb-3 text-[13px] font-semibold uppercase tracking-wide text-muted">Address</h3>
+          <AddressFields idPrefix="ec-addr" value={f.address} onChange={(a) => setF((x) => ({ ...x, address: a }))} showErrors={submitted} />
+        </section>
+
+        <section>
+          <h3 className="mb-1 flex items-center gap-1.5 text-[13px] font-semibold uppercase tracking-wide text-muted"><Lock size={12} /> Tax identification</h3>
+          <p className="mb-3 text-[12.5px] text-muted">Stored numbers are never pre-filled. Leave blank to keep what&rsquo;s on file; type a new value to replace it.</p>
+          {c.type === "individual" ? (
+            <div className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
+              <DOBInput id="ec-dob" label="Date of birth" hint={c.dob ? `On file: ${maskDOB(c.dob)}` : "Not on file"} value={dob} onChange={setDob} showErrors={submitted} />
+              <TaxIdInput id="ec-taxid" label={taxIdType} hint={c.taxIdLast4 ? `On file: ${c.taxIdType ?? "SSN"} ${maskTaxId(c.taxIdLast4)}` : "Not on file"} value={taxId} onChange={setTaxId} type={taxIdType} onTypeChange={setTaxIdType} showErrors={submitted} />
+            </div>
+          ) : (
+            <div className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
+              <EINInput id="ec-ein" label="EIN" hint={c.business?.einLast4 ? `On file: ${maskEIN(c.business.einLast4)}` : "Not on file"} value={ein} onChange={setEin} showErrors={submitted} />
+            </div>
+          )}
+        </section>
+
+        <section className="space-y-4">
+          <TextField label="Tags" hint="Comma-separated" value={f.tags} onChange={set("tags")} />
+          <fieldset>
+            <Label required>Assigned staff</Label>
+            <div className="flex flex-wrap gap-2">
+              {STAFF.map((s) => {
+                const on = f.staffIds.includes(s.id);
+                return (
+                  <button key={s.id} type="button" aria-pressed={on} onClick={() => toggleStaff(s.id)} className={`rounded-full border px-3 py-1.5 text-[13px] font-medium ${on ? "border-accent bg-accent-soft text-accent-ink" : "border-line text-ink-2 hover:bg-surface-hover"}`}>
+                    {s.name}
+                  </button>
+                );
+              })}
+            </div>
+            {submitted && f.staffIds.length === 0 && <p className="mt-1 text-[12px] text-danger-ink">Assign at least one staff member</p>}
+          </fieldset>
+        </section>
       </div>
     </Modal>
   );
 }
 
 function formFrom(c: Client) {
+  const blank = (v?: string) => (v && v !== "—" ? v : "");
   return {
     name: c.name,
     contactName: c.contactName ?? "",
     email: c.email,
-    phone: c.phone,
+    phone: blank(c.phone),
     preferredContact: c.preferredContact,
-    line1: c.address.line1,
-    city: c.address.city,
-    state: c.address.state,
-    zip: c.address.zip,
+    address: { line1: blank(c.address.line1), line2: c.address.line2 ?? "", city: blank(c.address.city), state: blank(c.address.state), zip: blank(c.address.zip) } as Address,
     status: c.status,
     staffIds: c.staffIds,
     tags: c.tags.join(", "),

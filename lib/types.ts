@@ -125,16 +125,20 @@ export type Client = {
   email: string;
   phone: string;
   preferredContact: "Email" | "Phone" | "Text" | "Portal";
-  address: { line1: string; city: string; state: string; zip: string };
+  address: { line1: string; line2?: string; city: string; state: string; zip: string };
+  /** ISO date (YYYY-MM-DD). Displayed masked; full value only on audited reveal. */
   dob?: string;
-  /** Always stored/displayed masked in the UI. */
-  taxIdMasked?: string;
+  /** Individual taxpayer ID type and last four digits. The full number lives
+   *  in the encrypted vault (sample: in-memory), never on the client record. */
+  taxIdType?: "SSN" | "ITIN";
+  taxIdLast4?: string;
   business?: {
     legalName: string;
     entityType: "LLC" | "S-Corp" | "C-Corp" | "Sole Prop" | "Partnership" | "Nonprofit";
     state: string;
     formedAt?: string;
-    einMasked?: string;
+    /** Last four of the EIN; full EIN lives in the vault. */
+    einLast4?: string;
     industry: string;
     fiscalYearEnd: string;
   };

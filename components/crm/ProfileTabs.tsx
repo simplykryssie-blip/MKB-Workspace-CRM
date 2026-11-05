@@ -11,6 +11,7 @@ import {
   CreditCard,
   Download,
   Eye,
+  EyeOff,
   FilePlus2,
   FileUp,
   Lock,
@@ -46,6 +47,7 @@ import { STAGES, SAMPLE_NOW, staffById } from "@/lib/sample/clients";
 import { useClients } from "@/lib/store/clients-store";
 import { docStatus, enrollmentStatus, invoiceStatus, signatureStatus } from "@/lib/status";
 import { fileSize, fmtDate, fmtDateTime, fmtTime, relTime, usd } from "@/lib/format";
+import { formatPhone, formatZip, isoToDob, maskDOB, maskEIN, maskTaxId } from "@/lib/validation";
 import type { ActivityKind, Client, ClientDocument, Enrollment, ServiceKey } from "@/lib/types";
 import { downloadPlaceholder } from "./dialogs";
 import type { DialogKind, TabKey } from "./ClientProfile";
@@ -69,6 +71,7 @@ export function OverviewTab({ c, act }: { c: Client; act: Act }) {
   const pinned = c.notes.filter((n) => n.pinned);
   const active = c.enrollments.filter((e) => e.status !== "complete");
   const done = c.enrollments.filter((e) => e.status === "complete");
+  const missingTax = missingTaxInfo(c);
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
@@ -87,12 +90,15 @@ export function OverviewTab({ c, act }: { c: Client; act: Act }) {
         <Card>
           <CardHeader title="Outstanding requirements" subtitle="What's blocking progress right now" />
           <div className="px-3 pb-3 sm:px-4">
-            {requested.length + pendingSig.length + unpaid.length === 0 ? (
+            {requested.length + pendingSig.length + unpaid.length + missingTax.length === 0 ? (
               <p className="flex items-center gap-2 px-2 pb-3 text-[13.5px] text-muted">
                 <CheckCircle2 size={16} className="text-success" /> Nothing outstanding — all caught up.
               </p>
             ) : (
               <ul>
+                {missingTax.length > 0 && (
+                  <ReqRow icon={ShieldAlert} title={`Missing ${missingTax.join(" and ")}`} sub="Required before preparing the return" service="tax" tone="danger" label="Tax ID" onClick={() => act.open("edit")} />
+                )}
                 {requested.map((d) => (
                   <ReqRow key={d.id} icon={FileUp} title={d.name} sub={d.status === "rejected" ? "Re-upload requested" : `Requested ${relTime(d.requestedAt)}`} service={d.service} tone="warning" label="Document" onClick={() => act.go("documents")} />
                 ))}
@@ -111,6 +117,15 @@ export function OverviewTab({ c, act }: { c: Client; act: Act }) {
       <div className="space-y-5">
         <Card>
           <CardHeader title={c.type === "business" ? "Business information" : "Contact information"} action={<Button size="sm" variant="ghost" onClick={() => act.open("edit")}>Edit</Button>} />
+          {missingTax.length > 0 && (
+            <div className="mx-5 mb-3 flex items-start gap-2 rounded-xl border border-warning/30 bg-warning-soft px-3 py-2.5 text-[12.5px] text-warning-ink sm:mx-6">
+              <AlertCircle size={15} className="mt-px shrink-0" />
+              <span className="flex-1">
+                <strong>Needed for tax preparation:</strong> {missingTax.join(", ")}.{" "}
+                <button onClick={() => act.open("edit")} className="font-semibold underline underline-offset-2">Add now</button>
+              </span>
+            </div>
+          )}
           <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2.5 px-5 pb-5 text-[13.5px] sm:px-6">
             {c.business && (
               <>
@@ -118,20 +133,32 @@ export function OverviewTab({ c, act }: { c: Client; act: Act }) {
                 <Dt>Entity</Dt><Dd>{c.business.entityType} · {c.business.state}</Dd>
                 <Dt>Industry</Dt><Dd>{c.business.industry}</Dd>
                 {c.business.formedAt && (<><Dt>Formed</Dt><Dd>{fmtDate(c.business.formedAt)}</Dd></>)}
-                <Dt>EIN</Dt><Dd><Masked value={c.business.einMasked} /></Dd>
+                <Dt>EIN</Dt><Dd><Sensitive c={c} field="ein" masked={maskEIN(c.business.einLast4)} /></Dd>
                 <Dt>Fiscal year end</Dt><Dd>{c.business.fiscalYearEnd}</Dd>
                 <Dt>Primary contact</Dt><Dd>{c.contactName ?? "—"}</Dd>
               </>
             )}
             {!c.business && (
               <>
-                {c.dob && (<><Dt>Date of birth</Dt><Dd><Masked value={`••/••/${c.dob.slice(0, 4)}`} /></Dd></>)}
-                <Dt>SSN / ITIN</Dt><Dd><Masked value={c.taxIdMasked} /></Dd>
+                <Dt>Date of birth</Dt><Dd><Sensitive c={c} field="dob" masked={maskDOB(c.dob)} /></Dd>
+                <Dt>{c.taxIdType ?? "SSN / ITIN"}</Dt><Dd><Sensitive c={c} field="taxId" masked={maskTaxId(c.taxIdLast4)} /></Dd>
               </>
             )}
             <Dt>Email</Dt><Dd>{c.email}</Dd>
-            <Dt>Phone</Dt><Dd>{c.phone}</Dd>
-            <Dt>Address</Dt><Dd>{c.address.line1}<br />{c.address.city}, {c.address.state} {c.address.zip}</Dd>
+            <Dt>Phone</Dt><Dd>{c.phone && c.phone !== "—" ? formatPhone(c.phone) : <span className="text-faint">Not on file</span>}</Dd>
+            <Dt>Address</Dt>
+            <Dd>
+              {c.address.line1 && c.address.line1 !== "—" ? (
+                <>
+                  {c.address.line1}
+                  {c.address.line2 && <>, {c.address.line2}</>}
+                  <br />
+                  {c.address.city}, {c.address.state} {formatZip(c.address.zip)}
+                </>
+              ) : (
+                <span className="text-faint">Not on file</span>
+              )}
+            </Dd>
             <Dt>Preferred contact</Dt><Dd>{c.preferredContact}</Dd>
             <Dt>Source</Dt><Dd>{c.source}</Dd>
           </dl>
@@ -180,12 +207,38 @@ function ReqRow({ icon: Icon, title, sub, service, tone, label, onClick }: { ico
 const Dt = ({ children }: { children: React.ReactNode }) => <dt className="text-muted">{children}</dt>;
 const Dd = ({ children }: { children: React.ReactNode }) => <dd className="min-w-0 break-words font-medium text-ink">{children}</dd>;
 
-function Masked({ value }: { value?: string }) {
-  if (!value) return <span className="text-faint">Not on file</span>;
+/** Fields required before tax preparation can proceed. */
+export function missingTaxInfo(c: Client): string[] {
+  if (!c.enrollments.some((e) => e.service === "tax" && e.status !== "complete")) return [];
+  if (c.type === "business") return c.business?.einLast4 ? [] : ["EIN"];
+  return [!c.dob && "date of birth", !c.taxIdLast4 && "SSN or ITIN"].filter(Boolean) as string[];
+}
+
+/** Masked identifier with an audited, auto-hiding reveal. */
+function Sensitive({ c, field, masked }: { c: Client; field: "taxId" | "ein" | "dob"; masked: string }) {
+  const store = useClients();
+  const toast = useToast();
+  const [shown, setShown] = useState<string | null>(null);
+  useEffect(() => {
+    if (!shown) return;
+    const t = setTimeout(() => setShown(null), 30000);
+    return () => clearTimeout(t);
+  }, [shown]);
+  if (!masked) return <span className="text-faint">Not on file</span>;
+  const reveal = () => {
+    if (shown) return setShown(null);
+    const full = field === "dob" ? isoToDob(c.dob) : store.reveal(c.id, field);
+    if (field === "dob") store.reveal(c.id, "dob");
+    if (!full) return toast("Full value isn't available for this record", "info");
+    setShown(full);
+    toast("Revealed for 30 seconds — recorded in the activity log", "info");
+  };
   return (
-    <span className="inline-flex items-center gap-1.5 font-mono text-[13px]" title="Masked. Revealing requires the 'View sensitive data' permission and is logged.">
-      {value}
-      <Lock size={12} className="text-faint" />
+    <span className="inline-flex items-center gap-1.5">
+      <span className="font-mono text-[13px] tabular-nums">{shown ?? masked}</span>
+      <button onClick={reveal} title={shown ? "Hide" : "Reveal (requires 'View sensitive data' permission; logged)"} aria-label={shown ? "Hide" : `Reveal ${field === "taxId" ? c.taxIdType ?? "tax ID" : field === "ein" ? "EIN" : "date of birth"}`} className="grid h-6 w-6 place-items-center rounded-md text-muted hover:bg-surface-hover hover:text-ink">
+        {shown ? <EyeOff size={13} /> : <Eye size={13} />}
+      </button>
     </span>
   );
 }

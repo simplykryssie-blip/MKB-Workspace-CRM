@@ -39,6 +39,8 @@ import { balanceDue, openRequirements, staffById, SAMPLE_NOW } from "@/lib/sampl
 import { useClient, useClients } from "@/lib/store/clients-store";
 import { clientStatus, portalStatus } from "@/lib/status";
 import { fmtDate, fmtDateTime, usd } from "@/lib/format";
+import { formatPhone } from "@/lib/validation";
+import { missingTaxInfo } from "./ProfileTabs";
 import type { ClientDocument, ServiceKey } from "@/lib/types";
 import {
   DocPreviewDialog,
@@ -117,7 +119,7 @@ export function ClientProfile({ id }: { id: string }) {
   const st = clientStatus[c.status];
   const ps = portalStatus[c.portal];
   const bal = balanceDue(c);
-  const openReq = openRequirements(c);
+  const openReq = openRequirements(c) + (missingTaxInfo(c).length ? 1 : 0);
   const next = c.appointments.find((a) => a.status === "scheduled" && a.at >= SAMPLE_NOW.toISOString());
   const unread = c.messages.filter((m) => m.from === "client" && !m.read).length;
   const services = [...new Set(c.enrollments.map((e) => e.service))];
@@ -170,10 +172,10 @@ export function ClientProfile({ id }: { id: string }) {
                   <AtSign size={14} className="shrink-0 text-muted" /> {c.email}
                 </a>
                 <a href={`tel:${c.phone}`} className="inline-flex items-center gap-1.5 hover:text-accent">
-                  <Phone size={14} className="text-muted" /> {c.phone}
+                  <Phone size={14} className="text-muted" /> {c.phone && c.phone !== "—" ? formatPhone(c.phone) : "No phone"}
                 </a>
                 <span className="inline-flex items-center gap-1.5">
-                  <MapPin size={14} className="text-muted" /> {c.address.city}, {c.address.state}
+                  <MapPin size={14} className="text-muted" /> {c.address.city && c.address.city !== "—" ? `${c.address.city}, ${c.address.state}` : "No address"}
                 </span>
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-1.5">

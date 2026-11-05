@@ -8,7 +8,7 @@
  * Nothing leaves the browser and nothing persists past a page reload.
  * In Phase 3 these actions become authenticated API calls with the same shapes.
  */
-import { createContext, useCallback, useContext, useMemo, useReducer } from "react";
+import { createContext, useCallback, useContext, useMemo, useReducer, useRef } from "react";
 import { CLIENTS, SAMPLE_NOW, STAGES, staffById } from "@/lib/sample/clients";
 import type {
   ActivityItem,
@@ -29,25 +29,43 @@ const uid = (p: string) => `${p}-${Math.random().toString(36).slice(2, 9)}`;
 const started = Date.now();
 export const nowIso = () => new Date(SAMPLE_NOW.getTime() + (Date.now() - started)).toISOString();
 
-type State = { clients: Client[] };
+/** Full tax identifiers, kept apart from client records (Phase 3: encrypted
+ *  server-side vault, fetched only by permitted staff, every read audited). */
+export type VaultEntry = { taxId?: string; ein?: string };
+type State = { clients: Client[]; vault: Record<string, VaultEntry> };
 
 type Action =
   | { type: "reset" }
-  | { type: "addClient"; client: Client }
-  | { type: "update"; id: string; fn: (c: Client) => Client };
+  | { type: "addClient"; client: Client; vault?: VaultEntry }
+  | { type: "update"; id: string; fn: (c: Client) => Client; vault?: VaultEntry };
 
 function reducer(state: State, a: Action): State {
   switch (a.type) {
     case "reset":
       return init();
     case "addClient":
-      return { ...state, clients: [a.client, ...state.clients] };
+      return { clients: [a.client, ...state.clients], vault: a.vault ? { ...state.vault, [a.client.id]: a.vault } : state.vault };
     case "update":
-      return { ...state, clients: state.clients.map((c) => (c.id === a.id ? a.fn(c) : c)) };
+      return {
+        clients: state.clients.map((c) => (c.id === a.id ? a.fn(c) : c)),
+        vault: a.vault ? { ...state.vault, [a.id]: { ...state.vault[a.id], ...a.vault } } : state.vault,
+      };
   }
 }
 
-const init = (): State => ({ clients: structuredClone(CLIENTS) });
+/** Sample vault: full numbers use the never-issued 000 SSN area and 00 EIN
+ *  prefix, so they can't belong to a real person or business. */
+const sampleVault = (): Record<string, VaultEntry> =>
+  Object.fromEntries(
+    CLIENTS.map((c) => [
+      c.id,
+      {
+        taxId: c.taxIdLast4 ? `000-00-${c.taxIdLast4}` : undefined,
+        ein: c.business?.einLast4 ? `00-000${c.business.einLast4}` : undefined,
+      },
+    ]),
+  );
+const init = (): State => ({ clients: structuredClone(CLIENTS), vault: sampleVault() });
 
 function log(c: Client, kind: ActivityKind, text: string, actor: ActivityItem["actor"] = "staff"): Client {
   const at = nowIso();
@@ -60,6 +78,12 @@ export type NewClientInput = {
   contactName?: string;
   email: string;
   phone: string;
+  address: Client["address"];
+  dob?: string;
+  taxIdType?: "SSN" | "ITIN";
+  taxId?: string;
+  ein?: string;
+  entityType?: NonNullable<Client["business"]>["entityType"];
   services: ServiceKey[];
   staffIds: string[];
   invite: boolean;
@@ -73,7 +97,9 @@ export const DEFAULT_TITLES: Record<ServiceKey, string> = {
 };
 export const DEFAULT_FEES: Record<ServiceKey, number> = { tax: 425, books: 650, biz: 899, expunge: 750 };
 
-function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => number) {
+const last4 = (v?: string) => (v ? v.replace(/\D/g, "").slice(-4) : undefined);
+
+function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => number, getVault: () => Record<string, VaultEntry>) {
   const up = (id: string, fn: (c: Client) => Client) => dispatch({ type: "update", id, fn });
 
   return {
@@ -102,10 +128,13 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
         email: input.email.trim(),
         phone: input.phone.trim() || "—",
         preferredContact: "Email",
-        address: { line1: "—", city: "—", state: "—", zip: "" },
+        address: input.address,
+        dob: input.type === "individual" ? input.dob : undefined,
+        taxIdType: input.type === "individual" && input.taxId ? input.taxIdType : undefined,
+        taxIdLast4: input.type === "individual" ? last4(input.taxId) : undefined,
         business:
           input.type === "business"
-            ? { legalName: input.name.trim(), entityType: "LLC", state: "GA", industry: "—", fiscalYearEnd: "December" }
+            ? { legalName: input.name.trim(), entityType: input.entityType ?? "LLC", state: input.address.state || "GA", industry: "—", fiscalYearEnd: "December", einLast4: last4(input.ein) }
             : undefined,
         staffIds,
         status: "onboarding",
@@ -126,12 +155,43 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
           { id: uid("x"), kind: "intake", text: "Client record created", at, actor: "staff" },
         ],
       };
-      dispatch({ type: "addClient", client });
+      dispatch({ type: "addClient", client, vault: { taxId: input.type === "individual" ? input.taxId : undefined, ein: input.type === "business" ? input.ein : undefined } });
       return id;
     },
 
     updateClient(id: string, patch: Partial<Client>, summary = "Updated client details") {
       up(id, (c) => log({ ...c, ...patch }, "status", summary));
+    },
+
+    /** Replace tax identifiers. Only last-4 lands on the client record. */
+    updateTaxIds(id: string, v: { taxId?: string; taxIdType?: "SSN" | "ITIN"; ein?: string; dob?: string }) {
+      const changed = [v.taxId && (v.taxIdType ?? "SSN"), v.ein && "EIN", v.dob && "date of birth"].filter(Boolean).join(", ");
+      if (!changed) return;
+      dispatch({
+        type: "update",
+        id,
+        vault: { ...(v.taxId ? { taxId: v.taxId } : {}), ...(v.ein ? { ein: v.ein } : {}) },
+        fn: (c) =>
+          log(
+            {
+              ...c,
+              dob: v.dob ?? c.dob,
+              taxIdType: v.taxId ? v.taxIdType : c.taxIdType,
+              taxIdLast4: v.taxId ? last4(v.taxId) : c.taxIdLast4,
+              business: c.business && v.ein ? { ...c.business, einLast4: last4(v.ein) } : c.business,
+            },
+            "status",
+            `Updated ${changed} (audit)`,
+          ),
+      });
+    },
+
+    /** Audited reveal of a full identifier. Returns undefined if none on file. */
+    reveal(id: string, field: "taxId" | "ein" | "dob"): string | undefined {
+      const label = field === "taxId" ? "SSN/ITIN" : field === "ein" ? "EIN" : "date of birth";
+      up(id, (c) => log(c, "status", `Revealed full ${label} (audit)`));
+      if (field === "dob") return undefined; // DOB is on the record; caller formats it
+      return getVault()[id]?.[field];
     },
 
     sendInvite(id: string) {
@@ -303,7 +363,9 @@ export function ClientsProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, undefined, init);
   const counter = useMemo(() => ({ n: 1200 }), []);
   const getNext = useCallback(() => counter.n++, [counter]);
-  const actions = useMemo(() => makeStore(dispatch, getNext), [getNext]);
+  const vaultRef = useRef(state.vault);
+  vaultRef.current = state.vault;
+  const actions = useMemo(() => makeStore(dispatch, getNext, () => vaultRef.current), [getNext]);
   const value = useMemo(() => ({ ...actions, clients: state.clients }), [actions, state.clients]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
