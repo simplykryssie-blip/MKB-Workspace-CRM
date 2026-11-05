@@ -134,6 +134,19 @@ export function OverviewTab({ c, act }: { c: Client; act: Act }) {
                 <Dt>Industry</Dt><Dd>{c.business.industry}</Dd>
                 {c.business.formedAt && (<><Dt>Formed</Dt><Dd>{fmtDate(c.business.formedAt)}</Dd></>)}
                 <Dt>EIN</Dt><Dd><Sensitive c={c} field="ein" masked={maskEIN(c.business.einLast4)} /></Dd>
+                <Dt>Responsible party</Dt>
+                <Dd>
+                  {c.business.responsibleParty ? (
+                    <>
+                      {c.business.responsibleParty.name} <span className="font-normal text-muted">· {c.business.responsibleParty.title}</span>
+                      <br />
+                      <span className="text-[12px] font-normal text-muted">{c.business.responsibleParty.taxIdType ?? "SSN"} </span>
+                      <Sensitive c={c} field="rpTaxId" masked={maskTaxId(c.business.responsibleParty.taxIdLast4)} />
+                    </>
+                  ) : (
+                    <span className="text-faint">Not on file</span>
+                  )}
+                </Dd>
                 <Dt>Fiscal year end</Dt><Dd>{c.business.fiscalYearEnd}</Dd>
                 <Dt>Primary contact</Dt><Dd>{c.contactName ?? "—"}</Dd>
               </>
@@ -210,15 +223,20 @@ const Dd = ({ children }: { children: React.ReactNode }) => <dd className="min-w
 /** Fields required before tax preparation can proceed. */
 export function missingTaxInfo(c: Client): string[] {
   if (!c.enrollments.some((e) => e.service === "tax" && e.status !== "complete")) return [];
-  if (c.type === "business") return c.business?.einLast4 ? [] : ["EIN"];
+  if (c.type === "business") {
+    const rp = c.business?.responsibleParty;
+    return [!c.business?.einLast4 && "EIN", !rp?.name && "responsible party", rp?.name && !rp.taxIdLast4 && "responsible party SSN/ITIN"].filter(Boolean) as string[];
+  }
   return [!c.dob && "date of birth", !c.taxIdLast4 && "SSN or ITIN"].filter(Boolean) as string[];
 }
 
 /** Masked identifier with an audited, auto-hiding reveal. */
-function Sensitive({ c, field, masked }: { c: Client; field: "taxId" | "ein" | "dob"; masked: string }) {
+function Sensitive({ c, field, masked }: { c: Client; field: "taxId" | "ein" | "dob" | "rpTaxId"; masked: string }) {
   const store = useClients();
   const toast = useToast();
   const [shown, setShown] = useState<string | null>(null);
+  // If the stored value changes (edited), drop any revealed copy immediately.
+  useEffect(() => setShown(null), [masked]);
   useEffect(() => {
     if (!shown) return;
     const t = setTimeout(() => setShown(null), 30000);
@@ -236,7 +254,7 @@ function Sensitive({ c, field, masked }: { c: Client; field: "taxId" | "ein" | "
   return (
     <span className="inline-flex items-center gap-1.5">
       <span className="font-mono text-[13px] tabular-nums">{shown ?? masked}</span>
-      <button onClick={reveal} title={shown ? "Hide" : "Reveal (requires 'View sensitive data' permission; logged)"} aria-label={shown ? "Hide" : `Reveal ${field === "taxId" ? c.taxIdType ?? "tax ID" : field === "ein" ? "EIN" : "date of birth"}`} className="grid h-6 w-6 place-items-center rounded-md text-muted hover:bg-surface-hover hover:text-ink">
+      <button onClick={reveal} title={shown ? "Hide" : "Reveal (requires 'View sensitive data' permission; logged)"} aria-label={shown ? "Hide" : `Reveal ${field === "taxId" ? c.taxIdType ?? "tax ID" : field === "ein" ? "EIN" : field === "rpTaxId" ? "responsible party tax ID" : "date of birth"}`} className="grid h-6 w-6 place-items-center rounded-md text-muted hover:bg-surface-hover hover:text-ink">
         {shown ? <EyeOff size={13} /> : <Eye size={13} />}
       </button>
     </span>

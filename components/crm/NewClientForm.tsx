@@ -7,7 +7,7 @@ import { AlertTriangle, ArrowRight, Building2, Lock, ShieldCheck, User } from "l
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Checkbox, SelectField, TextField } from "@/components/ui/Field";
-import { AddressFields, DOBInput, EINInput, EmailInput, PhoneInput, TaxIdInput } from "@/components/ui/FormattedInputs";
+import { AddressFields, DOBInput, EINInput, EmailInput, PhoneInput, ResponsiblePartyFields, TaxIdInput } from "@/components/ui/FormattedInputs";
 import { ServiceTag } from "@/components/ui/ServiceTag";
 import { useToast } from "@/components/ui/Toast";
 import { SERVICES, SERVICE_ORDER } from "@/lib/sample-data";
@@ -48,6 +48,10 @@ export function NewClientForm() {
   const [taxIdType, setTaxIdType] = useState<TaxIdType>("SSN");
   const [taxId, setTaxId] = useState("");
   const [ein, setEin] = useState("");
+  const [rpName, setRpName] = useState("");
+  const [rpTitle, setRpTitle] = useState("Owner");
+  const [rpTaxIdType, setRpTaxIdType] = useState<TaxIdType>("SSN");
+  const [rpTaxId, setRpTaxId] = useState("");
   const [deferTax, setDeferTax] = useState(false);
   const [services, setServices] = useState<ServiceKey[]>([]);
   const [staff, setStaff] = useState<string[]>([]);
@@ -78,6 +82,8 @@ export function NewClientForm() {
     dob: type === "individual" && !deferTax ? validateDOB(dob, taxRequired) : null,
     taxId: type === "individual" && !deferTax ? validateTaxId(taxId, taxIdType, taxRequired) : null,
     ein: type === "business" && !deferTax ? validateEIN(ein, taxRequired) : null,
+    rpName: type === "business" && !deferTax && taxRequired && !rpName.trim() ? "Responsible party name is required" : null,
+    rpTaxId: type === "business" && !deferTax ? validateTaxId(rpTaxId, rpTaxIdType, taxRequired) : null,
     services: services.length === 0 ? "Choose at least one service" : null,
   };
   const valid = Object.values(errors).every((x) => !x);
@@ -104,6 +110,7 @@ export function NewClientForm() {
       taxIdType,
       taxId: keepTax && taxId ? taxId : undefined,
       ein: keepTax && ein ? ein : undefined,
+      responsibleParty: type === "business" && rpName.trim() ? { name: rpName, title: rpTitle, taxIdType: rpTaxIdType, taxId: keepTax && rpTaxId ? rpTaxId : undefined } : undefined,
       services,
       staffIds: staff,
       invite,
@@ -181,7 +188,7 @@ export function NewClientForm() {
         <Card>
           <CardHeader
             title="Tax identification"
-            subtitle={type === "business" ? "Employer Identification Number" : "Date of birth and Social Security or Individual Taxpayer ID"}
+            subtitle={type === "business" ? "EIN and the IRS responsible party" : "Date of birth and Social Security or Individual Taxpayer ID"}
             action={
               <span className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2.5 py-1 text-[11.5px] font-medium text-muted ring-1 ring-line">
                 <Lock size={11} /> Encrypted · masked after saving
@@ -197,8 +204,24 @@ export function NewClientForm() {
                 <TaxIdInput id="nc-taxid" label={taxIdType} required={taxRequired} value={taxId} onChange={setTaxId} type={taxIdType} onTypeChange={setTaxIdType} showErrors={submitted} />
               </div>
             ) : (
-              <div className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
-                <EINInput id="nc-ein" label="EIN" required={taxRequired} value={ein} onChange={setEin} showErrors={submitted} />
+              <div className="space-y-4">
+                <div className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
+                  <EINInput id="nc-ein" label="EIN" required={taxRequired} value={ein} onChange={setEin} showErrors={submitted} />
+                </div>
+                <ResponsiblePartyFields
+                  idPrefix="nc-rp"
+                  required={taxRequired}
+                  name={rpName}
+                  onName={setRpName}
+                  title={rpTitle}
+                  onTitle={setRpTitle}
+                  taxId={rpTaxId}
+                  onTaxId={setRpTaxId}
+                  taxIdType={rpTaxIdType}
+                  onTaxIdType={setRpTaxIdType}
+                  showErrors={submitted}
+                  onCopyContact={contact.trim() ? () => setRpName(contact.trim()) : undefined}
+                />
               </div>
             )}
             {services.includes("tax") ? (

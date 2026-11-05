@@ -31,7 +31,7 @@ export const nowIso = () => new Date(SAMPLE_NOW.getTime() + (Date.now() - starte
 
 /** Full tax identifiers, kept apart from client records (Phase 3: encrypted
  *  server-side vault, fetched only by permitted staff, every read audited). */
-export type VaultEntry = { taxId?: string; ein?: string };
+export type VaultEntry = { taxId?: string; ein?: string; rpTaxId?: string };
 type State = { clients: Client[]; vault: Record<string, VaultEntry> };
 
 type Action =
@@ -62,6 +62,7 @@ const sampleVault = (): Record<string, VaultEntry> =>
       {
         taxId: c.taxIdLast4 ? `000-00-${c.taxIdLast4}` : undefined,
         ein: c.business?.einLast4 ? `00-000${c.business.einLast4}` : undefined,
+        rpTaxId: c.business?.responsibleParty?.taxIdLast4 ? `000-00-${c.business.responsibleParty.taxIdLast4}` : undefined,
       },
     ]),
   );
@@ -83,6 +84,7 @@ export type NewClientInput = {
   taxIdType?: "SSN" | "ITIN";
   taxId?: string;
   ein?: string;
+  responsibleParty?: { name: string; title: string; taxIdType: "SSN" | "ITIN"; taxId?: string };
   entityType?: NonNullable<Client["business"]>["entityType"];
   services: ServiceKey[];
   staffIds: string[];
@@ -134,7 +136,10 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
         taxIdLast4: input.type === "individual" ? last4(input.taxId) : undefined,
         business:
           input.type === "business"
-            ? { legalName: input.name.trim(), entityType: input.entityType ?? "LLC", state: input.address.state || "GA", industry: "—", fiscalYearEnd: "December", einLast4: last4(input.ein) }
+            ? { legalName: input.name.trim(), entityType: input.entityType ?? "LLC", state: input.address.state || "GA", industry: "—", fiscalYearEnd: "December", einLast4: last4(input.ein),
+                responsibleParty: input.responsibleParty?.name.trim()
+                  ? { name: input.responsibleParty.name.trim(), title: input.responsibleParty.title, taxIdType: input.responsibleParty.taxId ? input.responsibleParty.taxIdType : undefined, taxIdLast4: last4(input.responsibleParty.taxId) }
+                  : undefined }
             : undefined,
         staffIds,
         status: "onboarding",
@@ -155,7 +160,7 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
           { id: uid("x"), kind: "intake", text: "Client record created", at, actor: "staff" },
         ],
       };
-      dispatch({ type: "addClient", client, vault: { taxId: input.type === "individual" ? input.taxId : undefined, ein: input.type === "business" ? input.ein : undefined } });
+      dispatch({ type: "addClient", client, vault: { taxId: input.type === "individual" ? input.taxId : undefined, ein: input.type === "business" ? input.ein : undefined, rpTaxId: input.type === "business" ? input.responsibleParty?.taxId : undefined } });
       return id;
     },
 
@@ -164,13 +169,13 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
     },
 
     /** Replace tax identifiers. Only last-4 lands on the client record. */
-    updateTaxIds(id: string, v: { taxId?: string; taxIdType?: "SSN" | "ITIN"; ein?: string; dob?: string }) {
-      const changed = [v.taxId && (v.taxIdType ?? "SSN"), v.ein && "EIN", v.dob && "date of birth"].filter(Boolean).join(", ");
+    updateTaxIds(id: string, v: { taxId?: string; taxIdType?: "SSN" | "ITIN"; ein?: string; dob?: string; rp?: { name: string; title: string; taxIdType: "SSN" | "ITIN"; taxId?: string } }) {
+      const changed = [v.taxId && (v.taxIdType ?? "SSN"), v.ein && "EIN", v.dob && "date of birth", v.rp && "responsible party", v.rp?.taxId && `responsible party ${v.rp.taxIdType}`].filter(Boolean).join(", ");
       if (!changed) return;
       dispatch({
         type: "update",
         id,
-        vault: { ...(v.taxId ? { taxId: v.taxId } : {}), ...(v.ein ? { ein: v.ein } : {}) },
+        vault: { ...(v.taxId ? { taxId: v.taxId } : {}), ...(v.ein ? { ein: v.ein } : {}), ...(v.rp?.taxId ? { rpTaxId: v.rp.taxId } : {}) },
         fn: (c) =>
           log(
             {
@@ -178,7 +183,20 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
               dob: v.dob ?? c.dob,
               taxIdType: v.taxId ? v.taxIdType : c.taxIdType,
               taxIdLast4: v.taxId ? last4(v.taxId) : c.taxIdLast4,
-              business: c.business && v.ein ? { ...c.business, einLast4: last4(v.ein) } : c.business,
+              business: c.business
+                ? {
+                    ...c.business,
+                    einLast4: v.ein ? last4(v.ein) : c.business.einLast4,
+                    responsibleParty: v.rp
+                      ? {
+                          name: v.rp.name,
+                          title: v.rp.title,
+                          taxIdType: v.rp.taxId ? v.rp.taxIdType : c.business.responsibleParty?.taxIdType,
+                          taxIdLast4: v.rp.taxId ? last4(v.rp.taxId) : c.business.responsibleParty?.taxIdLast4,
+                        }
+                      : c.business.responsibleParty,
+                  }
+                : c.business,
             },
             "status",
             `Updated ${changed} (audit)`,
@@ -187,8 +205,8 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
     },
 
     /** Audited reveal of a full identifier. Returns undefined if none on file. */
-    reveal(id: string, field: "taxId" | "ein" | "dob"): string | undefined {
-      const label = field === "taxId" ? "SSN/ITIN" : field === "ein" ? "EIN" : "date of birth";
+    reveal(id: string, field: "taxId" | "ein" | "dob" | "rpTaxId"): string | undefined {
+      const label = field === "taxId" ? "SSN/ITIN" : field === "ein" ? "EIN" : field === "rpTaxId" ? "responsible party SSN/ITIN" : "date of birth";
       up(id, (c) => log(c, "status", `Revealed full ${label} (audit)`));
       if (field === "dob") return undefined; // DOB is on the record; caller formats it
       return getVault()[id]?.[field];

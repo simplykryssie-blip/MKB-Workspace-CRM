@@ -139,6 +139,9 @@ export type Client = {
     formedAt?: string;
     /** Last four of the EIN; full EIN lives in the vault. */
     einLast4?: string;
+    /** IRS "responsible party": the individual who controls the entity
+     *  (owner, member, officer). Full SSN/ITIN lives in the vault. */
+    responsibleParty?: { name: string; title: string; taxIdType?: "SSN" | "ITIN"; taxIdLast4?: string };
     industry: string;
     fiscalYearEnd: string;
   };

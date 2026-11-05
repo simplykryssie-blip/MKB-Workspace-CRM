@@ -4,6 +4,7 @@ import { useState } from "react";
 import { AlertCircle, Eye, EyeOff, Lock } from "lucide-react";
 import { Label } from "@/components/ui/Field";
 import {
+  RESPONSIBLE_PARTY_TITLES,
   US_STATES,
   detectTaxIdType,
   formatDOB,
@@ -188,6 +189,77 @@ function RevealToggle({ visible, onToggle, label }: { visible: boolean; onToggle
     <button type="button" onClick={onToggle} aria-label={visible ? `Hide ${label}` : `Show ${label}`} title={visible ? "Hide" : "Show while typing"} className="absolute right-1.5 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-lg text-muted hover:bg-surface-hover hover:text-ink">
       {visible ? <EyeOff size={16} /> : <Eye size={16} />}
     </button>
+  );
+}
+
+/* ------------------------ Responsible party ------------------------ */
+
+/** IRS "responsible party" for a business: the individual who controls the entity. */
+export function ResponsiblePartyFields({
+  idPrefix, required, name, onName, title, onTitle, taxId, onTaxId, taxIdType, onTaxIdType, showErrors, taxIdHint, onCopyContact,
+}: {
+  idPrefix: string;
+  required?: boolean;
+  name: string;
+  onName: (v: string) => void;
+  title: string;
+  onTitle: (v: string) => void;
+  taxId: string;
+  onTaxId: (v: string) => void;
+  taxIdType: TaxIdType;
+  onTaxIdType: (t: TaxIdType) => void;
+  showErrors?: boolean;
+  taxIdHint?: string;
+  onCopyContact?: () => void;
+}) {
+  const [touched, setTouched] = useState(false);
+  const nameErr = (touched || showErrors) && required && !name.trim() ? "Responsible party name is required" : null;
+  return (
+    <fieldset className="rounded-xl border border-line p-4">
+      <legend className="px-1 text-[13px] font-semibold text-ink-2">Responsible party</legend>
+      <p className="mb-3 text-[12.5px] text-muted">
+        The individual who owns or controls the business (IRS Form SS-4).{" "}
+        {onCopyContact && (
+          <button type="button" onClick={onCopyContact} className="font-semibold text-accent">
+            Same as primary contact
+          </button>
+        )}
+      </p>
+      <div className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
+        <div>
+          <label htmlFor={`${idPrefix}-name`}>
+            <Label required={required}>Full legal name</Label>
+          </label>
+          <input
+            id={`${idPrefix}-name`}
+            value={name}
+            autoComplete="off"
+            aria-invalid={!!nameErr}
+            onChange={(e) => onName(e.target.value)}
+            onBlur={() => {
+              setTouched(true);
+              onName(name.replace(/\s+/g, " ").trim());
+            }}
+            className={`${base} ${nameErr ? err : ok}`}
+          />
+          <ErrorText id={`${idPrefix}-name-err`} msg={nameErr} />
+        </div>
+        <div>
+          <label htmlFor={`${idPrefix}-title`}>
+            <Label>Title</Label>
+          </label>
+          <select id={`${idPrefix}-title`} value={title} onChange={(e) => onTitle(e.target.value)} className={`${base} ${ok} pr-8`}>
+            {RESPONSIBLE_PARTY_TITLES.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+          <ErrorText id={`${idPrefix}-title-err`} />
+        </div>
+        <TaxIdInput id={`${idPrefix}-taxid`} label={`${taxIdType}`} hint={taxIdHint} required={required} value={taxId} onChange={onTaxId} type={taxIdType} onTypeChange={onTaxIdType} showErrors={showErrors} />
+      </div>
+    </fieldset>
   );
 }
 

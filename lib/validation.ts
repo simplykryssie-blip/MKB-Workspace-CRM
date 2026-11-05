@@ -165,7 +165,8 @@ export function tidyLine(s: string) {
 
 export function validateAddress(a: Address, required = false) {
   const e: Partial<Record<keyof Address, string>> = {};
-  const any = a.line1.trim() || a.city.trim() || a.state || digits(a.zip);
+  // State has a default selection, so it alone doesn't count as "started".
+  const any = a.line1.trim() || (a.line2 ?? "").trim() || a.city.trim() || digits(a.zip);
   if (!any && !required) return e;
   if (!a.line1.trim()) e.line1 = "Street address is required";
   if (!a.city.trim()) e.city = "City is required";
@@ -177,6 +178,8 @@ export function validateAddress(a: Address, required = false) {
 
 /** One-line display: "100 Example Ave, Apt 4, Springfield, GA 30000" */
 export const addressOneLine = (a: Address) => [a.line1, a.line2, a.city && a.state ? `${a.city}, ${a.state} ${a.zip}`.trim() : a.city].filter((x) => x && x !== "—").join(", ");
+
+export const RESPONSIBLE_PARTY_TITLES = ["Owner", "Sole proprietor", "Managing member", "Member", "President", "CEO", "Partner", "Treasurer", "Other officer"];
 
 /* ----------------------------- Masks ----------------------------- */
 

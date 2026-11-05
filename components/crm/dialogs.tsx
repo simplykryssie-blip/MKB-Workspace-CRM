@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { FileText, Lock, UploadCloud } from "lucide-react";
-import { AddressFields, DOBInput, EINInput, EmailInput, PhoneInput, TaxIdInput } from "@/components/ui/FormattedInputs";
+import { AddressFields, DOBInput, EINInput, EmailInput, PhoneInput, ResponsiblePartyFields, TaxIdInput } from "@/components/ui/FormattedInputs";
 import { dobToIso, maskDOB, maskEIN, maskTaxId, normalizeEmail, validateAddress, validateDOB, validateEIN, validateEmail, validatePhone, validateTaxId, type Address, type TaxIdType } from "@/lib/validation";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
@@ -44,6 +44,10 @@ export function EditClientDialog({ client: c, open, onClose }: DialogProps) {
   const [taxId, setTaxId] = useState("");
   const [taxIdType, setTaxIdType] = useState<TaxIdType>(c.taxIdType ?? "SSN");
   const [ein, setEin] = useState("");
+  const [rpName, setRpName] = useState(c.business?.responsibleParty?.name ?? "");
+  const [rpTitle, setRpTitle] = useState(c.business?.responsibleParty?.title ?? "Owner");
+  const [rpTaxIdType, setRpTaxIdType] = useState<TaxIdType>(c.business?.responsibleParty?.taxIdType ?? "SSN");
+  const [rpTaxId, setRpTaxId] = useState("");
   const [submitted, setSubmitted] = useState(false);
   useEffect(() => {
     if (open) {
@@ -52,6 +56,10 @@ export function EditClientDialog({ client: c, open, onClose }: DialogProps) {
       setTaxId("");
       setEin("");
       setTaxIdType(c.taxIdType ?? "SSN");
+      setRpName(c.business?.responsibleParty?.name ?? "");
+      setRpTitle(c.business?.responsibleParty?.title ?? "Owner");
+      setRpTaxIdType(c.business?.responsibleParty?.taxIdType ?? "SSN");
+      setRpTaxId("");
       setSubmitted(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -67,6 +75,7 @@ export function EditClientDialog({ client: c, open, onClose }: DialogProps) {
     c.type === "individual" && validateDOB(dob),
     c.type === "individual" && validateTaxId(taxId, taxIdType),
     c.type === "business" && validateEIN(ein),
+    c.type === "business" && validateTaxId(rpTaxId, rpTaxIdType),
   ];
   const valid = errs.every((x) => !x);
 
@@ -85,7 +94,16 @@ export function EditClientDialog({ client: c, open, onClose }: DialogProps) {
       tags: f.tags.split(",").map((t) => t.trim()).filter(Boolean),
       business: c.business ? { ...c.business, legalName: f.legalName || c.business.legalName, entityType: f.entityType as NonNullable<Client["business"]>["entityType"], industry: f.industry, state: f.address.state || c.business.state } : undefined,
     });
-    if (dob || taxId || ein) store.updateTaxIds(c.id, { dob: dob ? dobToIso(dob) ?? undefined : undefined, taxId: taxId || undefined, taxIdType, ein: ein || undefined });
+    const rpOld = c.business?.responsibleParty;
+    const rpChanged = c.type === "business" && rpName.trim() && (rpName.trim() !== rpOld?.name || rpTitle !== rpOld?.title || !!rpTaxId);
+    if (dob || taxId || ein || rpChanged)
+      store.updateTaxIds(c.id, {
+        dob: dob ? dobToIso(dob) ?? undefined : undefined,
+        taxId: taxId || undefined,
+        taxIdType,
+        ein: ein || undefined,
+        rp: rpChanged ? { name: rpName.trim(), title: rpTitle, taxIdType: rpTaxIdType, taxId: rpTaxId || undefined } : undefined,
+      });
     toast("Client details saved");
     onClose();
   };
@@ -125,8 +143,24 @@ export function EditClientDialog({ client: c, open, onClose }: DialogProps) {
               <TaxIdInput id="ec-taxid" label={taxIdType} hint={c.taxIdLast4 ? `On file: ${c.taxIdType ?? "SSN"} ${maskTaxId(c.taxIdLast4)}` : "Not on file"} value={taxId} onChange={setTaxId} type={taxIdType} onTypeChange={setTaxIdType} showErrors={submitted} />
             </div>
           ) : (
-            <div className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
-              <EINInput id="ec-ein" label="EIN" hint={c.business?.einLast4 ? `On file: ${maskEIN(c.business.einLast4)}` : "Not on file"} value={ein} onChange={setEin} showErrors={submitted} />
+            <div className="space-y-4">
+              <div className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
+                <EINInput id="ec-ein" label="EIN" hint={c.business?.einLast4 ? `On file: ${maskEIN(c.business.einLast4)}` : "Not on file"} value={ein} onChange={setEin} showErrors={submitted} />
+              </div>
+              <ResponsiblePartyFields
+                idPrefix="ec-rp"
+                name={rpName}
+                onName={setRpName}
+                title={rpTitle}
+                onTitle={setRpTitle}
+                taxId={rpTaxId}
+                onTaxId={setRpTaxId}
+                taxIdType={rpTaxIdType}
+                onTaxIdType={setRpTaxIdType}
+                showErrors={submitted}
+                taxIdHint={c.business?.responsibleParty?.taxIdLast4 ? `On file: ${maskTaxId(c.business.responsibleParty.taxIdLast4)}` : "Not on file"}
+                onCopyContact={f.contactName.trim() ? () => setRpName(f.contactName.trim()) : undefined}
+              />
             </div>
           )}
         </section>
