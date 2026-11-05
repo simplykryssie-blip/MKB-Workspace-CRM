@@ -6,6 +6,8 @@ import { FlaskConical } from "lucide-react";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { ThemeToggle } from "./ThemeToggle";
+import { ClientsProvider } from "@/lib/store/clients-store";
+import { ToastProvider } from "@/components/ui/Toast";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -28,6 +30,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     });
 
   return (
+    <ClientsProvider>
+    <ToastProvider>
     <div className="flex min-h-screen">
       <Sidebar collapsed={collapsed} onToggleCollapsed={toggle} mobileOpen={mobileOpen} onCloseMobile={() => setMobileOpen(false)} />
       <div className="min-w-0 flex-1">
@@ -42,5 +46,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <main className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main>
       </div>
     </div>
+    </ToastProvider>
+    </ClientsProvider>
   );
 }

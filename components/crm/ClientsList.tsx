@@ -3,12 +3,17 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { ArrowDownUp, Building2, ChevronRight, Filter, Layers, Search, User, UserCheck, Users, X } from "lucide-react";
+import { ArrowDownUp, Building2, ChevronRight, Download, Filter, Layers, RotateCcw, Search, User, UserCheck, Users, X } from "lucide-react";
 import { Avatar, AvatarStack } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { ServiceTag } from "@/components/ui/ServiceTag";
 import { SERVICES, SERVICE_ORDER } from "@/lib/sample-data";
-import { CLIENTS, STAFF, balanceDue, openRequirements, staffById } from "@/lib/sample/clients";
+import { STAFF, balanceDue, openRequirements, staffById } from "@/lib/sample/clients";
+import { useClients } from "@/lib/store/clients-store";
+import { useToast } from "@/components/ui/Toast";
+import { Button } from "@/components/ui/Button";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { UserPlus } from "lucide-react";
 import { clientStatus } from "@/lib/status";
 import { relTime, usd } from "@/lib/format";
 import type { ClientStatus, ServiceKey } from "@/lib/types";
@@ -17,6 +22,8 @@ type SortKey = "recent" | "name" | "balance";
 
 export function ClientsList() {
   const router = useRouter();
+  const { clients: CLIENTS, reset: resetStore } = useClients();
+  const toast = useToast();
   const [q, setQ] = useState("");
   const [services, setServices] = useState<ServiceKey[]>([]);
   const [status, setStatus] = useState<ClientStatus | "all">("all");
@@ -36,7 +43,22 @@ export function ClientsList() {
     }).sort((a, b) =>
       sort === "name" ? a.name.localeCompare(b.name) : sort === "balance" ? balanceDue(b) - balanceDue(a) : b.lastActivityAt.localeCompare(a.lastActivityAt),
     );
-  }, [q, services, status, staff, type, sort]);
+  }, [CLIENTS, q, services, status, staff, type, sort]);
+
+  const exportCsv = () => {
+    const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
+    const header = ["Client ID", "Name", "Type", "Contact", "Email", "Phone", "City", "State", "Status", "Services", "Assigned staff", "Open items", "Balance due", "Last activity"];
+    const lines = rows.map((c) =>
+      [c.id, c.name, c.type, c.contactName ?? "", c.email, c.phone, c.address.city, c.address.state, c.status, [...new Set(c.enrollments.map((e) => SERVICES[e.service].label))].join("; "), c.staffIds.map((id) => staffById(id).name).join("; "), openRequirements(c), balanceDue(c), c.lastActivityAt.slice(0, 10)].map(esc).join(","),
+    );
+    const url = URL.createObjectURL(new Blob([[header.map(esc).join(","), ...lines].join("\n")], { type: "text/csv" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "mkb-clients-sample.csv";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast(`Exported ${rows.length} client${rows.length === 1 ? "" : "s"} to CSV (sample data) — logged`);
+  };
 
   const filtersOn = services.length > 0 || status !== "all" || staff !== "all" || type !== "all" || q !== "";
   const reset = () => {
@@ -57,6 +79,24 @@ export function ClientsList() {
   ];
 
   return (
+    <>
+    <PageHeader
+      title="Clients"
+      subtitle="One record per client, shared across every MKB service."
+      actions={
+        <>
+          <Button icon={RotateCcw} variant="ghost" aria-label="Reset sample data" title="Reset sample data" className="px-2.5 sm:px-4" onClick={() => { if (confirm("Reset all sample data to its original state? Changes made in this session will be lost.")) { resetStore(); toast("Sample data reset"); } }}>
+            <span className="hidden sm:inline">Reset sample data</span>
+          </Button>
+          <Button icon={Download} onClick={exportCsv} disabled={rows.length === 0}>
+            Export<span className="hidden sm:inline">{filtersOn ? " filtered" : ""}</span>
+          </Button>
+          <Button variant="primary" icon={UserPlus} href="/clients/new">
+            New client
+          </Button>
+        </>
+      }
+    />
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {summary.map((s) => (
@@ -76,7 +116,7 @@ export function ClientsList() {
         {/* Filters — one row above the list */}
         <div className="space-y-3 border-b border-line p-4 sm:p-5">
           <div className="flex flex-wrap items-center gap-2">
-            <label className="relative min-w-[200px] flex-1">
+            <label className="relative w-full min-w-[200px] flex-1 sm:w-auto">
               <span className="sr-only">Search clients</span>
               <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
               <input
@@ -86,10 +126,12 @@ export function ClientsList() {
                 className="h-10 w-full rounded-xl border border-line bg-surface-2 pl-9 pr-3 text-[14px] text-ink placeholder:text-faint focus:border-accent focus:bg-surface focus:outline-none focus:ring-4 focus:ring-accent/15"
               />
             </label>
+            <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap">
             <Select label="Status" value={status} onChange={(v) => setStatus(v as typeof status)} options={[["all", "All statuses"], ["active", "Active"], ["onboarding", "Onboarding"], ["inactive", "Inactive"]]} />
             <Select label="Assigned staff" value={staff} onChange={setStaff} options={[["all", "All staff"], ...STAFF.map((s) => [s.id, s.name] as [string, string])]} />
             <Select label="Client type" value={type} onChange={(v) => setType(v as typeof type)} options={[["all", "All types"], ["individual", "Individuals"], ["business", "Businesses"]]} />
-            <Select label="Sort" icon value={sort} onChange={(v) => setSort(v as SortKey)} options={[["recent", "Recent activity"], ["name", "Name A–Z"], ["balance", "Balance due"]]} />
+            <Select label="Sort" icon value={sort} onChange={(v) => setSort(v as SortKey)} options={[["recent", "Recent"], ["name", "Name A–Z"], ["balance", "Balance due"]]} />
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="flex items-center gap-1 text-[12.5px] font-medium text-muted">
@@ -231,6 +273,7 @@ export function ClientsList() {
         )}
       </section>
     </div>
+    </>
   );
 }
 
@@ -248,13 +291,13 @@ function Select({
   icon?: boolean;
 }) {
   return (
-    <label className="relative">
+    <label className="relative min-w-0">
       <span className="sr-only">{label}</span>
       {icon && <ArrowDownUp size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />}
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className={`h-10 rounded-xl border border-line bg-surface pr-8 text-[13.5px] font-medium text-ink-2 focus:border-accent focus:outline-none ${icon ? "pl-8" : "pl-3"}`}
+        className={`h-10 w-full rounded-xl border border-line bg-surface pr-8 text-[13.5px] font-medium text-ink-2 focus:border-accent focus:outline-none ${icon ? "pl-8" : "pl-3"}`}
       >
         {options.map(([v, l]) => (
           <option key={v} value={v}>

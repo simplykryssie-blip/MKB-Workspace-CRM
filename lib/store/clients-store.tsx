@@ -1,0 +1,322 @@
+"use client";
+
+/**
+ * In-browser sample-data store for the Phase 2 frontend.
+ *
+ * Every action (new client, request document, record payment, …) updates this
+ * in-memory state so the interface is fully clickable without a backend.
+ * Nothing leaves the browser and nothing persists past a page reload.
+ * In Phase 3 these actions become authenticated API calls with the same shapes.
+ */
+import { createContext, useCallback, useContext, useMemo, useReducer } from "react";
+import { CLIENTS, SAMPLE_NOW, STAGES, staffById } from "@/lib/sample/clients";
+import type {
+  ActivityItem,
+  ActivityKind,
+  Appointment,
+  Client,
+  ClientDocument,
+  Enrollment,
+  Invoice,
+  Message,
+  Note,
+  ServiceKey,
+  Signature,
+} from "@/lib/types";
+
+const uid = (p: string) => `${p}-${Math.random().toString(36).slice(2, 9)}`;
+/** Session-relative timestamp: sample "now" plus real seconds elapsed, so new items sort as newest. */
+const started = Date.now();
+export const nowIso = () => new Date(SAMPLE_NOW.getTime() + (Date.now() - started)).toISOString();
+
+type State = { clients: Client[] };
+
+type Action =
+  | { type: "reset" }
+  | { type: "addClient"; client: Client }
+  | { type: "update"; id: string; fn: (c: Client) => Client };
+
+function reducer(state: State, a: Action): State {
+  switch (a.type) {
+    case "reset":
+      return init();
+    case "addClient":
+      return { ...state, clients: [a.client, ...state.clients] };
+    case "update":
+      return { ...state, clients: state.clients.map((c) => (c.id === a.id ? a.fn(c) : c)) };
+  }
+}
+
+const init = (): State => ({ clients: structuredClone(CLIENTS) });
+
+function log(c: Client, kind: ActivityKind, text: string, actor: ActivityItem["actor"] = "staff"): Client {
+  const at = nowIso();
+  return { ...c, lastActivityAt: at, activity: [{ id: uid("x"), kind, text, at, actor }, ...c.activity] };
+}
+
+export type NewClientInput = {
+  type: Client["type"];
+  name: string;
+  contactName?: string;
+  email: string;
+  phone: string;
+  services: ServiceKey[];
+  staffIds: string[];
+  invite: boolean;
+};
+
+export const DEFAULT_TITLES: Record<ServiceKey, string> = {
+  tax: "2025 Individual return (1040)",
+  books: "Monthly bookkeeping",
+  biz: "Business formation",
+  expunge: "Record review",
+};
+export const DEFAULT_FEES: Record<ServiceKey, number> = { tax: 425, books: 650, biz: 899, expunge: 750 };
+
+function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => number) {
+  const up = (id: string, fn: (c: Client) => Client) => dispatch({ type: "update", id, fn });
+
+  return {
+    reset: () => dispatch({ type: "reset" }),
+
+    addClient(input: NewClientInput): string {
+      const id = `c-${Math.floor(2000 + Math.random() * 7000)}`;
+      const at = nowIso();
+      const staffIds = input.staffIds.length ? input.staffIds : ["s-mk"];
+      const enrollments: Enrollment[] = input.services.map((s) => ({
+        id: uid("e"),
+        service: s,
+        title: DEFAULT_TITLES[s],
+        stage: STAGES[s][0],
+        progress: 5,
+        status: "active",
+        staffId: staffIds[0],
+        startedAt: at,
+        fee: DEFAULT_FEES[s],
+      }));
+      const client: Client = {
+        id,
+        type: input.type,
+        name: input.name.trim(),
+        contactName: input.contactName?.trim() || undefined,
+        email: input.email.trim(),
+        phone: input.phone.trim() || "—",
+        preferredContact: "Email",
+        address: { line1: "—", city: "—", state: "—", zip: "" },
+        business:
+          input.type === "business"
+            ? { legalName: input.name.trim(), entityType: "LLC", state: "GA", industry: "—", fiscalYearEnd: "December" }
+            : undefined,
+        staffIds,
+        status: "onboarding",
+        portal: input.invite ? "invited" : "not_invited",
+        tags: [],
+        source: "Manual entry",
+        since: at,
+        lastActivityAt: at,
+        enrollments,
+        documents: [],
+        messages: [],
+        appointments: [],
+        invoices: [],
+        signatures: [],
+        notes: [],
+        activity: [
+          ...(input.invite ? [{ id: uid("x"), kind: "message" as const, text: "Portal invitation sent", at, actor: "system" as const }] : []),
+          { id: uid("x"), kind: "intake", text: "Client record created", at, actor: "staff" },
+        ],
+      };
+      dispatch({ type: "addClient", client });
+      return id;
+    },
+
+    updateClient(id: string, patch: Partial<Client>, summary = "Updated client details") {
+      up(id, (c) => log({ ...c, ...patch }, "status", summary));
+    },
+
+    sendInvite(id: string) {
+      up(id, (c) => log({ ...c, portal: c.portal === "active" ? "active" : "invited" }, "message", "Portal invitation sent", "system"));
+    },
+
+    // Services ------------------------------------------------------------
+    enroll(id: string, e: { service: ServiceKey; title: string; staffId: string; fee: number; dueAt?: string }) {
+      up(id, (c) =>
+        log(
+          {
+            ...c,
+            staffIds: c.staffIds.includes(e.staffId) ? c.staffIds : [...c.staffIds, e.staffId],
+            enrollments: [
+              ...c.enrollments,
+              { id: uid("e"), ...e, stage: STAGES[e.service][0], progress: 5, status: "active", startedAt: nowIso() },
+            ],
+          },
+          "intake",
+          `Enrolled in ${e.title}`,
+        ),
+      );
+    },
+
+    advanceStage(id: string, enrollmentId: string) {
+      up(id, (c) => {
+        let text = "";
+        const enrollments = c.enrollments.map((e) => {
+          if (e.id !== enrollmentId) return e;
+          const stages = STAGES[e.service];
+          const i = stages.indexOf(e.stage);
+          if (i >= stages.length - 1) return e;
+          const next = stages[i + 1];
+          const last = i + 1 === stages.length - 1;
+          text = `Moved "${e.title}" to "${next}"`;
+          return {
+            ...e,
+            stage: next,
+            progress: last ? 100 : Math.round(((i + 1) / (stages.length - 1)) * 100),
+            status: last ? ("complete" as const) : e.status === "waiting_on_client" ? ("active" as const) : e.status,
+          };
+        });
+        return text ? log({ ...c, enrollments }, "status", text) : c;
+      });
+    },
+
+    setEnrollmentStatus(id: string, enrollmentId: string, status: Enrollment["status"]) {
+      up(id, (c) => {
+        const e = c.enrollments.find((x) => x.id === enrollmentId)!;
+        return log({ ...c, enrollments: c.enrollments.map((x) => (x.id === enrollmentId ? { ...x, status } : x)) }, "status", `Set "${e.title}" to ${status.replace(/_/g, " ")}`);
+      });
+    },
+
+    // Documents ------------------------------------------------------------
+    requestDocument(id: string, d: { name: string; service: ServiceKey; category: string; sensitive: boolean }) {
+      up(id, (c) =>
+        log(
+          { ...c, documents: [{ id: uid("d"), ...d, status: "requested", requestedAt: nowIso() }, ...c.documents] },
+          "upload",
+          `Requested "${d.name}" from client`,
+        ),
+      );
+    },
+    uploadDocument(id: string, d: { name: string; service: ServiceKey; category: string; sensitive: boolean; sizeKb: number; replaces?: string }) {
+      up(id, (c) => {
+        const doc: ClientDocument = { id: uid("d"), name: d.name, service: d.service, category: d.category, sensitive: d.sensitive, status: "received", requestedAt: nowIso(), uploadedAt: nowIso(), sizeKb: d.sizeKb, uploadedBy: "staff" };
+        const documents = d.replaces
+          ? c.documents.map((x) => (x.id === d.replaces ? { ...x, status: "received" as const, uploadedAt: nowIso(), sizeKb: d.sizeKb, uploadedBy: "staff" as const } : x))
+          : [doc, ...c.documents];
+        return log({ ...c, documents }, "upload", `Uploaded "${d.name}"`);
+      });
+    },
+    setDocStatus(id: string, docId: string, status: ClientDocument["status"]) {
+      up(id, (c) => {
+        const d = c.documents.find((x) => x.id === docId)!;
+        const verb = status === "reviewed" ? "Marked reviewed" : status === "rejected" ? "Asked client to re-upload" : "Updated";
+        return log({ ...c, documents: c.documents.map((x) => (x.id === docId ? { ...x, status } : x)) }, "upload", `${verb}: "${d.name}"`);
+      });
+    },
+    remindDocument(id: string, docId: string) {
+      up(id, (c) => log(c, "message", `Reminder sent for "${c.documents.find((x) => x.id === docId)?.name}"`, "system"));
+    },
+    logDocumentAccess(id: string, docId: string, action: "Viewed" | "Downloaded") {
+      up(id, (c) => log(c, "upload", `${action} "${c.documents.find((x) => x.id === docId)?.name}" (audit)`));
+    },
+
+    // Messages ---------------------------------------------------------------
+    sendMessage(id: string, body: string, service?: ServiceKey) {
+      up(id, (c) =>
+        log({ ...c, messages: [...c.messages, { id: uid("m"), from: "staff", author: "MKB Owner", body, at: nowIso(), read: true, service }] }, "message", "Sent a message"),
+      );
+    },
+    markMessagesRead(id: string) {
+      up(id, (c) => (c.messages.some((m) => !m.read) ? { ...c, messages: c.messages.map((m): Message => ({ ...m, read: true })) } : c));
+    },
+
+    // Appointments -----------------------------------------------------------
+    schedule(id: string, a: Omit<Appointment, "id" | "status">) {
+      up(id, (c) =>
+        log({ ...c, appointments: [...c.appointments, { ...a, id: uid("a"), status: "scheduled" as const }].sort((x, y) => x.at.localeCompare(y.at)) }, "appointment", `Scheduled "${a.title}"`),
+      );
+    },
+    setAppointmentStatus(id: string, apptId: string, status: Appointment["status"]) {
+      up(id, (c) => {
+        const a = c.appointments.find((x) => x.id === apptId)!;
+        return log({ ...c, appointments: c.appointments.map((x) => (x.id === apptId ? { ...x, status } : x)) }, "appointment", `${status === "cancelled" ? "Cancelled" : status === "completed" ? "Completed" : "Updated"} "${a.title}"`);
+      });
+    },
+
+    // Invoices -----------------------------------------------------------------
+    createInvoice(id: string, i: { service: ServiceKey; description: string; amount: number; dueAt: string; draft: boolean }) {
+      const number = `INV-${getNextInvoice()}`;
+      up(id, (c) =>
+        log(
+          {
+            ...c,
+            invoices: [{ id: uid("i"), number, service: i.service, description: i.description, amount: i.amount, paid: 0, status: i.draft ? "draft" : "open", issuedAt: nowIso(), dueAt: i.dueAt }, ...c.invoices],
+          },
+          "invoice",
+          `${i.draft ? "Drafted" : "Sent"} invoice ${number}`,
+        ),
+      );
+      return number;
+    },
+    sendInvoice(id: string, invId: string) {
+      up(id, (c) => log({ ...c, invoices: c.invoices.map((x) => (x.id === invId ? { ...x, status: "open" as const } : x)) }, "invoice", `Sent invoice ${c.invoices.find((x) => x.id === invId)?.number}`));
+    },
+    recordPayment(id: string, invId: string, amount: number, method: string) {
+      up(id, (c) => {
+        const invoices = c.invoices.map((x): Invoice => {
+          if (x.id !== invId) return x;
+          const paid = Math.min(x.amount, x.paid + amount);
+          return { ...x, paid, status: paid >= x.amount ? "paid" : "partial" };
+        });
+        const inv = c.invoices.find((x) => x.id === invId)!;
+        return log({ ...c, invoices }, "payment", `Recorded ${method} payment on ${inv.number}`);
+      });
+    },
+
+    // Signatures ---------------------------------------------------------------
+    requestSignature(id: string, s: { document: string; service: ServiceKey }) {
+      up(id, (c) => log({ ...c, signatures: [{ id: uid("s"), ...s, status: "pending", sentAt: nowIso() } satisfies Signature, ...c.signatures] }, "signature", `Sent "${s.document}" for signature`));
+    },
+    resendSignature(id: string, sigId: string) {
+      up(id, (c) => log({ ...c, signatures: c.signatures.map((x) => (x.id === sigId ? { ...x, sentAt: nowIso() } : x)) }, "signature", `Resent "${c.signatures.find((x) => x.id === sigId)?.document}"`, "system"));
+    },
+    cancelSignature(id: string, sigId: string) {
+      up(id, (c) => log({ ...c, signatures: c.signatures.map((x) => (x.id === sigId ? { ...x, status: "expired" as const } : x)) }, "signature", `Voided "${c.signatures.find((x) => x.id === sigId)?.document}"`));
+    },
+
+    // Notes -----------------------------------------------------------------------
+    addNote(id: string, body: string, service?: ServiceKey) {
+      up(id, (c) => log({ ...c, notes: [{ id: uid("n"), authorId: "s-mk", body, at: nowIso(), service } satisfies Note, ...c.notes] }, "note", "Added an internal note"));
+    },
+    togglePin(id: string, noteId: string) {
+      up(id, (c) => ({ ...c, notes: c.notes.map((n) => (n.id === noteId ? { ...n, pinned: !n.pinned } : n)) }));
+    },
+    deleteNote(id: string, noteId: string) {
+      up(id, (c) => log({ ...c, notes: c.notes.filter((n) => n.id !== noteId) }, "note", "Deleted an internal note"));
+    },
+  };
+}
+
+export type ClientStore = ReturnType<typeof makeStore> & { clients: Client[] };
+
+const Ctx = createContext<ClientStore | null>(null);
+
+export function ClientsProvider({ children }: { children: React.ReactNode }) {
+  const [state, dispatch] = useReducer(reducer, undefined, init);
+  const counter = useMemo(() => ({ n: 1200 }), []);
+  const getNext = useCallback(() => counter.n++, [counter]);
+  const actions = useMemo(() => makeStore(dispatch, getNext), [getNext]);
+  const value = useMemo(() => ({ ...actions, clients: state.clients }), [actions, state.clients]);
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+export function useClients() {
+  const v = useContext(Ctx);
+  if (!v) throw new Error("useClients must be used inside <ClientsProvider>");
+  return v;
+}
+
+export function useClient(id: string) {
+  const s = useClients();
+  return s.clients.find((c) => c.id === id);
+}
+
+export { staffById };

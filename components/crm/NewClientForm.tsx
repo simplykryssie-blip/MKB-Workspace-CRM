@@ -2,17 +2,24 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { AlertTriangle, ArrowRight, Building2, CheckCircle2, User } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useClients } from "@/lib/store/clients-store";
+import { useToast } from "@/components/ui/Toast";
+import { AlertTriangle, ArrowRight, Building2, User } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { ServiceTag } from "@/components/ui/ServiceTag";
 import { SERVICES, SERVICE_ORDER } from "@/lib/sample-data";
-import { CLIENTS, STAFF } from "@/lib/sample/clients";
+import { STAFF } from "@/lib/sample/clients";
 import type { ServiceKey } from "@/lib/types";
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 export function NewClientForm() {
+  const router = useRouter();
+  const store = useClients();
+  const toast = useToast();
+  const CLIENTS = store.clients;
   const [type, setType] = useState<"individual" | "business">("individual");
   const [name, setName] = useState("");
   const [contact, setContact] = useState("");
@@ -21,7 +28,6 @@ export function NewClientForm() {
   const [services, setServices] = useState<ServiceKey[]>([]);
   const [staff, setStaff] = useState<string[]>([]);
   const [invite, setInvite] = useState(true);
-  const [saved, setSaved] = useState(false);
 
   // Duplicate detection: same email, same phone digits, or same normalized name.
   const dupes = useMemo(() => {
@@ -34,31 +40,19 @@ export function NewClientForm() {
         (p.length >= 7 && c.phone.replace(/\D/g, "").endsWith(p.slice(-7))) ||
         (n.length >= 4 && norm(c.name).includes(n)),
     ).slice(0, 3);
-  }, [email, phone, name]);
+  }, [CLIENTS, email, phone, name]);
 
   const toggle = <T,>(arr: T[], v: T) => (arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
   const valid = name.trim() && email.includes("@") && services.length > 0;
-
-  if (saved)
-    return (
-      <Card className="mx-auto max-w-xl p-8 text-center">
-        <CheckCircle2 size={40} className="mx-auto text-success" />
-        <h2 className="mt-3 text-[18px] font-bold text-ink">Client created (preview)</h2>
-        <p className="mt-1 text-[14px] text-muted">
-          In Phase 3 this saves to the database{invite ? " and emails a portal invitation" : ""}. Nothing was stored — this is sample mode.
-        </p>
-        <div className="mt-5 flex justify-center gap-2">
-          <Button href="/clients">Back to clients</Button>
-          <Button variant="primary" onClick={() => setSaved(false)}>Add another</Button>
-        </div>
-      </Card>
-    );
 
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        if (valid) setSaved(true);
+        if (!valid) return;
+        const id = store.addClient({ type, name, contactName: contact, email, phone, services, staffIds: staff, invite });
+        toast(`${name.trim()} created${invite ? " — portal invitation sent" : ""}`);
+        router.push(`/clients/${id}`);
       }}
       className="grid grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]"
     >

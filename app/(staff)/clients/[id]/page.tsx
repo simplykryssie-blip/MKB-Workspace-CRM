@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
 import { ClientProfile } from "@/components/crm/ClientProfile";
 import { CLIENTS, clientById } from "@/lib/sample/clients";
 
+// Sample clients are pre-rendered; clients created during a preview session
+// render on demand and are read from the in-browser sample store.
 export function generateStaticParams() {
   return CLIENTS.map((c) => ({ id: c.id }));
 }
@@ -14,7 +15,5 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function ClientPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const client = clientById(id);
-  if (!client) notFound();
-  return <ClientProfile client={client} />;
+  return <ClientProfile id={id} />;
 }
