@@ -1,34 +1,39 @@
 /**
- * Placeholder MKB wordmark built in SVG so it stays crisp at any size.
- * Swap in the official MKB logo file (SVG preferred) when provided.
+ * Official MKB Financial Group logo (gold artwork, background removed so it
+ * sits on the navy sidebar). Source files live in /brand-assets; the web
+ * versions in /public/brand are generated from them.
+ *
+ * The gold is used for the brand mark only — the application UI itself keeps
+ * the Verexa-derived blue palette.
  */
-export function LogoMark({ size = 36 }: { size?: number }) {
+/* eslint-disable @next/next/no-img-element -- static brand images; avoids paid image optimization on Cloudflare */
+
+export function LogoMark({ height = 26 }: { height?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 40 40" aria-hidden="true">
-      <defs>
-        <linearGradient id="mkb-mark" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#1592EF" />
-          <stop offset="1" stopColor="#0B6FD0" />
-        </linearGradient>
-      </defs>
-      <rect width="40" height="40" rx="10" fill="url(#mkb-mark)" />
-      <path d="M9 27V13.5l5.5 7 5.5-7V27" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M24 13.5V27M24 20.5l6.5-7M25.5 19l5.5 8" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M7 31.5c8 3 18 3 27-3.5" fill="none" stroke="#A4D22B" strokeWidth="2.6" strokeLinecap="round" />
-    </svg>
+    <img
+      src="/brand/mkb-monogram.webp"
+      alt="MKB Financial Group"
+      width={Math.round((height * 185) / 96)}
+      height={height}
+      className="block select-none"
+      draggable={false}
+    />
   );
 }
 
 export function Logo({ collapsed = false }: { collapsed?: boolean }) {
-  if (collapsed) return <LogoMark size={38} />;
+  if (collapsed) return <LogoMark height={24} />;
   return (
-    <div className="flex items-center gap-3">
-      <LogoMark size={40} />
-      <div className="leading-tight">
-        <div className="text-[20px] font-extrabold leading-none tracking-tight text-white">MKB</div>
-        <div className="mt-1 text-[10.5px] font-bold uppercase leading-none tracking-[0.16em] text-[#5cc8f0]">Financial Group</div>
-        <div className="mt-1 text-[11.5px] font-medium leading-none text-rail-muted">Business Suite</div>
-      </div>
+    <div className="flex flex-col items-start">
+      <img
+        src="/brand/mkb-logo-sidebar.webp"
+        alt="MKB Financial Group"
+        width={176}
+        height={88}
+        className="block h-auto w-[176px] select-none"
+        draggable={false}
+      />
+      <div className="mt-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-rail-muted">Business Suite</div>
     </div>
   );
 }

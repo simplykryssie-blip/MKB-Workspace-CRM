@@ -34,7 +34,7 @@ export function Sidebar({ collapsed, onToggleCollapsed, mobileOpen, onCloseMobil
       >
         {/* The navy panel stretches the full page height; the menu itself stays pinned in view while scrolling. */}
         <div className="flex h-full flex-col md:sticky md:top-0 md:h-screen">
-        <div className={`flex h-[76px] shrink-0 items-center border-b border-rail-line ${collapsed ? "justify-center px-2" : "px-5 md:justify-center md:px-2 lg:justify-start lg:px-5"}`}>
+        <div className={`flex min-h-[76px] shrink-0 items-center border-b py-5 border-rail-line ${collapsed ? "justify-center px-2" : "px-5 md:justify-center md:px-2 lg:justify-start lg:px-5"}`}>
           <div className={collapsed ? "" : "md:hidden lg:block"}>
             <Logo collapsed={collapsed} />
           </div>
@@ -43,7 +43,7 @@ export function Sidebar({ collapsed, onToggleCollapsed, mobileOpen, onCloseMobil
               <Logo collapsed />
             </div>
           )}
-          <button onClick={onCloseMobile} className="ml-auto grid h-9 w-9 place-items-center rounded-lg text-rail-muted hover:bg-rail-hover md:hidden" aria-label="Close menu">
+          <button onClick={onCloseMobile} className="ml-auto grid h-9 w-9 self-start place-items-center rounded-lg text-rail-muted hover:bg-rail-hover md:hidden" aria-label="Close menu">
             <X size={18} />
           </button>
         </div>
