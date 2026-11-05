@@ -21,6 +21,8 @@ import type {
 /** Fixed "now" for sample data so relative dates stay stable in the preview. */
 import { SAMPLE_NOW } from "./time";
 import { BOOKS_SEEDS, booksClientRecords } from "./books-seed";
+import { bizClientRecords, bizEnrollmentState, bizRequestsFor } from "./biz-seed";
+import { FLOW as BIZ_FLOW, quoteTotal } from "@/lib/biz/config";
 export { SAMPLE_NOW };
 
 export const STAFF: Staff[] = [
@@ -37,7 +39,8 @@ export const STAGES: Record<ServiceKey, string[]> = {
   tax: ["Intake", "Awaiting Documents", "Ready for Review", "In Preparation", "Awaiting Client Approval", "Ready to E-file", "Submitted", "Accepted", "Completed"],
   // Bookkeeping engagements mirror the current month's close stage (see lib/books/config.ts).
   books: ["Client Entry in Progress", "Ready for MKB Review", "MKB Reviewing", "Reconciliation in Progress", "Client Follow-up Needed", "MKB Final Review", "Reports Ready", "Month Closed"],
-  biz: ["Intake", "Name search", "Filing submitted", "State approved", "EIN obtained", "Complete"],
+  // Business services engagements mirror their service request status (see lib/biz/config.ts).
+  biz: [...BIZ_FLOW],
   expunge: ["Intake", "Records requested", "Eligibility review", "Petition drafted", "Filed", "Hearing", "Order granted"],
 };
 
@@ -395,7 +398,12 @@ const APPT_TITLES: Record<ServiceKey, string[]> = {
 };
 
 function build(seed: Seed, ci: number): Client {
-  const enrollments: Enrollment[] = seed.enrollments.map((e, i) => ({ ...e, id: `${seed.id}-e${i + 1}` }));
+  // Business-services engagements come from the client's service requests (one per request).
+  const bizReqs = bizRequestsFor(seed.id);
+  const enrollments: Enrollment[] = [
+    ...seed.enrollments.map((e, i) => ({ ...e, id: `${seed.id}-e${i + 1}` })).filter((e) => e.service !== "biz"),
+    ...bizReqs.map((r): Enrollment => ({ id: r.enrollmentId!, service: "biz", title: `${r.serviceName} — ${r.businessName}`, ...bizEnrollmentState(r.status, r.holdFrom), staffId: r.assignedTo, startedAt: r.createdAt, dueAt: r.dueAt, fee: quoteTotal(r.quote) })),
+  ];
   const documents: ClientDocument[] = [];
   const signatures: Signature[] = [];
   const appointments: Appointment[] = [];
@@ -404,6 +412,12 @@ function build(seed: Seed, ci: number): Client {
   const notes: Note[] = [];
   const activity: ActivityItem[] = [];
   let inv = 1030 + ci * 3;
+  if (bizReqs.length) {
+    const rec = bizClientRecords(seed.id);
+    documents.push(...rec.documents);
+    invoices.push(...rec.invoices);
+    messages.push(...rec.messages);
+  }
 
   enrollments.forEach((e, ei) => {
     const stageIdx = Math.max(0, STAGES[e.service].indexOf(e.stage));
@@ -422,7 +436,8 @@ function build(seed: Seed, ci: number): Client {
       invoices.push(...rec.invoices);
       messages.push(...rec.messages);
     }
-    (booksSeed ? [] : tpl).forEach((t, ti) => {
+    const bizReq = e.service === "biz";
+    (booksSeed || bizReq ? [] : tpl).forEach((t, ti) => {
       const done = e.status === "complete" || ti / tpl.length < e.progress / 100 + 0.15;
       // Staff-produced documents (filed articles, petition drafts) are never "requested" from the client.
       const staffMade = t.category === "Filings" || t.category === "Formation";
@@ -468,7 +483,7 @@ function build(seed: Seed, ci: number): Client {
       staffId: e.staffId,
       status: "completed",
     });
-    if (e.status !== "complete")
+    if (e.status !== "complete" && e.status !== "cancelled")
       appointments.push({
         id: `${e.id}-a2`,
         title: titles[1],
@@ -482,7 +497,7 @@ function build(seed: Seed, ci: number): Client {
 
     // Invoices: deposit (paid) + balance (status depends on progress/seed). Bookkeeping bills monthly (above).
     const deposit = Math.round(e.fee * 0.5);
-    if (!booksSeed) invoices.push({
+    if (!booksSeed && !bizReq) invoices.push({
       id: `${e.id}-i1`,
       number: `INV-${inv++}`,
       service: e.service,
@@ -494,7 +509,7 @@ function build(seed: Seed, ci: number): Client {
       dueAt: at(0.1),
       taxReturnId,
     });
-    if (!booksSeed && (e.progress >= 50 || e.status === "complete")) {
+    if (!booksSeed && !bizReq && (e.progress >= 50 || e.status === "complete")) {
       const balance = e.fee - deposit;
       const st: Invoice["status"] =
         e.status === "complete" ? "paid" : ci % 4 === 1 ? "overdue" : ci % 4 === 2 ? "partial" : "open";
@@ -513,7 +528,7 @@ function build(seed: Seed, ci: number): Client {
     }
 
     // Messages
-    messages.push(
+    if (!bizReq) messages.push(
       { id: `${e.id}-m1`, from: "staff", author: staffById(e.staffId).name, body: `Welcome! I'll be handling your ${e.title.toLowerCase()}. Your checklist is in the portal — upload anything you have and I'll follow up on the rest.`, at: at(0.03, 12), service: e.service, read: true },
       { id: `${e.id}-m2`, from: "client", author: seed.contactName ?? seed.name, body: "Thanks — I'll get started on the documents this week.", at: at(0.05, 18), service: e.service, read: true },
     );

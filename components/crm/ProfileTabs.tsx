@@ -56,6 +56,7 @@ import { downloadPlaceholder } from "./dialogs";
 import type { DialogKind, TabKey } from "./ClientProfile";
 import { useTax } from "@/lib/store/tax-store";
 import { useBooks } from "@/lib/store/books-store";
+import { useBiz } from "@/lib/store/biz-store";
 import { ReturnStatusBadge } from "@/components/tax/TaxBits";
 
 export type Act = {
@@ -308,7 +309,8 @@ function EnrollmentRow({ c, e, compact }: { c: Client; e: Enrollment; compact?: 
   };
   const taxReturn = useTax().returns.find((r) => r.enrollmentId === e.id);
   const booksWs = useBooks().workspaces.find((w) => w.enrollmentId === e.id);
-  const isTax = e.service === "tax" || !!booksWs;
+  const bizReq = useBiz().requests.find((r) => r.enrollmentId === e.id);
+  const isTax = e.service === "tax" || !!booksWs || !!bizReq;
   const setStatus = (s: Enrollment["status"]) => {
     store.setEnrollmentStatus(c.id, e.id, s);
     toast(`Status set to "${enrollmentStatus[s].label}"`);
@@ -379,8 +381,10 @@ function EnrollmentRow({ c, e, compact }: { c: Client; e: Enrollment; compact?: 
       )}
       {isTax && (
         <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
-          <span className="mr-auto text-[12px] text-muted">{booksWs ? "Monthly close is managed in the Bookkeeping workspace." : "Workflow is managed in the Tax Preparation Center."}</span>
-          {booksWs ? (
+          <span className="mr-auto text-[12px] text-muted">{bizReq ? `Managed in Business Services as ${bizReq.number}.` : booksWs ? "Monthly close is managed in the Bookkeeping workspace." : "Workflow is managed in the Tax Preparation Center."}</span>
+          {bizReq ? (
+            <Button size="sm" variant={compact ? "ghost" : "secondary"} href={`/services/business-services/requests/${bizReq.id}`}>Open service request</Button>
+          ) : booksWs ? (
             <Button size="sm" variant={compact ? "ghost" : "secondary"} href={`/services/bookkeeping/${booksWs.id}`}>Open bookkeeping workspace</Button>
           ) : (
             <Button size="sm" variant={compact ? "ghost" : "secondary"} href={taxReturn ? `/services/tax-preparation/returns/${taxReturn.id}` : "/services/tax-preparation"}>
@@ -403,7 +407,7 @@ function EnrollmentRow({ c, e, compact }: { c: Client; e: Enrollment; compact?: 
 export function ServicesTab({ c, act }: { c: Client; act: Act }) {
   const enrolled = new Set(c.enrollments.map((e) => e.service));
   const [filter, setFilter] = useState<"all" | "active" | "complete">("all");
-  const list = c.enrollments.filter((e) => filter === "all" || (filter === "complete" ? e.status === "complete" : e.status !== "complete"));
+  const list = c.enrollments.filter((e) => filter === "all" || (filter === "complete" ? e.status === "complete" || e.status === "cancelled" : e.status !== "complete" && e.status !== "cancelled"));
   return (
     <Card>
       <CardHeader

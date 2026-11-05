@@ -29,7 +29,7 @@ export type Enrollment = {
   stage: string;
   /** 0–100, for progress bars. */
   progress: number;
-  status: "active" | "waiting_on_client" | "in_review" | "complete" | "on_hold";
+  status: "active" | "waiting_on_client" | "in_review" | "complete" | "on_hold" | "cancelled";
   staffId: string;
   startedAt: string;
   dueAt?: string;
@@ -55,6 +55,13 @@ export type ClientDocument = {
   /** Bookkeeping documents are tagged by business workspace and month ("2026-10"). */
   workspaceId?: string;
   period?: string;
+  /** Business services: the business entity and service request the file belongs to. */
+  entityId?: string;
+  bizRequestId?: string;
+  /** Licenses, permits and similar documents that expire. */
+  expiresAt?: string;
+  /** Deliverables: when the file was delivered to the client. */
+  deliveredAt?: string;
 };
 
 export type Message = {
@@ -67,6 +74,8 @@ export type Message = {
   read: boolean;
   /** Bookkeeping: which business workspace a client-visible message belongs to. */
   workspaceId?: string;
+  /** Business services: which service request a message belongs to. */
+  bizRequestId?: string;
 };
 
 export type Appointment = {
@@ -96,7 +105,17 @@ export type Invoice = {
   taxReturnId?: string;
   /** Set for bookkeeping invoices — links billing to a business workspace. */
   workspaceId?: string;
+  /** Set for business services invoices — links billing to a service request. */
+  bizRequestId?: string;
+  /** Itemized lines. Business services separate MKB fees from pass-through government and third-party fees. */
+  lines?: InvoiceLine[];
+  paidAt?: string;
+  /** Refunds, credits and other adjustments, newest first. */
+  adjustments?: InvoiceAdjustment[];
 };
+
+export type InvoiceLine = { label: string; amount: number; kind: "service" | "additional" | "filing" | "third_party" | "discount" };
+export type InvoiceAdjustment = { id: string; kind: "refund" | "credit" | "correction"; amount: number; note: string; at: string; byId: string };
 
 export type Signature = {
   id: string;

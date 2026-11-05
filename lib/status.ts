@@ -17,6 +17,7 @@ export const enrollmentStatus: Record<Enrollment["status"], { label: string; ton
   in_review: { label: "In review", tone: "info" },
   complete: { label: "Complete", tone: "success" },
   on_hold: { label: "On hold", tone: "neutral" },
+  cancelled: { label: "Cancelled", tone: "neutral" },
 };
 export const docStatus: Record<DocStatus, { label: string; tone: Tone }> = {
   requested: { label: "Requested", tone: "warning" },

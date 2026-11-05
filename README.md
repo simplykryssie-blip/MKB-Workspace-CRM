@@ -47,6 +47,19 @@ npm run build && npm start
   final approval); a QuickBooks tab designed around Intuit OAuth 2.0 per company (no real
   connection); a report center; documents, client-visible messages and internal notes; and billing
   on the client record. Reconciliation balances are marked as fictional sample values.
+- **Business Services Center** (nationwide, all 50 states): dashboard KPIs and a work queue with the
+  next required action; an administrator-editable service catalog (custom services, no code changes)
+  that labels administrative and document-preparation work as not legal advice; service requests from
+  intake through quote, payment, client information, assignment, processing, agency submission,
+  verified approval, reviewed deliverables, completion approval and follow-up; a formation workspace;
+  businesses linked to existing clients (several per client) with formation state, state ID numbers
+  and foreign registrations in other states; a configurable state requirement framework (agency,
+  official website, frequency, due date, fee, source, last-verified date) that ships with no
+  hard-coded deadlines or fees; verification tracking that never labels a business compliant without
+  a recorded check; a nationwide compliance calendar (filters by state, entity type, deadline and
+  staff) with 60/30/14/7-day reminders; state-specific document checklists; documents and billing on
+  the client record with MKB fees separated from government and third-party fees, refunds and
+  adjustment history; and a mobile-friendly client portal view.
 
 Changes reset on page reload. Nothing is sent to a server.
 

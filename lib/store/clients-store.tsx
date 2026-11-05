@@ -317,7 +317,7 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
     },
 
     // Documents ------------------------------------------------------------
-    requestDocument(id: string, d: { name: string; service: ServiceKey; category: string; sensitive: boolean; taxYear?: number; workspaceId?: string; period?: string }): string {
+    requestDocument(id: string, d: { name: string; service: ServiceKey; category: string; sensitive: boolean; taxYear?: number; workspaceId?: string; period?: string; entityId?: string; bizRequestId?: string }): string {
       const docId = uid("d");
       up(id, (c) =>
         log(
@@ -328,11 +328,11 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
       );
       return docId;
     },
-    uploadDocument(id: string, d: { name: string; service: ServiceKey; category: string; sensitive: boolean; sizeKb: number; replaces?: string; taxYear?: number; workspaceId?: string; period?: string; by?: "client" | "staff" }): string {
+    uploadDocument(id: string, d: { name: string; service: ServiceKey; category: string; sensitive: boolean; sizeKb: number; replaces?: string; taxYear?: number; workspaceId?: string; period?: string; by?: "client" | "staff"; entityId?: string; bizRequestId?: string; expiresAt?: string }): string {
       const docId = d.replaces ?? uid("d");
       const by = d.by ?? "staff";
       up(id, (c) => {
-        const doc: ClientDocument = { id: docId, name: d.name, service: d.service, category: d.category, sensitive: d.sensitive, status: "received", requestedAt: nowIso(), uploadedAt: nowIso(), sizeKb: d.sizeKb, uploadedBy: by, taxYear: d.taxYear, workspaceId: d.workspaceId, period: d.period };
+        const doc: ClientDocument = { id: docId, name: d.name, service: d.service, category: d.category, sensitive: d.sensitive, status: "received", requestedAt: nowIso(), uploadedAt: nowIso(), sizeKb: d.sizeKb, uploadedBy: by, taxYear: d.taxYear, workspaceId: d.workspaceId, period: d.period, entityId: d.entityId, bizRequestId: d.bizRequestId, expiresAt: d.expiresAt };
         const documents = d.replaces
           ? c.documents.map((x) => (x.id === d.replaces ? { ...x, status: "received" as const, uploadedAt: nowIso(), sizeKb: d.sizeKb, uploadedBy: by } : x))
           : [doc, ...c.documents];
@@ -347,6 +347,13 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
         return log({ ...c, documents: c.documents.map((x) => (x.id === docId ? { ...x, status } : x)) }, "upload", `${verb}: "${d.name}"`);
       });
     },
+    /** Business services: a deliverable was delivered to the client portal. */
+    markDocDelivered(id: string, docId: string) {
+      up(id, (c) => log({ ...c, documents: c.documents.map((x) => (x.id === docId ? { ...x, deliveredAt: nowIso(), status: "reviewed" as const } : x)) }, "upload", `Delivered "${c.documents.find((x) => x.id === docId)?.name}" to the client portal`));
+    },
+    setDocExpiry(id: string, docId: string, expiresAt?: string) {
+      up(id, (c) => ({ ...c, documents: c.documents.map((x) => (x.id === docId ? { ...x, expiresAt } : x)) }));
+    },
     remindDocument(id: string, docId: string) {
       up(id, (c) => log(c, "message", `Reminder sent for "${c.documents.find((x) => x.id === docId)?.name}"`, "system"));
     },
@@ -355,11 +362,11 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
     },
 
     // Messages ---------------------------------------------------------------
-    sendMessage(id: string, body: string, service?: ServiceKey, opts?: { from?: "client" | "staff"; author?: string; workspaceId?: string }) {
+    sendMessage(id: string, body: string, service?: ServiceKey, opts?: { from?: "client" | "staff"; author?: string; workspaceId?: string; bizRequestId?: string }) {
       const from = opts?.from ?? "staff";
       up(id, (c) =>
         log(
-          { ...c, messages: [...c.messages, { id: uid("m"), from, author: opts?.author ?? (from === "client" ? c.contactName ?? c.name : "MKB Owner"), body, at: nowIso(), read: from === "staff", service, workspaceId: opts?.workspaceId }] },
+          { ...c, messages: [...c.messages, { id: uid("m"), from, author: opts?.author ?? (from === "client" ? c.contactName ?? c.name : "MKB Owner"), body, at: nowIso(), read: from === "staff", service, workspaceId: opts?.workspaceId, bizRequestId: opts?.bizRequestId }] },
           "message",
           from === "client" ? "Client sent a message" : "Sent a message",
           from === "client" ? "client" : "staff",
@@ -384,13 +391,13 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
     },
 
     // Invoices -----------------------------------------------------------------
-    createInvoice(id: string, i: { service: ServiceKey; description: string; amount: number; dueAt: string; draft: boolean; taxReturnId?: string; workspaceId?: string }) {
+    createInvoice(id: string, i: { service: ServiceKey; description: string; amount: number; dueAt: string; draft: boolean; taxReturnId?: string; workspaceId?: string; bizRequestId?: string; lines?: Invoice["lines"] }) {
       const number = `INV-${getNextInvoice()}`;
       up(id, (c) =>
         log(
           {
             ...c,
-            invoices: [{ id: uid("i"), number, service: i.service, description: i.description, amount: i.amount, paid: 0, status: i.draft ? "draft" : "open", issuedAt: nowIso(), dueAt: i.dueAt, taxReturnId: i.taxReturnId, workspaceId: i.workspaceId }, ...c.invoices],
+            invoices: [{ id: uid("i"), number, service: i.service, description: i.description, amount: i.amount, paid: 0, status: i.draft ? "draft" : "open", issuedAt: nowIso(), dueAt: i.dueAt, taxReturnId: i.taxReturnId, workspaceId: i.workspaceId, bizRequestId: i.bizRequestId, lines: i.lines }, ...c.invoices],
           },
           "invoice",
           `${i.draft ? "Drafted" : "Sent"} invoice ${number}`,
@@ -406,10 +413,26 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
         const invoices = c.invoices.map((x): Invoice => {
           if (x.id !== invId) return x;
           const paid = Math.min(x.amount, x.paid + amount);
-          return { ...x, paid, status: paid >= x.amount ? "paid" : "partial" };
+          return { ...x, paid, status: paid >= x.amount ? "paid" : "partial", paidAt: paid >= x.amount ? nowIso() : x.paidAt };
         });
         const inv = c.invoices.find((x) => x.id === invId)!;
         return log({ ...c, invoices }, "payment", `Recorded ${method} payment on ${inv.number}`);
+      });
+    },
+
+    /** Refund (reduces amount paid), credit (reduces amount owed) or correction (changes the total). History is kept on the invoice. */
+    adjustInvoice(id: string, invId: string, adj: { kind: "refund" | "credit" | "correction"; amount: number; note: string; byId: string }) {
+      up(id, (c) => {
+        const inv = c.invoices.find((x) => x.id === invId)!;
+        const invoices = c.invoices.map((x): Invoice => {
+          if (x.id !== invId) return x;
+          // A refund returns money that is then no longer owed, so it lowers both the total and the amount paid.
+          const amount = adj.kind === "correction" ? Math.max(0, x.amount + adj.amount) : Math.max(0, x.amount - adj.amount);
+          const paid = adj.kind === "refund" ? Math.max(0, x.paid - adj.amount) : Math.min(x.paid, amount);
+          const status: Invoice["status"] = x.status === "draft" ? "draft" : paid >= amount ? "paid" : paid > 0 ? "partial" : x.status === "overdue" ? "overdue" : "open";
+          return { ...x, amount, paid, status, adjustments: [{ id: uid("adj"), at: nowIso(), ...adj }, ...(x.adjustments ?? [])] };
+        });
+        return log({ ...c, invoices }, "payment", `${adj.kind === "refund" ? "Refunded" : adj.kind === "credit" ? "Credited" : "Corrected"} ${inv.number}: $${adj.amount.toFixed(2)} — ${adj.note}`);
       });
     },
 
