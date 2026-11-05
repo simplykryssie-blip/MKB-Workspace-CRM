@@ -19,7 +19,9 @@ import type {
 } from "@/lib/types";
 
 /** Fixed "now" for sample data so relative dates stay stable in the preview. */
-export const SAMPLE_NOW = new Date("2026-11-05T15:00:00");
+import { SAMPLE_NOW } from "./time";
+import { BOOKS_SEEDS, booksClientRecords } from "./books-seed";
+export { SAMPLE_NOW };
 
 export const STAFF: Staff[] = [
   { id: "s-mk", name: "MKB Owner", initials: "MK", title: "Owner" },
@@ -33,7 +35,8 @@ export const staffById = (id: string) => STAFF.find((s) => s.id === id)!;
 export const STAGES: Record<ServiceKey, string[]> = {
   // Tax engagements follow the return workflow ("Rejected" is a status, not a stage).
   tax: ["Intake", "Awaiting Documents", "Ready for Review", "In Preparation", "Awaiting Client Approval", "Ready to E-file", "Submitted", "Accepted", "Completed"],
-  books: ["Onboarding", "Collecting statements", "Categorizing", "Reconciliation", "Monthly close", "Reports delivered"],
+  // Bookkeeping engagements mirror the current month's close stage (see lib/books/config.ts).
+  books: ["Client Entry in Progress", "Ready for MKB Review", "MKB Reviewing", "Reconciliation in Progress", "Client Follow-up Needed", "MKB Final Review", "Reports Ready", "Month Closed"],
   biz: ["Intake", "Name search", "Filing submitted", "State approved", "EIN obtained", "Complete"],
   expunge: ["Intake", "Records requested", "Eligibility review", "Petition drafted", "Filed", "Hearing", "Order granted"],
 };
@@ -105,7 +108,7 @@ const SEEDS: Seed[] = [
     lastActivityAt: d(0, 14, 12),
     pastTax: [{ year: 2025, fee: 1150 }],
     enrollments: [
-      { service: "books", title: "Monthly bookkeeping — October", stage: "Reconciliation", progress: 60, status: "active", staffId: "s-rt", startedAt: d(-5), dueAt: d(10), fee: 650 },
+      { service: "books", title: "Monthly bookkeeping", stage: "Reconciliation in Progress", progress: 43, status: "active", staffId: "s-rt", startedAt: d(-534), fee: 650 },
       { service: "tax", title: "2026 Business return (1065)", stage: "Intake", progress: 5, status: "active", staffId: "s-al", startedAt: d(-3), fee: 1200 },
     ],
   },
@@ -216,7 +219,7 @@ const SEEDS: Seed[] = [
     lastActivityAt: d(-2),
     enrollments: [
       { service: "tax", title: "2025 Business return (1120-S)", stage: "Submitted", progress: 75, status: "on_hold", staffId: "s-al", startedAt: d(-80), fee: 1000 },
-      { service: "books", title: "Monthly bookkeeping — October", stage: "Collecting statements", progress: 25, status: "waiting_on_client", staffId: "s-rt", startedAt: d(-5), dueAt: d(10), fee: 1200 },
+      { service: "books", title: "Monthly bookkeeping", stage: "Client Follow-up Needed", progress: 57, status: "waiting_on_client", staffId: "s-rt", startedAt: d(-857), fee: 950 },
       { service: "biz", title: "Annual report filing (state)", stage: "Complete", progress: 100, status: "complete", staffId: "s-mk", startedAt: d(-90), fee: 150 },
     ],
   },
@@ -239,7 +242,7 @@ const SEEDS: Seed[] = [
     lastActivityAt: d(-1),
     enrollments: [
       { service: "tax", title: "2025 Business return (1065)", stage: "Ready to E-file", progress: 63, status: "active", staffId: "s-al", startedAt: d(-60), fee: 900 },
-      { service: "books", title: "Monthly bookkeeping — October", stage: "Monthly close", progress: 80, status: "in_review", staffId: "s-rt", startedAt: d(-5), dueAt: d(10), fee: 550 },
+      { service: "books", title: "Monthly bookkeeping", stage: "MKB Final Review", progress: 71, status: "in_review", staffId: "s-rt", startedAt: d(-100), fee: 550 },
       { service: "biz", title: "Health permit renewal", stage: "Filing submitted", progress: 60, status: "active", staffId: "s-mk", startedAt: d(-14), dueAt: d(25), fee: 175 },
     ],
   },
@@ -252,7 +255,7 @@ const SEEDS: Seed[] = [
     preferredContact: "Email",
     address: { line1: "6 Test Court", city: "Lakeside", state: "GA", zip: "30002" },
     taxIdType: "SSN", taxIdLast4: "0124",
-    staffIds: ["s-al"],
+    staffIds: ["s-al", "s-rt"],
     status: "active",
     portal: "active",
     tags: ["Self-employed"],
@@ -262,7 +265,8 @@ const SEEDS: Seed[] = [
     pastTax: [{ year: 2025, fee: 550 }],
     enrollments: [
       { service: "tax", title: "2026 Individual return (1040 + Sch C)", stage: "Awaiting Documents", progress: 13, status: "waiting_on_client", staffId: "s-al", startedAt: d(-20), fee: 650 },
-      { service: "books", title: "Quarterly bookkeeping — Q3", stage: "Reports delivered", progress: 100, status: "complete", staffId: "s-rt", startedAt: d(-35), fee: 300 },
+      { service: "books", title: "Monthly bookkeeping — Mockwell Design Studio", stage: "Ready for MKB Review", progress: 14, status: "active", staffId: "s-rt", startedAt: d(-399), fee: 300 },
+      { service: "books", title: "Monthly bookkeeping — Mockwell Rental Properties", stage: "Reports Ready", progress: 86, status: "active", staffId: "s-mk", startedAt: d(-297), fee: 300 },
     ],
   },
   {
@@ -411,7 +415,14 @@ function build(seed: Seed, ci: number): Client {
     const tpl = e.service === "tax" && seed.type === "business" ? BIZ_TAX_DOCS : DOC_TEMPLATES[e.service];
     const taxYear = e.service === "tax" ? yearFromTitle(e.title) : undefined;
     const taxReturnId = taxYear ? `TR-${seed.id}-${taxYear}` : undefined;
-    tpl.forEach((t, ti) => {
+    const booksSeed = e.service === "books" ? BOOKS_SEEDS.find((b) => b.clientId === seed.id && b.title === e.title) : undefined;
+    if (booksSeed) {
+      const rec = booksClientRecords(booksSeed, e.id, seed.contactName ?? seed.name, 100 + ci * 10 + ei * 5);
+      documents.push(...rec.documents);
+      invoices.push(...rec.invoices);
+      messages.push(...rec.messages);
+    }
+    (booksSeed ? [] : tpl).forEach((t, ti) => {
       const done = e.status === "complete" || ti / tpl.length < e.progress / 100 + 0.15;
       // Staff-produced documents (filed articles, petition drafts) are never "requested" from the client.
       const staffMade = t.category === "Filings" || t.category === "Formation";
@@ -469,9 +480,9 @@ function build(seed: Seed, ci: number): Client {
         status: "scheduled",
       });
 
-    // Invoices: deposit (paid) + balance (status depends on progress/seed).
+    // Invoices: deposit (paid) + balance (status depends on progress/seed). Bookkeeping bills monthly (above).
     const deposit = Math.round(e.fee * 0.5);
-    invoices.push({
+    if (!booksSeed) invoices.push({
       id: `${e.id}-i1`,
       number: `INV-${inv++}`,
       service: e.service,
@@ -483,7 +494,7 @@ function build(seed: Seed, ci: number): Client {
       dueAt: at(0.1),
       taxReturnId,
     });
-    if (e.progress >= 50 || e.status === "complete") {
+    if (!booksSeed && (e.progress >= 50 || e.status === "complete")) {
       const balance = e.fee - deposit;
       const st: Invoice["status"] =
         e.status === "complete" ? "paid" : ci % 4 === 1 ? "overdue" : ci % 4 === 2 ? "partial" : "open";

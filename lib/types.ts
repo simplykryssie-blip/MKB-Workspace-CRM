@@ -52,6 +52,9 @@ export type ClientDocument = {
   uploadedBy?: "client" | "staff";
   /** Tax documents are tagged by tax year so years never mix. */
   taxYear?: number;
+  /** Bookkeeping documents are tagged by business workspace and month ("2026-10"). */
+  workspaceId?: string;
+  period?: string;
 };
 
 export type Message = {
@@ -62,6 +65,8 @@ export type Message = {
   at: string;
   service?: ServiceKey;
   read: boolean;
+  /** Bookkeeping: which business workspace a client-visible message belongs to. */
+  workspaceId?: string;
 };
 
 export type Appointment = {
@@ -89,6 +94,8 @@ export type Invoice = {
   dueAt: string;
   /** Set for tax preparation invoices — links billing to a specific return. */
   taxReturnId?: string;
+  /** Set for bookkeeping invoices — links billing to a business workspace. */
+  workspaceId?: string;
 };
 
 export type Signature = {

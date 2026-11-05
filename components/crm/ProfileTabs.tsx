@@ -55,6 +55,7 @@ import type { ActivityKind, Client, ClientDocument, Enrollment, ServiceKey } fro
 import { downloadPlaceholder } from "./dialogs";
 import type { DialogKind, TabKey } from "./ClientProfile";
 import { useTax } from "@/lib/store/tax-store";
+import { useBooks } from "@/lib/store/books-store";
 import { ReturnStatusBadge } from "@/components/tax/TaxBits";
 
 export type Act = {
@@ -306,7 +307,8 @@ function EnrollmentRow({ c, e, compact }: { c: Client; e: Enrollment; compact?: 
     toast(last ? "Already at the final stage" : `Moved to "${stages[idx + 1]}"`, last ? "info" : "success");
   };
   const taxReturn = useTax().returns.find((r) => r.enrollmentId === e.id);
-  const isTax = e.service === "tax";
+  const booksWs = useBooks().workspaces.find((w) => w.enrollmentId === e.id);
+  const isTax = e.service === "tax" || !!booksWs;
   const setStatus = (s: Enrollment["status"]) => {
     store.setEnrollmentStatus(c.id, e.id, s);
     toast(`Status set to "${enrollmentStatus[s].label}"`);
@@ -377,10 +379,14 @@ function EnrollmentRow({ c, e, compact }: { c: Client; e: Enrollment; compact?: 
       )}
       {isTax && (
         <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
-          <span className="mr-auto text-[12px] text-muted">Workflow is managed in the Tax Preparation Center.</span>
-          <Button size="sm" variant={compact ? "ghost" : "secondary"} href={taxReturn ? `/services/tax-preparation/returns/${taxReturn.id}` : "/services/tax-preparation"}>
-            {taxReturn ? "Open return in Tax Center" : "Set up return in Tax Center"}
-          </Button>
+          <span className="mr-auto text-[12px] text-muted">{booksWs ? "Monthly close is managed in the Bookkeeping workspace." : "Workflow is managed in the Tax Preparation Center."}</span>
+          {booksWs ? (
+            <Button size="sm" variant={compact ? "ghost" : "secondary"} href={`/services/bookkeeping/${booksWs.id}`}>Open bookkeeping workspace</Button>
+          ) : (
+            <Button size="sm" variant={compact ? "ghost" : "secondary"} href={taxReturn ? `/services/tax-preparation/returns/${taxReturn.id}` : "/services/tax-preparation"}>
+              {taxReturn ? "Open return in Tax Center" : "Set up return in Tax Center"}
+            </Button>
+          )}
         </div>
       )}
       {!compact && e.status !== "complete" && !isTax && (

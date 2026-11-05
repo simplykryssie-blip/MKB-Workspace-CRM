@@ -258,6 +258,11 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
       return eid;
     },
 
+    /** Keep any engagement in step with its service workspace (e.g. bookkeeping month stage). */
+    syncEnrollmentStage(id: string, enrollmentId: string, stage: string, status: Enrollment["status"], progress: number) {
+      up(id, (c) => ({ ...c, enrollments: c.enrollments.map((e) => (e.id === enrollmentId ? { ...e, stage, status, progress } : e)) }));
+    },
+
     /** Keep a client's Tax Preparation engagement in step with its return's status. */
     syncTaxEnrollment(id: string, enrollmentId: string, returnStatus: string) {
       const stages = STAGES.tax;
@@ -312,7 +317,7 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
     },
 
     // Documents ------------------------------------------------------------
-    requestDocument(id: string, d: { name: string; service: ServiceKey; category: string; sensitive: boolean; taxYear?: number }): string {
+    requestDocument(id: string, d: { name: string; service: ServiceKey; category: string; sensitive: boolean; taxYear?: number; workspaceId?: string; period?: string }): string {
       const docId = uid("d");
       up(id, (c) =>
         log(
@@ -323,14 +328,15 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
       );
       return docId;
     },
-    uploadDocument(id: string, d: { name: string; service: ServiceKey; category: string; sensitive: boolean; sizeKb: number; replaces?: string; taxYear?: number }): string {
+    uploadDocument(id: string, d: { name: string; service: ServiceKey; category: string; sensitive: boolean; sizeKb: number; replaces?: string; taxYear?: number; workspaceId?: string; period?: string; by?: "client" | "staff" }): string {
       const docId = d.replaces ?? uid("d");
+      const by = d.by ?? "staff";
       up(id, (c) => {
-        const doc: ClientDocument = { id: docId, name: d.name, service: d.service, category: d.category, sensitive: d.sensitive, status: "received", requestedAt: nowIso(), uploadedAt: nowIso(), sizeKb: d.sizeKb, uploadedBy: "staff", taxYear: d.taxYear };
+        const doc: ClientDocument = { id: docId, name: d.name, service: d.service, category: d.category, sensitive: d.sensitive, status: "received", requestedAt: nowIso(), uploadedAt: nowIso(), sizeKb: d.sizeKb, uploadedBy: by, taxYear: d.taxYear, workspaceId: d.workspaceId, period: d.period };
         const documents = d.replaces
-          ? c.documents.map((x) => (x.id === d.replaces ? { ...x, status: "received" as const, uploadedAt: nowIso(), sizeKb: d.sizeKb, uploadedBy: "staff" as const } : x))
+          ? c.documents.map((x) => (x.id === d.replaces ? { ...x, status: "received" as const, uploadedAt: nowIso(), sizeKb: d.sizeKb, uploadedBy: by } : x))
           : [doc, ...c.documents];
-        return log({ ...c, documents }, "upload", `Uploaded "${d.name}"`);
+        return log({ ...c, documents }, "upload", `Uploaded "${d.name}"`, by);
       });
       return docId;
     },
@@ -349,9 +355,15 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
     },
 
     // Messages ---------------------------------------------------------------
-    sendMessage(id: string, body: string, service?: ServiceKey) {
+    sendMessage(id: string, body: string, service?: ServiceKey, opts?: { from?: "client" | "staff"; author?: string; workspaceId?: string }) {
+      const from = opts?.from ?? "staff";
       up(id, (c) =>
-        log({ ...c, messages: [...c.messages, { id: uid("m"), from: "staff", author: "MKB Owner", body, at: nowIso(), read: true, service }] }, "message", "Sent a message"),
+        log(
+          { ...c, messages: [...c.messages, { id: uid("m"), from, author: opts?.author ?? (from === "client" ? c.contactName ?? c.name : "MKB Owner"), body, at: nowIso(), read: from === "staff", service, workspaceId: opts?.workspaceId }] },
+          "message",
+          from === "client" ? "Client sent a message" : "Sent a message",
+          from === "client" ? "client" : "staff",
+        ),
       );
     },
     markMessagesRead(id: string) {
@@ -372,13 +384,13 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
     },
 
     // Invoices -----------------------------------------------------------------
-    createInvoice(id: string, i: { service: ServiceKey; description: string; amount: number; dueAt: string; draft: boolean; taxReturnId?: string }) {
+    createInvoice(id: string, i: { service: ServiceKey; description: string; amount: number; dueAt: string; draft: boolean; taxReturnId?: string; workspaceId?: string }) {
       const number = `INV-${getNextInvoice()}`;
       up(id, (c) =>
         log(
           {
             ...c,
-            invoices: [{ id: uid("i"), number, service: i.service, description: i.description, amount: i.amount, paid: 0, status: i.draft ? "draft" : "open", issuedAt: nowIso(), dueAt: i.dueAt, taxReturnId: i.taxReturnId }, ...c.invoices],
+            invoices: [{ id: uid("i"), number, service: i.service, description: i.description, amount: i.amount, paid: 0, status: i.draft ? "draft" : "open", issuedAt: nowIso(), dueAt: i.dueAt, taxReturnId: i.taxReturnId, workspaceId: i.workspaceId }, ...c.invoices],
           },
           "invoice",
           `${i.draft ? "Drafted" : "Sent"} invoice ${number}`,

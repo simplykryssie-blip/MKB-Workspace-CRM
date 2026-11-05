@@ -39,12 +39,20 @@ npm run build && npm start
   acknowledgements and rejection codes, fee schedule, pricing, invoices and balances, and a
   permission preview. Returns link to the central client profile (documents, invoices,
   engagement and activity live there).
+- **Bookkeeping Workspace**: an oversight layer over each client's own QuickBooks Online (not a
+  replacement for it). Overview KPIs and a work queue showing who acts next (client or MKB); one
+  workspace per business (a client can have several); an 8-stage monthly close with reopen and a
+  full status history; a client task center and client portal preview; an MKB-only review and
+  reconciliation center (flagged items, statement balances and dates, discrepancies, assignments,
+  final approval); a QuickBooks tab designed around Intuit OAuth 2.0 per company (no real
+  connection); a report center; documents, client-visible messages and internal notes; and billing
+  on the client record. Reconciliation balances are marked as fictional sample values.
 
 Changes reset on page reload. Nothing is sent to a server.
 
 ## Roadmap
-1. **Design**: dashboard, navigation, themes ← *current*
-2. **Frontend**: service workspaces, CRM screens, client portal, roles and permissions UI
+1. **Design**: dashboard, navigation, themes (approved)
+2. **Frontend**: service workspaces, CRM screens, client portal, roles and permissions UI ← *current*
 3. **Backend**: Cloudflare, database, auth with MFA, RBAC, file storage, audit logs
 4. **Testing and deployment**: protected preview first, then a production domain only after approval
 
