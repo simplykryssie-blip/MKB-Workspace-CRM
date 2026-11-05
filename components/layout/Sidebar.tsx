@@ -27,10 +27,13 @@ export function Sidebar({ collapsed, onToggleCollapsed, mobileOpen, onCloseMobil
       />
       <aside
         aria-label="Primary"
-        className={`fixed inset-y-0 left-0 z-50 flex flex-col bg-gradient-to-b from-rail to-rail-2 text-rail-ink transition-[width,transform] duration-200
-          w-[280px] ${mobileOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0
+        className={`fixed inset-y-0 left-0 z-50 bg-rail text-rail-ink transition-[width,transform] duration-200
+          w-[280px] ${mobileOpen ? "translate-x-0" : "-translate-x-full"}
+          md:static md:z-auto md:shrink-0 md:self-stretch md:translate-x-0
           ${collapsed ? "md:w-[76px]" : "md:w-[76px] lg:w-[264px]"}`}
       >
+        {/* The navy panel stretches the full page height; the menu itself stays pinned in view while scrolling. */}
+        <div className="flex h-full flex-col md:sticky md:top-0 md:h-screen">
         <div className={`flex h-[76px] shrink-0 items-center border-b border-rail-line ${collapsed ? "justify-center px-2" : "px-5 md:justify-center md:px-2 lg:justify-start lg:px-5"}`}>
           <div className={collapsed ? "" : "md:hidden lg:block"}>
             <Logo collapsed={collapsed} />
@@ -82,6 +85,7 @@ export function Sidebar({ collapsed, onToggleCollapsed, mobileOpen, onCloseMobil
           >
             {collapsed ? <ChevronsRight size={17} className="mx-auto" /> : <><ChevronsLeft size={17} /> Collapse</>}
           </button>
+        </div>
         </div>
       </aside>
     </>

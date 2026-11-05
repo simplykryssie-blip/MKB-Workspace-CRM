@@ -28,9 +28,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     });
 
   return (
-    <div className="min-h-screen">
+    <div className="flex min-h-screen">
       <Sidebar collapsed={collapsed} onToggleCollapsed={toggle} mobileOpen={mobileOpen} onCloseMobile={() => setMobileOpen(false)} />
-      <div className={`transition-[padding] duration-200 md:pl-[76px] ${collapsed ? "" : "lg:pl-[264px]"}`}>
+      <div className="min-w-0 flex-1">
         <Topbar onOpenMenu={() => setMobileOpen(true)} />
         <div className="flex items-center gap-2 border-b border-warning/25 bg-warning-soft px-4 py-1.5 text-[12px] font-medium text-warning-ink sm:px-6 lg:px-8">
           <FlaskConical size={14} className="shrink-0" />
