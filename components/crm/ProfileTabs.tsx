@@ -21,6 +21,8 @@ import {
   NotebookPen,
   PenLine,
   Phone,
+  PhoneCall,
+  UserPlus,
   Pin,
   PinOff,
   Plus,
@@ -900,7 +902,7 @@ export function NotesTab({ c }: { c: Client }) {
 /* Activity                                                            */
 /* ------------------------------------------------------------------ */
 
-const kindMeta: Record<ActivityKind, { icon: LucideIcon; cls: string; label: string }> = {
+export const kindMeta: Record<ActivityKind, { icon: LucideIcon; cls: string; label: string }> = {
   upload: { icon: FileUp, cls: "bg-accent-soft text-accent", label: "Documents" },
   payment: { icon: CreditCard, cls: "bg-success-soft text-success", label: "Payments" },
   signature: { icon: PenLine, cls: "bg-svc-books-soft text-svc-books", label: "Signatures" },
@@ -910,9 +912,11 @@ const kindMeta: Record<ActivityKind, { icon: LucideIcon; cls: string; label: str
   appointment: { icon: CalendarPlus, cls: "bg-accent-soft text-accent", label: "Appointments" },
   note: { icon: NotebookPen, cls: "bg-warning-soft text-warning", label: "Notes" },
   invoice: { icon: Receipt, cls: "bg-surface-2 text-ink-2 ring-1 ring-line", label: "Invoices" },
+  call: { icon: PhoneCall, cls: "bg-svc-books-soft text-svc-books", label: "Calls" },
+  lead: { icon: UserPlus, cls: "bg-accent-soft text-accent", label: "Lead history" },
 };
 
-function Timeline({ items }: { items: Client["activity"] }) {
+export function Timeline({ items }: { items: Client["activity"] }) {
   return (
     <ol className="px-5 pb-4 sm:px-6">
       {items.map((a, i) => {

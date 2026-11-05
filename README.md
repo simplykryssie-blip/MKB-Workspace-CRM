@@ -24,6 +24,17 @@ npm run build && npm start
 - The Verexa-style white sidebar (blue-to-lime active pill, slate dark mode) becomes an icon rail on tablet and a slide-out drawer on mobile.
 - Logo: the official MKB gold artwork, with the black background removed and the letters kept solid so it sits directly on the white sidebar (`brand-assets/build_logo.py` regenerates it). The original is in `brand-assets/`; web versions are in `public/brand/`. Gold is used only for the brand mark, not the UI.
 
+## What works in the preview (sample data, in-browser only)
+- **Dashboard**: KPIs, revenue chart, service performance, appointments, tasks, activity, invoices.
+- **Clients**: list (search, filters, sort, CSV export), profile with services, documents, messages,
+  appointments, invoices, signatures, notes and activity; formatted contact/tax fields
+  (DOB, SSN/ITIN, EIN, responsible party) with masked, audited reveal.
+- **Leads**: board (drag-and-drop) and list (bulk actions), customizable stages and sources,
+  follow-up reminders, notes, activity log, status and priority, and lead → client conversion
+  that carries over contact, business info, notes, staff, source and full history.
+
+Changes reset on page reload. Nothing is sent to a server.
+
 ## Roadmap
 1. **Design**: dashboard, navigation, themes ← *current*
 2. **Frontend**: service workspaces, CRM screens, client portal, roles and permissions UI

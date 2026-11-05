@@ -166,6 +166,11 @@ export function ClientProfile({ id }: { id: string }) {
                 {c.contactName && <span>Contact: {c.contactName}</span>}
                 <span>Client since {fmtDate(c.since, { month: "short", year: "numeric" })}</span>
                 <span className="font-mono text-[11.5px] text-faint">{c.id.toUpperCase()}</span>
+                {c.leadId && (
+                  <Link href={`/leads/${c.leadId}`} className="inline-flex items-center gap-1 font-medium text-accent hover:underline">
+                    Converted from lead {c.leadId}
+                  </Link>
+                )}
               </div>
               <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-[13.5px] text-ink-2">
                 <a href={`mailto:${c.email}`} className="inline-flex min-w-0 items-center gap-1.5 break-all hover:text-accent">

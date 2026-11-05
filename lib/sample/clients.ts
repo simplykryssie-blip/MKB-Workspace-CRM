@@ -119,6 +119,7 @@ const SEEDS: Seed[] = [
     portal: "active",
     tags: ["New business"],
     source: "Google",
+    leadId: "L-2015",
     since: d(-12),
     lastActivityAt: d(-1, 16, 20),
     enrollments: [
@@ -164,6 +165,7 @@ const SEEDS: Seed[] = [
     portal: "invited",
     tags: ["Lead converted"],
     source: "Instagram",
+    leadId: "L-2014",
     since: d(-2),
     lastActivityAt: d(0, 12, 0),
     enrollments: [

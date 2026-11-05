@@ -87,8 +87,12 @@ export type NewClientInput = {
   responsibleParty?: { name: string; title: string; taxIdType: "SSN" | "ITIN"; taxId?: string };
   entityType?: NonNullable<Client["business"]>["entityType"];
   services: ServiceKey[];
+  /** Optional per-service engagement titles (defaults otherwise). */
+  titles?: Partial<Record<ServiceKey, string>>;
   staffIds: string[];
   invite: boolean;
+  /** Carried over when converting a lead: nothing is re-entered and history is kept. */
+  fromLead?: { leadId: string; source: string; tags: string[]; notes: Note[]; activity: ActivityItem[] };
 };
 
 export const DEFAULT_TITLES: Record<ServiceKey, string> = {
@@ -97,6 +101,15 @@ export const DEFAULT_TITLES: Record<ServiceKey, string> = {
   biz: "Business formation",
   expunge: "Record review",
 };
+/** Engagement title that fits the client: business returns use the entity's IRS form. */
+export function defaultTitleFor(s: ServiceKey, type: Client["type"] = "individual", entity?: NonNullable<Client["business"]>["entityType"]) {
+  if (s === "tax" && type === "business") {
+    const form = entity === "S-Corp" ? "1120-S" : entity === "C-Corp" ? "1120" : entity === "Nonprofit" ? "990" : entity === "Sole Prop" ? "1040 + Sch C" : "1065";
+    return `2025 Business return (${form})`;
+  }
+  if (s === "biz" && type === "individual") return "Business formation consult";
+  return DEFAULT_TITLES[s];
+}
 export const DEFAULT_FEES: Record<ServiceKey, number> = { tax: 425, books: 650, biz: 899, expunge: 750 };
 
 const last4 = (v?: string) => (v ? v.replace(/\D/g, "").slice(-4) : undefined);
@@ -114,7 +127,7 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
       const enrollments: Enrollment[] = input.services.map((s) => ({
         id: uid("e"),
         service: s,
-        title: DEFAULT_TITLES[s],
+        title: input.titles?.[s]?.trim() || defaultTitleFor(s, input.type, input.entityType),
         stage: STAGES[s][0],
         progress: 5,
         status: "active",
@@ -144,8 +157,9 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
         staffIds,
         status: "onboarding",
         portal: input.invite ? "invited" : "not_invited",
-        tags: [],
-        source: "Manual entry",
+        tags: input.fromLead ? [...new Set([...input.fromLead.tags, "Converted lead"])] : [],
+        source: input.fromLead?.source ?? "Manual entry",
+        leadId: input.fromLead?.leadId,
         since: at,
         lastActivityAt: at,
         enrollments,
@@ -154,10 +168,13 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
         appointments: [],
         invoices: [],
         signatures: [],
-        notes: [],
+        notes: input.fromLead ? input.fromLead.notes.map((n) => ({ ...n, id: uid("n") })) : [],
         activity: [
+          ...(input.fromLead ? [{ id: uid("x"), kind: "lead" as const, text: `Converted from lead ${input.fromLead.leadId}`, at, actor: "staff" as const }] : []),
           ...(input.invite ? [{ id: uid("x"), kind: "message" as const, text: "Portal invitation sent", at, actor: "system" as const }] : []),
           { id: uid("x"), kind: "intake", text: "Client record created", at, actor: "staff" },
+          // Full lead history travels with the client (and stays on the lead too).
+          ...(input.fromLead ? input.fromLead.activity.map((a) => ({ ...a, id: uid("x"), text: `Lead: ${a.text}` })) : []),
         ],
       };
       dispatch({ type: "addClient", client, vault: { taxId: input.type === "individual" ? input.taxId : undefined, ein: input.type === "business" ? input.ein : undefined, rpTaxId: input.type === "business" ? input.responsibleParty?.taxId : undefined } });

@@ -105,7 +105,7 @@ export type Note = {
   service?: ServiceKey;
 };
 
-export type ActivityKind = "upload" | "payment" | "signature" | "message" | "intake" | "status" | "appointment" | "note" | "invoice";
+export type ActivityKind = "upload" | "payment" | "signature" | "message" | "intake" | "status" | "appointment" | "note" | "invoice" | "call" | "lead";
 
 export type ActivityItem = {
   id: string;
@@ -150,6 +150,8 @@ export type Client = {
   portal: PortalStatus;
   tags: string[];
   source: string;
+  /** Set when the client was created by converting a lead (history is preserved on the lead). */
+  leadId?: string;
   since: string;
   lastActivityAt: string;
   enrollments: Enrollment[];
@@ -160,4 +162,48 @@ export type Client = {
   signatures: Signature[];
   notes: Note[];
   activity: ActivityItem[];
+};
+
+/* ------------------------------------------------------------------ */
+/* Leads                                                               */
+/* ------------------------------------------------------------------ */
+
+/** A pipeline stage. Stages are customizable by the owner (add, rename, reorder, remove). */
+export type LeadStage = { id: string; name: string };
+
+/** Open = in the pipeline; converted = became a client; lost = closed without converting. */
+export type LeadStatus = "open" | "converted" | "lost";
+export type LeadPriority = "low" | "medium" | "high" | "urgent";
+
+export type LeadReminder = { id: string; at: string; note: string; done: boolean; ownerId: string };
+
+export type Lead = {
+  id: string;
+  type: ClientType;
+  /** Person's name, or business name. */
+  name: string;
+  contactName?: string;
+  email: string;
+  phone: string;
+  address?: { line1: string; line2?: string; city: string; state: string; zip: string };
+  business?: { entityType: NonNullable<Client["business"]>["entityType"]; industry: string };
+  source: string;
+  /** e.g. referrer's name, campaign, ad set. */
+  sourceDetail?: string;
+  /** Services the lead is interested in — become the default enrollments on conversion. */
+  interests: ServiceKey[];
+  estValue: number;
+  ownerId: string;
+  stageId: string;
+  status: LeadStatus;
+  priority: LeadPriority;
+  tags: string[];
+  createdAt: string;
+  lastActivityAt: string;
+  reminders: LeadReminder[];
+  notes: Note[];
+  activity: ActivityItem[];
+  lostReason?: string;
+  convertedClientId?: string;
+  convertedAt?: string;
 };

@@ -15,5 +15,5 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function ClientPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  return <ClientProfile id={id} />;
+  return <ClientProfile key={id} id={id} />;
 }

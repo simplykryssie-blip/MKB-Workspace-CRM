@@ -165,9 +165,10 @@ export function tidyLine(s: string) {
 
 export function validateAddress(a: Address, required = false) {
   const e: Partial<Record<keyof Address, string>> = {};
-  // State has a default selection, so it alone doesn't count as "started".
-  const any = a.line1.trim() || (a.line2 ?? "").trim() || a.city.trim() || digits(a.zip);
-  if (!any && !required) return e;
+  // Optional addresses may be just a city/state (common for leads). Once a
+  // street, unit or ZIP is entered, the full mailing address is required.
+  const started = a.line1.trim() || (a.line2 ?? "").trim() || digits(a.zip);
+  if (!started && !required) return e;
   if (!a.line1.trim()) e.line1 = "Street address is required";
   if (!a.city.trim()) e.city = "City is required";
   if (!a.state) e.state = "Choose a state";
