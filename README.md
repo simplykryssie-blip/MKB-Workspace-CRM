@@ -21,8 +21,8 @@ npm run build && npm start
 ## Design system
 - Palette derived from the Verexa CRM: azure `#0B7FE0`, lime `#A4D22B`, cool slate neutrals and soft card shadows.
 - Service division colors (blue, cyan, green, amber) were checked for color-blind separation in both themes.
-- The navy sidebar becomes an icon rail on tablet and a slide-out drawer on mobile.
-- Logo: the official MKB gold artwork, with the background removed so it sits on the navy sidebar. The original is in `brand-assets/`; web versions are in `public/brand/`. Gold is used only for the brand mark, not the UI.
+- The Verexa-style white sidebar (blue-to-lime active pill, slate dark mode) becomes an icon rail on tablet and a slide-out drawer on mobile.
+- Logo: the official MKB gold artwork, with the background removed, shown on a small navy plate so the gold stays rich on the white sidebar. The original is in `brand-assets/`; web versions are in `public/brand/`. Gold is used only for the brand mark, not the UI.
 
 ## Roadmap
 1. **Design**: dashboard, navigation, themes ← *current*

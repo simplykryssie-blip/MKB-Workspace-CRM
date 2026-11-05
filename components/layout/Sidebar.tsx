@@ -27,14 +27,14 @@ export function Sidebar({ collapsed, onToggleCollapsed, mobileOpen, onCloseMobil
       />
       <aside
         aria-label="Primary"
-        className={`fixed inset-y-0 left-0 z-50 bg-rail text-rail-ink transition-[width,transform] duration-200
+        className={`fixed inset-y-0 left-0 z-50 border-r border-rail-line bg-rail text-rail-ink transition-[width,transform] duration-200
           w-[280px] ${mobileOpen ? "translate-x-0" : "-translate-x-full"}
           md:static md:z-auto md:shrink-0 md:self-stretch md:translate-x-0
           ${collapsed ? "md:w-[76px]" : "md:w-[76px] lg:w-[264px]"}`}
       >
-        {/* The navy panel stretches the full page height; the menu itself stays pinned in view while scrolling. */}
+        {/* The sidebar stretches the full page height; the menu itself stays pinned in view while scrolling. */}
         <div className="flex h-full flex-col md:sticky md:top-0 md:h-screen">
-        <div className={`flex min-h-[76px] shrink-0 items-center border-b py-5 border-rail-line ${collapsed ? "justify-center px-2" : "px-5 md:justify-center md:px-2 lg:justify-start lg:px-5"}`}>
+        <div className={`flex min-h-[76px] shrink-0 items-center border-b py-3 border-rail-line ${collapsed ? "justify-center px-2" : "px-5 md:justify-center md:px-2 lg:justify-start lg:px-5"}`}>
           <div className={collapsed ? "" : "md:hidden lg:block"}>
             <Logo collapsed={collapsed} />
           </div>
@@ -48,11 +48,11 @@ export function Sidebar({ collapsed, onToggleCollapsed, mobileOpen, onCloseMobil
           </button>
         </div>
 
-        <nav className="rail-scroll flex-1 overflow-y-auto px-3 py-4">
+        <nav className="rail-scroll flex-1 overflow-y-auto px-3 pb-1.5 pt-3">
           {NAV.map((group, gi) => (
-            <div key={gi} className={gi > 0 ? "mt-5" : ""}>
+            <div key={gi} className={gi > 0 ? "mt-3" : ""}>
               {group.section && (
-                <div className={`mb-2 px-3 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-rail-muted/70 ${collapsed ? "md:hidden" : "md:hidden lg:block"}`}>
+                <div className={`mb-2 px-3 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-rail-section ${collapsed ? "md:hidden" : "md:hidden lg:block"}`}>
                   {group.section}
                 </div>
               )}
@@ -68,11 +68,12 @@ export function Sidebar({ collapsed, onToggleCollapsed, mobileOpen, onCloseMobil
           ))}
         </nav>
 
-        <div className="shrink-0 border-t border-rail-line p-3">
+        {/* Footer: portal link + collapse toggle share one row when expanded, stack as icons in the rail */}
+        <div className={`flex shrink-0 gap-1 border-t border-rail-line p-2.5 ${collapsed ? "md:flex-col" : "md:flex-col lg:flex-row"}`}>
           <Link
             href="/portal"
             onClick={onCloseMobile}
-            className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] text-rail-muted hover:bg-rail-hover hover:text-white ${collapsed ? "md:justify-center md:px-0" : "md:justify-center md:px-0 lg:justify-start lg:px-3"}`}
+            className={`flex flex-1 items-center gap-3 rounded-xl px-3 py-2 text-[13px] text-rail-muted hover:bg-rail-hover hover:text-rail-ink ${collapsed ? "md:justify-center md:px-0" : "md:justify-center md:px-0 lg:justify-start lg:px-3"}`}
             title="Client portal preview"
           >
             <ExternalLink size={17} />
@@ -80,10 +81,11 @@ export function Sidebar({ collapsed, onToggleCollapsed, mobileOpen, onCloseMobil
           </Link>
           <button
             onClick={onToggleCollapsed}
-            className="mt-1 hidden w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] text-rail-muted hover:bg-rail-hover hover:text-white lg:flex"
+            className="hidden h-9 w-full shrink-0 place-items-center rounded-xl text-rail-muted hover:bg-rail-hover hover:text-rail-ink lg:grid lg:w-9"
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
-            {collapsed ? <ChevronsRight size={17} className="mx-auto" /> : <><ChevronsLeft size={17} /> Collapse</>}
+            {collapsed ? <ChevronsRight size={17} /> : <ChevronsLeft size={17} />}
           </button>
         </div>
         </div>
@@ -102,12 +104,12 @@ function NavRow({ item, collapsed, onNavigate }: { item: NavItem; collapsed: boo
   const hideLabel = collapsed ? "md:hidden" : "md:hidden lg:inline";
   const rowLayout = collapsed ? "md:justify-center md:px-0" : "md:justify-center md:px-0 lg:justify-start lg:px-3";
 
-  const base = `group relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[14px] font-medium transition-colors ${rowLayout}`;
+  const base = `group relative flex w-full items-center gap-3 rounded-xl px-3 py-2 text-[14px] font-medium transition-colors ${rowLayout}`;
   const look = active
-    ? "bg-[image:var(--rail-active)] text-white shadow-[0_6px_18px_rgba(11,127,224,0.35)]"
+    ? "bg-[image:var(--rail-active)] font-semibold text-rail-active-ink shadow-[0_6px_18px_rgba(11,127,224,0.22)]"
     : childActive
-      ? "text-white"
-      : "text-rail-muted hover:bg-rail-hover hover:text-white";
+      ? "text-rail-ink"
+      : "text-rail-muted hover:bg-rail-hover hover:text-rail-ink";
 
   if (hasChildren) {
     return (
@@ -140,7 +142,8 @@ function NavRow({ item, collapsed, onNavigate }: { item: NavItem; collapsed: boo
   return (
     <li>
       <Link href={item.href} onClick={onNavigate} aria-current={active ? "page" : undefined} title={item.label} className={`${base} ${look}`}>
-        <Icon size={19} strokeWidth={1.9} />
+        {active && <span aria-hidden="true" className="absolute -left-3 bottom-1.5 top-1.5 w-[3px] rounded-r bg-rail-indicator" />}
+        <Icon size={19} strokeWidth={active ? 2.2 : 1.9} />
         <span className={`flex-1 ${hideLabel}`}>{item.label}</span>
         {item.badge ? (
           <span
@@ -167,9 +170,9 @@ function ChildRow({ item, collapsed, onNavigate }: { item: NavItem; collapsed: b
         onClick={onNavigate}
         title={item.label}
         aria-current={active ? "page" : undefined}
-        className={`relative flex items-center gap-3 rounded-lg px-3 py-2 text-[13.5px] transition-colors ${
-          collapsed ? "md:justify-center md:px-0 md:py-2.5" : "md:justify-center md:px-0 md:py-2.5 lg:justify-start lg:px-3 lg:py-2"
-        } ${active ? "bg-white/10 font-semibold text-white" : "text-rail-muted hover:bg-rail-hover hover:text-white"}`}
+        className={`relative flex items-center gap-3 rounded-lg px-3 py-1.5 text-[13.5px] transition-colors ${
+          collapsed ? "md:justify-center md:px-0 md:py-2.5" : "md:justify-center md:px-0 md:py-2 lg:justify-start lg:px-3 lg:py-1.5"
+        } ${active ? "bg-accent-soft font-semibold text-accent-ink" : "text-rail-muted hover:bg-rail-hover hover:text-rail-ink"}`}
       >
         <span className="relative">
           <Icon size={17} strokeWidth={1.9} />

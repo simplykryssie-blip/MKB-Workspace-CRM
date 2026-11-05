@@ -51,14 +51,19 @@
   --svc-biz-soft: #e3f4e9;
   --svc-expunge-soft: #fef3de;
 
-  /* Sidebar (navy rail in both themes) */
-  --rail-bg: #0d1a33;
-  --rail-bg-2: #12223f;
-  --rail-ink: #e2e8f3;
-  --rail-muted: #93a3bd;
-  --rail-hover: rgba(255, 255, 255, 0.06);
-  --rail-border: rgba(255, 255, 255, 0.08);
-  --rail-active: linear-gradient(120deg, #0b7fe0, #1592ef);
+  /* Sidebar — Verexa rail: white, slate text, blue-to-lime active pill */
+  --rail-bg: #ffffff;
+  --rail-ink: #0f172a;
+  --rail-muted: #64748b;
+  --rail-section: #9aa1ae;
+  --rail-hover: #f4f6fb;
+  --rail-border: #e3e7f0;
+  --rail-active: linear-gradient(120deg, #0b7fe0, #a4d22b);
+  --rail-active-ink: #071018;
+  --rail-indicator: #0b7fe0;
+  --rail-scroll: #cfd6e4;
+  /* Navy plate behind the gold MKB logo so it never washes out */
+  --logo-plate: #0d1a33;
 
   --chart-grid: #e8edf5;
   --aging-1: #9cc9f3;
@@ -113,9 +118,16 @@
   --svc-biz-soft: rgba(52, 160, 82, 0.16);
   --svc-expunge-soft: rgba(205, 152, 30, 0.16);
 
-  --rail-bg: #08101f;
-  --rail-bg-2: #0d1830;
-  --rail-border: rgba(255, 255, 255, 0.06);
+  --rail-bg: #101a2e;
+  --rail-ink: #e6ecf5;
+  --rail-muted: #94a3b8;
+  --rail-section: #6b7a93;
+  --rail-hover: rgba(255, 255, 255, 0.05);
+  --rail-border: #24314d;
+  --rail-active: linear-gradient(120deg, #2f8fe8, #a4d22b);
+  --rail-indicator: #3b9bf0;
+  --rail-scroll: #31415f;
+  --logo-plate: #0a1426;
 
   --chart-grid: #22304a;
   --aging-1: #1e4a7a;
@@ -163,11 +175,14 @@
   --color-svc-biz-soft: var(--svc-biz-soft);
   --color-svc-expunge-soft: var(--svc-expunge-soft);
   --color-rail: var(--rail-bg);
-  --color-rail-2: var(--rail-bg-2);
   --color-rail-ink: var(--rail-ink);
   --color-rail-muted: var(--rail-muted);
   --color-rail-hover: var(--rail-hover);
   --color-rail-line: var(--rail-border);
+  --color-rail-section: var(--rail-section);
+  --color-rail-active-ink: var(--rail-active-ink);
+  --color-rail-indicator: var(--rail-indicator);
+  --color-logo-plate: var(--logo-plate);
 
   --shadow-soft: var(--shadow-soft);
   --shadow-pop: var(--shadow-pop);
@@ -205,7 +220,7 @@ body {
 }
 .rail-scroll {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+  scrollbar-color: var(--rail-scroll) transparent;
 }
 
 @media (prefers-reduced-motion: reduce) {
