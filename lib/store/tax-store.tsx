@@ -1,0 +1,400 @@
+"use client";
+
+/**
+ * Tax Preparation Center store (Phase 2 — in-browser sample data only).
+ *
+ * Single source of truth rules:
+ *  - Documents live on the central client profile; checklist items link to them.
+ *  - Invoices live on the client profile (tagged with taxReturnId).
+ *  - The client's Tax Preparation engagement stage mirrors the return status.
+ */
+import { createContext, useContext, useMemo, useReducer, useRef } from "react";
+import { DEFAULT_FEE_SCHEDULE, ORGANIZERS, RETURN_STATUSES, baseChecklist, defaultPricing, dueDates, priceTotal, type ChecklistItem, type FeeItem, type FilingStatus, type PriceLine, type ReturnStatus, type TaxForm, type TaxReturn } from "@/lib/tax/config";
+import { TAX_RETURNS } from "@/lib/sample/tax";
+import { SAMPLE_NOW, staffById } from "@/lib/sample/clients";
+import { nowIso, useClients } from "@/lib/store/clients-store";
+import type { ActivityItem, ActivityKind, Client, ClientDocument, Invoice } from "@/lib/types";
+
+const uid = (p: string) => `${p}-${Math.random().toString(36).slice(2, 9)}`;
+type ClientsApi = ReturnType<typeof useClients>;
+
+/* ------------------------------------------------------------------ */
+/* Access preview (permissions are enforced server-side in Phase 3)    */
+/* ------------------------------------------------------------------ */
+
+export type AccessPreset = "full" | "no_sensitive" | "no_billing" | "read_only";
+export type TaxAccess = { edit: boolean; review: boolean; efile: boolean; billing: boolean; sensitiveDocs: boolean; revealIds: boolean };
+export const ACCESS_PRESETS: Record<AccessPreset, { label: string; access: TaxAccess }> = {
+  full: { label: "All tax permissions", access: { edit: true, review: true, efile: true, billing: true, sensitiveDocs: true, revealIds: true } },
+  no_sensitive: { label: "Without sensitive documents & IDs", access: { edit: true, review: false, efile: true, billing: true, sensitiveDocs: false, revealIds: false } },
+  no_billing: { label: "Without billing", access: { edit: true, review: true, efile: true, billing: false, sensitiveDocs: true, revealIds: true } },
+  read_only: { label: "View only", access: { edit: false, review: false, efile: false, billing: false, sensitiveDocs: false, revealIds: false } },
+};
+
+/* ------------------------------------------------------------------ */
+/* State                                                               */
+/* ------------------------------------------------------------------ */
+
+type State = { returns: TaxReturn[]; fees: FeeItem[]; preset: AccessPreset };
+type Action =
+  | { type: "reset" }
+  | { type: "add"; r: TaxReturn }
+  | { type: "update"; id: string; fn: (r: TaxReturn) => TaxReturn }
+  | { type: "fees"; fees: FeeItem[] }
+  | { type: "preset"; preset: AccessPreset };
+
+const init = (): State => ({ returns: structuredClone(TAX_RETURNS), fees: structuredClone(DEFAULT_FEE_SCHEDULE), preset: "full" });
+
+function reducer(s: State, a: Action): State {
+  switch (a.type) {
+    case "reset":
+      return init();
+    case "add":
+      return { ...s, returns: [a.r, ...s.returns] };
+    case "update":
+      return { ...s, returns: s.returns.map((r) => (r.id === a.id ? a.fn(r) : r)) };
+    case "fees":
+      return { ...s, fees: a.fees };
+    case "preset":
+      return { ...s, preset: a.preset };
+  }
+}
+
+const log = (r: TaxReturn, kind: ActivityKind, text: string, actor: ActivityItem["actor"] = "staff"): TaxReturn => ({
+  ...r,
+  activity: [{ id: uid("x"), kind, text, at: nowIso(), actor }, ...r.activity],
+});
+
+/* ------------------------------------------------------------------ */
+/* Derived helpers                                                     */
+/* ------------------------------------------------------------------ */
+
+export type ItemStatus = "needed" | "requested" | "received" | "reviewed" | "rejected" | "waived";
+
+export function itemStatus(item: ChecklistItem, client?: Client): ItemStatus {
+  if (item.waivedReason) return "waived";
+  if (item.archived) return "reviewed";
+  const doc = item.docId ? client?.documents.find((d) => d.id === item.docId) : undefined;
+  return doc ? (doc.status as ItemStatus) : "needed";
+}
+export const outstandingItems = (r: TaxReturn, client?: Client) => r.checklist.filter((i) => i.required && ["needed", "requested", "rejected"].includes(itemStatus(i, client)));
+
+export const returnInvoices = (r: TaxReturn, client?: Client): Invoice[] => (client?.invoices ?? []).filter((i) => i.taxReturnId === r.id);
+export function billing(r: TaxReturn, client?: Client) {
+  const inv = returnInvoices(r, client);
+  const price = priceTotal(r);
+  const billed = inv.filter((i) => i.status !== "draft").reduce((s, i) => s + i.amount, 0);
+  const paid = inv.reduce((s, i) => s + i.paid, 0);
+  return { price, billed, paid, balance: billed - paid, unbilled: Math.max(0, price - billed), invoices: inv };
+}
+
+export function isPastDue(r: TaxReturn, now = SAMPLE_NOW) {
+  if (["Submitted", "Accepted", "Completed"].includes(r.status)) return false;
+  const due = r.extension?.dueAt ?? r.dueAt;
+  return !!due && new Date(due) < now;
+}
+export const effectiveDue = (r: TaxReturn) => r.extension?.dueAt ?? r.dueAt;
+
+/* ------------------------------------------------------------------ */
+/* Actions                                                             */
+/* ------------------------------------------------------------------ */
+
+function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients: () => ClientsApi) {
+  const R = (id: string) => get().returns.find((r) => r.id === id)!;
+  const C = (clientId: string) => clients().clients.find((c) => c.id === clientId);
+  const up = (id: string, fn: (r: TaxReturn) => TaxReturn) => dispatch({ type: "update", id, fn });
+  const label = (r: TaxReturn) => `TY ${r.taxYear} ${r.form}`;
+
+  /** Status change: history + activity on the return, client activity, engagement sync. */
+  const moveTo = (id: string, status: ReturnStatus, text?: string, by = "s-mk") => {
+    const r = R(id);
+    if (r.status === status) return;
+    up(id, (x) =>
+      log(
+        { ...x, status, statusHistory: [...x.statusHistory, { status, at: nowIso(), by, note: text }], completedAt: status === "Completed" ? nowIso() : x.completedAt },
+        "status",
+        `Status → ${status}${text ? ` — ${text}` : ""}`,
+      ),
+    );
+    clients().logActivity(r.clientId, "status", `${label(r)} return → ${status}`);
+    if (r.enrollmentId) clients().syncTaxEnrollment(r.clientId, r.enrollmentId, status);
+  };
+
+  const docTitle = (r: TaxReturn, name: string) => name; // names stay clean; tax year is tagged on the document
+
+  const a = {
+    reset: () => dispatch({ type: "reset" }),
+    setPreset: (preset: AccessPreset) => dispatch({ type: "preset", preset }),
+
+    createReturn(input: { clientId: string; taxYear: number; form: TaxForm; filingStatus?: FilingStatus; preparerId: string; reviewerId: string; states: string[]; extension?: boolean }): string {
+      const c = C(input.clientId)!;
+      const id = `TR-${input.clientId}-${input.taxYear}${get().returns.some((r) => r.id === `TR-${input.clientId}-${input.taxYear}`) ? `-${input.form.replace(/\W/g, "")}` : ""}`;
+      const { due, extended } = dueDates(input.form, input.taxYear);
+      // Link to an existing engagement for this year, or create one on the client profile.
+      const title = `${input.taxYear} ${c.type === "business" ? "Business" : input.form === "1040-X" ? "Amended" : "Individual"} return (${input.form})`;
+      const existing = c.enrollments.find((e) => e.service === "tax" && e.title.startsWith(String(input.taxYear)) && !get().returns.some((r) => r.enrollmentId === e.id));
+      const enrollmentId = existing?.id ?? clients().enroll(c.id, { service: "tax", title, staffId: input.preparerId, fee: 0 });
+      const fees = get().fees;
+      const lines: PriceLine[] = defaultPricing(input.form).map((p) => {
+        const f = fees.find((x) => x.code === p.code)!;
+        return { id: uid("p"), code: p.code, description: f.label, qty: p.code === "STATE" || p.code === "STATE-B" ? Math.max(1, input.states.length) : p.qty, unit: f.price };
+      });
+      const checklist: ChecklistItem[] = baseChecklist(c.type, { hasEin: !!c.business?.einLast4, form: input.form }).map((s) => ({ id: uid("ci"), ...s, required: true, source: "standard" }));
+      const at = nowIso();
+      const r: TaxReturn = {
+        id,
+        clientId: c.id,
+        enrollmentId,
+        taxYear: input.taxYear,
+        kind: c.type,
+        form: input.form,
+        filingStatus: c.type === "individual" ? input.filingStatus : undefined,
+        states: input.states,
+        status: "Intake",
+        preparerId: input.preparerId,
+        reviewerId: input.reviewerId,
+        dueAt: due,
+        extension: input.extension && extended ? { filedAt: at, dueAt: extended } : undefined,
+        organizer: { status: "not_sent", answers: {} },
+        checklist,
+        efile: [],
+        pricing: { lines, discount: 0 },
+        statusHistory: [{ status: "Intake", at, by: "s-mk" }],
+        notes: [],
+        activity: [{ id: uid("x"), kind: "intake", text: `Return created — TY ${input.taxYear} ${input.form}`, at, actor: "staff" }],
+        createdAt: at,
+      };
+      dispatch({ type: "add", r });
+      clients().logActivity(c.id, "intake", `Tax return created — TY ${input.taxYear} ${input.form}`);
+      if (existing) clients().syncTaxEnrollment(c.id, existing.id, "Intake");
+      return id;
+    },
+
+    assign(id: string, role: "preparer" | "reviewer", staffId: string) {
+      up(id, (r) => log({ ...r, [role === "preparer" ? "preparerId" : "reviewerId"]: staffId }, "status", `${role === "preparer" ? "Preparer" : "Reviewer"}: ${staffById(staffId).name}`));
+    },
+    updateDetails(id: string, patch: Partial<Pick<TaxReturn, "filingStatus" | "states" | "form">>) {
+      up(id, (r) => log({ ...r, ...patch }, "status", "Updated return details"));
+    },
+    fileExtension(id: string) {
+      const r = R(id);
+      const { extended } = dueDates(r.form, r.taxYear);
+      if (!extended) return;
+      up(id, (x) => log({ ...x, extension: { filedAt: nowIso(), dueAt: extended } }, "status", `Extension filed — due ${new Date(extended).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`));
+      clients().logActivity(r.clientId, "status", `${label(r)}: extension filed`);
+    },
+    /** Manual override (owner / reviewer) — any status, with a reason. */
+    setStatus: (id: string, status: ReturnStatus, note?: string) => moveTo(id, status, note),
+
+    /* ---------------- Organizer ---------------- */
+    sendOrganizer(id: string) {
+      const r = R(id);
+      up(id, (x) => log({ ...x, organizer: { ...x.organizer, status: "sent", sentAt: nowIso() } }, "message", "Organizer sent to client portal"));
+      clients().logActivity(r.clientId, "message", `${ORGANIZERS[r.kind].title} sent for ${label(r)}`);
+      a.requestAllMissing(id);
+      if (r.status === "Intake") moveTo(id, "Awaiting Documents", "organizer and document requests sent");
+    },
+    saveOrganizer(id: string, answers: Record<string, string>, submit: boolean) {
+      up(id, (x) =>
+        log(
+          { ...x, organizer: { ...x.organizer, answers, status: submit ? "submitted" : x.organizer.status === "not_sent" || x.organizer.status === "sent" ? "in_progress" : x.organizer.status, submittedAt: submit ? nowIso() : x.organizer.submittedAt } },
+          "intake",
+          submit ? "Organizer submitted (entered by staff)" : "Organizer answers saved",
+        ),
+      );
+      if (submit) a.applyOrganizerDocs(id);
+    },
+    reviewOrganizer(id: string) {
+      up(id, (x) => log({ ...x, organizer: { ...x.organizer, status: "reviewed", reviewedAt: nowIso() } }, "intake", "Organizer reviewed"));
+      a.applyOrganizerDocs(id);
+    },
+    /** Answers like "Rental property: Yes" add the matching documents to the checklist. */
+    applyOrganizerDocs(id: string): number {
+      const r = R(id);
+      const toAdd: ChecklistItem[] = [];
+      ORGANIZERS[r.kind].questions.forEach((q) => {
+        const ans = r.organizer.answers[q.id];
+        if (q.docs && (ans === "Yes" || (q.type === "number" && Number(ans) > 0)))
+          q.docs.forEach((d) => {
+            if (!r.checklist.some((i) => i.name === d.name) && !toAdd.some((i) => i.name === d.name)) toAdd.push({ id: uid("ci"), ...d, required: true, source: "organizer" });
+          });
+      });
+      if (toAdd.length) up(id, (x) => log({ ...x, checklist: [...x.checklist, ...toAdd] }, "upload", `Organizer added ${toAdd.length} document${toAdd.length > 1 ? "s" : ""} to the checklist`));
+      return toAdd.length;
+    },
+
+    /* ---------------- Checklist / documents ---------------- */
+    addItem(id: string, item: { name: string; category: string; sensitive: boolean; required: boolean }) {
+      up(id, (x) => log({ ...x, checklist: [...x.checklist, { id: uid("ci"), ...item, source: "custom" }] }, "upload", `Added "${item.name}" to checklist`));
+    },
+    requestItem(id: string, itemId: string) {
+      const r = R(id);
+      const it = r.checklist.find((i) => i.id === itemId)!;
+      const docId = clients().requestDocument(r.clientId, { name: docTitle(r, it.name), service: "tax", category: it.category, sensitive: it.sensitive, taxYear: r.taxYear });
+      up(id, (x) => ({ ...x, checklist: x.checklist.map((i) => (i.id === itemId ? { ...i, docId } : i)) }));
+    },
+    requestAllMissing(id: string): number {
+      const r = R(id);
+      const c = C(r.clientId);
+      const needed = r.checklist.filter((i) => itemStatus(i, c) === "needed");
+      needed.forEach((i) => a.requestItem(id, i.id));
+      if (needed.length) up(id, (x) => log(x, "upload", `Requested ${needed.length} document${needed.length > 1 ? "s" : ""} from client`));
+      return needed.length;
+    },
+    remindItem(id: string, itemId: string) {
+      const r = R(id);
+      const it = r.checklist.find((i) => i.id === itemId)!;
+      if (it.docId) clients().remindDocument(r.clientId, it.docId);
+      up(id, (x) => log(x, "message", `Reminder sent: ${it.name}`, "system"));
+    },
+    remindAll(id: string): number {
+      const r = R(id);
+      const c = C(r.clientId);
+      const items = r.checklist.filter((i) => ["requested", "rejected"].includes(itemStatus(i, c)));
+      items.forEach((i) => i.docId && clients().remindDocument(r.clientId, i.docId));
+      if (items.length) up(id, (x) => log(x, "message", `Reminder sent for ${items.length} outstanding document${items.length > 1 ? "s" : ""}`, "system"));
+      return items.length;
+    },
+    /** Staff records a document as received (uploaded or dropped off). */
+    receiveItem(id: string, itemId: string, sizeKb = 240) {
+      const r = R(id);
+      const it = r.checklist.find((i) => i.id === itemId)!;
+      const docId = clients().uploadDocument(r.clientId, { name: it.name, service: "tax", category: it.category, sensitive: it.sensitive, sizeKb, replaces: it.docId, taxYear: r.taxYear });
+      up(id, (x) => log({ ...x, checklist: x.checklist.map((i) => (i.id === itemId ? { ...i, docId } : i)) }, "upload", `Received: ${it.name}`));
+    },
+    reviewItem(id: string, itemId: string, ok: boolean) {
+      const r = R(id);
+      const it = r.checklist.find((i) => i.id === itemId)!;
+      if (it.docId) clients().setDocStatus(r.clientId, it.docId, ok ? "reviewed" : "rejected");
+      up(id, (x) => log(x, "upload", ok ? `Reviewed: ${it.name}` : `Asked client to re-upload: ${it.name}`));
+    },
+    waiveItem(id: string, itemId: string, reason: string | undefined) {
+      const it = R(id).checklist.find((i) => i.id === itemId)!;
+      up(id, (x) => log({ ...x, checklist: x.checklist.map((i) => (i.id === itemId ? { ...i, waivedReason: reason } : i)) }, "upload", reason ? `Marked not needed: ${it.name} (${reason})` : `Restored to checklist: ${it.name}`));
+    },
+    removeItem(id: string, itemId: string) {
+      const it = R(id).checklist.find((i) => i.id === itemId)!;
+      up(id, (x) => log({ ...x, checklist: x.checklist.filter((i) => i.id !== itemId) }, "upload", `Removed "${it.name}" from checklist`));
+    },
+
+    /* ---------------- Workflow steps ---------------- */
+    markReadyForReview: (id: string, note?: string) => moveTo(id, "Ready for Review", note ?? "all required documents received"),
+    startPreparation: (id: string) => moveTo(id, "In Preparation"),
+    signOff(id: string, by: string, note: string) {
+      const r = R(id);
+      up(id, (x) => log({ ...x, reviewSignoff: { by, at: nowIso(), note: note || undefined } }, "status", `Reviewer sign-off by ${staffById(by).name}${note ? ` — ${note}` : ""}`));
+      clients().logActivity(r.clientId, "status", `${label(r)}: reviewer sign-off`);
+    },
+    clearSignOff(id: string) {
+      up(id, (x) => log({ ...x, reviewSignoff: undefined }, "status", "Reviewer sign-off removed — changes needed"));
+    },
+    sendForApproval(id: string) {
+      const r = R(id);
+      const doc = r.kind === "business" ? `Form 8879-${r.form === "1065" ? "PE" : r.form === "1120-S" ? "S" : r.form === "990" ? "TE" : "C"} (e-file authorization) — TY ${r.taxYear}` : `Form 8879 (e-file authorization) — TY ${r.taxYear}`;
+      const sigId = clients().requestSignature(r.clientId, { document: doc, service: "tax" });
+      up(id, (x) => ({ ...x, approvalSignatureId: sigId }));
+      moveTo(id, "Awaiting Client Approval", "return and e-file authorization sent to client");
+    },
+    recordApproval(id: string) {
+      const r = R(id);
+      if (r.approvalSignatureId) clients().markSigned(r.clientId, r.approvalSignatureId);
+      up(id, (x) => ({ ...x, clientApprovedAt: nowIso() }));
+      moveTo(id, "Ready to E-file", "client approved and signed");
+    },
+    submitEfile(id: string, jurisdictions: string[]) {
+      const at = nowIso();
+      const attempts = jurisdictions.map((j) => ({ id: uid("ef"), jurisdiction: j, submittedAt: at, submissionId: `SAMPLE-${Math.random().toString(36).slice(2, 8).toUpperCase()}`, result: "pending" as const }));
+      up(id, (x) => log({ ...x, efile: [...attempts, ...x.efile] }, "status", `E-filed: ${jurisdictions.join(" + ")} (${attempts.map((t) => t.submissionId).join(", ")})`));
+      moveTo(id, "Submitted", `transmitted ${jurisdictions.join(" + ")}`);
+    },
+    recordAck(id: string, attemptId: string, result: "accepted" | "rejected", code?: string, reason?: string) {
+      const r = R(id);
+      const att = r.efile.find((e) => e.id === attemptId)!;
+      up(id, (x) =>
+        log(
+          { ...x, efile: x.efile.map((e) => (e.id === attemptId ? { ...e, result, resultAt: nowIso(), code, reason } : e)) },
+          "status",
+          `${att.jurisdiction} ${result}${code ? ` — ${code}: ${reason}` : ""}`,
+          "system",
+        ),
+      );
+      // Apply the new result locally (store state updates after this action returns).
+      const latest = r.efile.map((e) => (e.id === attemptId ? { ...e, result, resultAt: nowIso(), code, reason } : e));
+      // Latest attempt per jurisdiction decides the overall result.
+      const byJur = new Map<string, (typeof latest)[number]>();
+      [...latest].sort((p, q) => p.submittedAt.localeCompare(q.submittedAt)).forEach((e) => byJur.set(e.jurisdiction, e));
+      const finals = [...byJur.values()];
+      if (finals.some((e) => e.result === "rejected")) moveTo(id, "Rejected", `${att.jurisdiction}: ${code ?? "rejected"}`, "system");
+      else if (finals.every((e) => e.result === "accepted")) moveTo(id, "Accepted", "all jurisdictions accepted", "system");
+    },
+    /** After a rejection: fix and either resubmit or send back to preparation. */
+    resolveRejection(id: string, next: "Ready to E-file" | "In Preparation", note: string) {
+      moveTo(id, next, note ? `correction: ${note}` : "correction made");
+    },
+    completeReturn(id: string) {
+      const r = R(id);
+      moveTo(id, "Completed", "filed, paid and delivered");
+      clients().logActivity(r.clientId, "upload", `${label(r)}: final return copy delivered to client portal`);
+    },
+
+    /* ---------------- Pricing & billing ---------------- */
+    addLine(id: string, line: Omit<PriceLine, "id">) {
+      up(id, (x) => log({ ...x, pricing: { ...x.pricing, lines: [...x.pricing.lines, { ...line, id: uid("p") }] } }, "invoice", `Added price line: ${line.description}`));
+    },
+    updateLine(id: string, lineId: string, patch: Partial<PriceLine>) {
+      up(id, (x) => ({ ...x, pricing: { ...x.pricing, lines: x.pricing.lines.map((l) => (l.id === lineId ? { ...l, ...patch } : l)) } }));
+    },
+    removeLine(id: string, lineId: string) {
+      up(id, (x) => log({ ...x, pricing: { ...x.pricing, lines: x.pricing.lines.filter((l) => l.id !== lineId) } }, "invoice", "Removed a price line"));
+    },
+    setDiscount(id: string, discount: number) {
+      up(id, (x) => ({ ...x, pricing: { ...x.pricing, discount } }));
+    },
+    invoice(id: string, amount: number, description: string, dueAt: string): string {
+      const r = R(id);
+      const number = clients().createInvoice(r.clientId, { service: "tax", description, amount, dueAt, draft: false, taxReturnId: r.id });
+      up(id, (x) => log(x, "invoice", `Invoice ${number} sent — $${amount.toFixed(2)}`));
+      return number;
+    },
+
+    addNote(id: string, body: string) {
+      up(id, (x) => log({ ...x, notes: [{ id: uid("n"), authorId: "s-mk", body, at: nowIso() }, ...x.notes] }, "note", "Added a note"));
+    },
+
+    /* ---------------- Fee schedule ---------------- */
+    setFee(code: string, price: number) {
+      dispatch({ type: "fees", fees: get().fees.map((f) => (f.code === code ? { ...f, price } : f)) });
+    },
+    addFee(item: FeeItem) {
+      dispatch({ type: "fees", fees: [...get().fees, item] });
+    },
+    removeFee(code: string) {
+      dispatch({ type: "fees", fees: get().fees.filter((f) => f.code !== code) });
+    },
+  };
+  return a;
+}
+
+export type TaxStore = ReturnType<typeof makeActions> & State & { access: TaxAccess };
+const Ctx = createContext<TaxStore | null>(null);
+
+export function TaxProvider({ children }: { children: React.ReactNode }) {
+  const clients = useClients();
+  const [state, dispatch] = useReducer(reducer, undefined, init);
+  const ref = useRef(state);
+  ref.current = state;
+  const cref = useRef(clients);
+  cref.current = clients;
+  const actions = useMemo(() => makeActions(dispatch, () => ref.current, () => cref.current), []);
+  const value = useMemo(() => ({ ...actions, ...state, access: ACCESS_PRESETS[state.preset].access }), [actions, state]);
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+export function useTax() {
+  const v = useContext(Ctx);
+  if (!v) throw new Error("useTax must be used inside <TaxProvider>");
+  return v;
+}
+
+export { RETURN_STATUSES };
+export type { ClientDocument };

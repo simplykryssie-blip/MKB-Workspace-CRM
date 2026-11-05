@@ -22,6 +22,8 @@ export type NavItem = {
   href: string;
   icon: LucideIcon;
   badge?: number;
+  /** Live badge computed in the sidebar (e.g. follow-ups due). */
+  badgeKey?: "leadsDue";
   /** CSS var for a small service-color dot */
   dot?: string;
   children?: NavItem[];
@@ -32,7 +34,7 @@ export const NAV: { section?: string; items: NavItem[] }[] = [
     items: [
       { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
       { label: "Clients", href: "/clients", icon: Users },
-      { label: "Leads", href: "/leads", icon: UserPlus },
+      { label: "Leads", href: "/leads", icon: UserPlus, badgeKey: "leadsDue" },
     ],
   },
   {

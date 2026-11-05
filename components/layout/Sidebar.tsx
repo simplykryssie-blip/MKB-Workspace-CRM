@@ -6,6 +6,8 @@ import { ChevronDown, ChevronsLeft, ChevronsRight, ExternalLink, X } from "lucid
 import { useState } from "react";
 import { Logo } from "@/components/brand/Logo";
 import { NAV, type NavItem } from "./nav";
+import { useLeads } from "@/lib/store/leads-store";
+import { followUpBucket } from "@/lib/sample/leads";
 
 type Props = {
   collapsed: boolean;
@@ -96,6 +98,9 @@ export function Sidebar({ collapsed, onToggleCollapsed, mobileOpen, onCloseMobil
 
 function NavRow({ item, collapsed, onNavigate }: { item: NavItem; collapsed: boolean; onNavigate: () => void }) {
   const pathname = usePathname();
+  const { leads } = useLeads();
+  const liveBadge = item.badgeKey === "leadsDue" ? leads.filter((l) => l.status === "open" && ["overdue", "today"].includes(followUpBucket(l))).length : undefined;
+  const badge = liveBadge ?? item.badge;
   const active = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href + "/"));
   const hasChildren = !!item.children?.length;
   const childActive = item.children?.some((c) => pathname.startsWith(c.href)) ?? false;
@@ -141,17 +146,17 @@ function NavRow({ item, collapsed, onNavigate }: { item: NavItem; collapsed: boo
 
   return (
     <li>
-      <Link href={item.href} onClick={onNavigate} aria-current={active ? "page" : undefined} title={item.label} className={`${base} ${look}`}>
+      <Link href={item.href} onClick={onNavigate} aria-current={active ? "page" : undefined} title={badge && item.badgeKey ? `${item.label} — ${badge} follow-up(s) due` : item.label} className={`${base} ${look}`}>
         {active && <span aria-hidden="true" className="absolute -left-3 bottom-1.5 top-1.5 w-[3px] rounded-r bg-rail-indicator" />}
         <Icon size={19} strokeWidth={active ? 2.2 : 1.9} />
         <span className={`flex-1 ${hideLabel}`}>{item.label}</span>
-        {item.badge ? (
+        {badge ? (
           <span
             className={`grid h-5 min-w-5 place-items-center rounded-full bg-accent px-1.5 text-[11px] font-bold text-white ${
               collapsed ? "md:absolute md:right-2 md:top-1" : "md:absolute md:right-2 md:top-1 lg:static"
             }`}
           >
-            {item.badge}
+            {badge}
           </span>
         ) : null}
       </Link>
