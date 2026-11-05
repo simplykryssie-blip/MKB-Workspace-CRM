@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Bell, ChevronDown, HelpCircle, Menu, Plus, Search } from "lucide-react";
 import { currentUser } from "@/lib/sample-data";
 import { ThemeToggle } from "./ThemeToggle";
@@ -30,9 +31,9 @@ export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
         </label>
 
         <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
-          <button className="hidden h-10 items-center gap-2 rounded-xl bg-accent px-4 text-[14px] font-semibold text-white shadow-[0_4px_14px_rgba(11,127,224,0.3)] hover:bg-accent-hover xl:flex">
+          <Link href="/clients/new" className="hidden h-10 items-center gap-2 rounded-xl bg-accent px-4 text-[14px] font-semibold text-white shadow-[0_4px_14px_rgba(11,127,224,0.3)] hover:bg-accent-hover xl:flex">
             <Plus size={17} /> New client
-          </button>
+          </Link>
           <div className="hidden sm:block">
             <ThemeToggle />
           </div>
