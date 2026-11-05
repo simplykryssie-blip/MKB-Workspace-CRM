@@ -62,8 +62,6 @@
   --rail-active-ink: #071018;
   --rail-indicator: #0b7fe0;
   --rail-scroll: #cfd6e4;
-  /* Navy plate behind the gold MKB logo so it never washes out */
-  --logo-plate: #0d1a33;
 
   --chart-grid: #e8edf5;
   --aging-1: #9cc9f3;
@@ -127,7 +125,6 @@
   --rail-active: linear-gradient(120deg, #2f8fe8, #a4d22b);
   --rail-indicator: #3b9bf0;
   --rail-scroll: #31415f;
-  --logo-plate: #0a1426;
 
   --chart-grid: #22304a;
   --aging-1: #1e4a7a;
@@ -182,7 +179,6 @@
   --color-rail-section: var(--rail-section);
   --color-rail-active-ink: var(--rail-active-ink);
   --color-rail-indicator: var(--rail-indicator);
-  --color-logo-plate: var(--logo-plate);
 
   --shadow-soft: var(--shadow-soft);
   --shadow-pop: var(--shadow-pop);
