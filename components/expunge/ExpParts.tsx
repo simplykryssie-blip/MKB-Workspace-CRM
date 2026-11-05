@@ -6,6 +6,11 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { SelectField, TextArea, TextField } from "@/components/ui/Field";
 import { useExp } from "@/lib/store/exp-store";
+import { useClients } from "@/lib/store/clients-store";
+import { TaxIdInput } from "@/components/ui/FormattedInputs";
+import { maskTaxId, validateTaxId, type TaxIdType } from "@/lib/validation";
+import { SSN_POLICY } from "@/lib/expunge/config";
+import type { Client } from "@/lib/types";
 import { DISPOSITIONS, EXP_ROLES, NOT_LEGAL_ADVICE_EXP, OUTCOME_TONE, STATUS_TONE, mask, type CaseStatus, type Docket, type ExpCase, type ExpRole, type Phase, type ScreeningOutcome, type Tri } from "@/lib/expunge/config";
 import type { NewCaseInput } from "@/lib/store/exp-store";
 
@@ -78,6 +83,42 @@ export function Masked({ value, label, matterId, caseId }: { value?: string; lab
   );
 }
 
+/** Staff view of the client's SSN: masked; reveal needs permission and is audited; full value lives only in the identifier vault. */
+export function SsnField({ c, matterId }: { c: Client; matterId: string }) {
+  const exp = useExp();
+  const store = useClients();
+  const [full, setFull] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState("");
+  const [type, setType] = useState<TaxIdType>("SSN");
+  const [tried, setTried] = useState(false);
+  useEffect(() => { if (!full) return; const t = setTimeout(() => setFull(null), 30000); return () => clearTimeout(t); }, [full]);
+  const err = validateTaxId(val, type, true);
+  return (
+    <div className="rounded-xl border border-line p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="inline-flex items-center gap-1 text-[13px] font-medium text-ink-2"><Lock size={12} /> Social Security number</span>
+        {c.taxIdLast4 ? (
+          <span className="font-mono text-[13.5px] text-ink">{full ?? maskTaxId(c.taxIdLast4)}{c.taxIdType === "ITIN" ? " (ITIN)" : ""}</span>
+        ) : <span className="text-[13px] text-muted">Not provided yet</span>}
+        <span className="ml-auto flex gap-1.5">
+          {c.taxIdLast4 && (exp.can.revealSsn ? (
+            <Button size="sm" variant="ghost" icon={full ? EyeOff : Eye} onClick={() => { if (full) { setFull(null); return; } const v = store.reveal(c.id, "taxId"); exp.logAccess(matterId, "Revealed full SSN"); setFull(v ?? null); }}>{full ? "Hide" : "Reveal (logged)"}</Button>
+          ) : <span className="inline-flex items-center gap-1 text-[12px] text-muted"><Lock size={12} /> This role can&rsquo;t reveal SSNs</span>)}
+          {exp.can.revealSsn && !editing && <Button size="sm" variant="ghost" onClick={() => { setEditing(true); setVal(""); setTried(false); }}>{c.taxIdLast4 ? "Update" : "Enter (given by phone)"}</Button>}
+        </span>
+      </div>
+      {editing && (
+        <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto] sm:items-start">
+          <TaxIdInput id={`ssn-${c.id}`} label="Full nine-digit SSN" required value={val} onChange={setVal} type={type} onTypeChange={setType} showErrors={tried} />
+          <div className="flex gap-2 sm:pt-6"><Button size="sm" onClick={() => setEditing(false)}>Cancel</Button><Button size="sm" variant="primary" onClick={() => { setTried(true); if (err) return; store.updateTaxIds(c.id, { taxId: val, taxIdType: type }); exp.logAccess(matterId, `Entered/updated full ${type}`); setVal(""); setEditing(false); }}>Save to vault</Button></div>
+        </div>
+      )}
+      <p className="mt-2 text-[11.5px] text-muted">{SSN_POLICY}</p>
+    </div>
+  );
+}
+
 export const triOpts: [string, string][] = [["unknown", "Unknown"], ["yes", "Yes"], ["no", "No"]];
 export function TriField({ id, label, value, onChange }: { id: string; label: string; value: Tri; onChange: (v: Tri) => void }) {
   return <SelectField id={id} label={label} value={value} onChange={(e) => onChange(e.target.value as Tri)} options={triOpts} />;
@@ -88,11 +129,12 @@ export function TriField({ id, label, value, onChange }: { id: string; label: st
 /* ================================================================== */
 
 export type CaseDraft = NewCaseInput;
-export const blankCase = (jurisdictionId = "J-LA", state = "LA"): CaseDraft => ({ jurisdictionId, state, locality: "", arrestingAgency: "", dockets: [{ id: uid("dk"), court: "", docketNumber: "", charges: [{ id: uid("ch"), description: "", disposition: "Unknown" }] }], sentenceCompleted: "unknown", obligations: "unknown" });
-export const draftFrom = (c: ExpCase): CaseDraft => ({ jurisdictionId: c.jurisdictionId, state: c.state, localityId: c.localityId, locality: c.locality, arrestingAgency: c.arrestingAgency, arrestDate: c.arrestDate, arrestNumber: c.arrestNumber, arrestingJurisdiction: c.arrestingJurisdiction, dockets: structuredClone(c.dockets), supervision: c.supervision, sentenceCompleted: c.sentenceCompleted, obligations: c.obligations, resolution: c.resolution, notes: c.notes });
+export const blankCase = (jurisdictionId = "J-LA", state = "LA"): CaseDraft => ({ jurisdictionId, state, remedyId: state === "LA" ? "LA-exp" : undefined, locality: "", arrestingAgency: "", dockets: [{ id: uid("dk"), court: "", docketNumber: "", charges: [{ id: uid("ch"), description: "", disposition: "Unknown" }] }], sentenceCompleted: "unknown", obligations: "unknown" });
+export const draftFrom = (c: ExpCase): CaseDraft => ({ jurisdictionId: c.jurisdictionId, state: c.state, remedyId: c.remedyId, localityId: c.localityId, locality: c.locality, arrestingAgency: c.arrestingAgency, arrestDate: c.arrestDate, arrestNumber: c.arrestNumber, arrestingJurisdiction: c.arrestingJurisdiction, dockets: structuredClone(c.dockets), supervision: c.supervision, sentenceCompleted: c.sentenceCompleted, obligations: c.obligations, resolution: c.resolution, notes: c.notes });
 export const caseErrors = (v: CaseDraft, client: boolean) =>
   [
     !v.jurisdictionId && "Choose a state",
+    !client && !v.remedyId && "Choose the workflow (service type) for this case",
     !v.locality.trim() && "Enter the parish or county",
     !client && !v.arrestingAgency.trim() && "Enter the arresting agency (or “Unknown”)",
     v.arrestDate && v.arrestDate > new Date().toISOString().slice(0, 10) && "Arrest date can't be in the future",
@@ -110,7 +152,7 @@ export function CaseEditor({ v, setV, client = false }: { v: CaseDraft; setV: (v
   return (
     <div className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-3">
-        <SelectField id={`${pre}-state`} label="State" required value={v.jurisdictionId} onChange={(e) => { const jj = exp.jurisdictions.find((x) => x.id === e.target.value)!; setCustom(false); setV({ ...v, jurisdictionId: jj.id, state: jj.state, localityId: undefined, locality: "" }); }} options={exp.jurisdictions.filter((x) => x.active).map((x) => [x.id, x.stateName] as [string, string])} />
+        <SelectField id={`${pre}-state`} label="State" required value={v.jurisdictionId} onChange={(e) => { const jj = exp.jurisdictions.find((x) => x.id === e.target.value)!; setCustom(false); setV({ ...v, jurisdictionId: jj.id, state: jj.state, remedyId: jj.remedies.length === 1 ? jj.remedies[0].id : undefined, localityId: undefined, locality: "" }); }} options={exp.jurisdictions.filter((x) => x.active).map((x) => [x.id, x.stateName] as [string, string])} />
         <div>
           <SelectField id={`${pre}-loc`} label={j?.localityLabel ?? "Parish / county"} required value={custom ? "__other" : v.localityId ?? ""} onChange={(e) => { const l = j?.localities.find((x) => x.id === e.target.value); setCustom(e.target.value === "__other"); setV({ ...v, localityId: l?.id, locality: l?.name ?? "" }); }} options={[["", `Choose a ${j?.localityLabel.toLowerCase() ?? "locality"}…`], ...(j?.localities ?? []).map((l) => [l.id, l.name] as [string, string]), ["__other", "Other / not listed"]]} />
           {custom && <input aria-label={`${j?.localityLabel ?? "Locality"} name`} value={v.locality} onChange={(e) => setV({ ...v, locality: e.target.value })} placeholder={`${j?.localityLabel ?? "Parish / county"} name`} className="mt-2 h-9 w-full rounded-lg border border-line bg-surface px-2.5 text-[13.5px] text-ink" />}
@@ -120,6 +162,12 @@ export function CaseEditor({ v, setV, client = false }: { v: CaseDraft; setV: (v
         <TextField id={`${pre}-num`} label="Arrest or incident number" value={v.arrestNumber ?? ""} onChange={(e) => setV({ ...v, arrestNumber: e.target.value || undefined })} />
         <TextField id={`${pre}-ajur`} label="Arresting jurisdiction" value={v.arrestingJurisdiction ?? ""} onChange={(e) => setV({ ...v, arrestingJurisdiction: e.target.value || undefined })} />
       </div>
+      {j && (
+        <div>
+          <SelectField id={`${pre}-remedy`} label={client ? "What are you hoping to do? (MKB will confirm)" : "Workflow (service type)"} required={!client} value={v.remedyId ?? ""} onChange={(e) => setV({ ...v, remedyId: e.target.value || undefined })} options={[["", client ? "Not sure — MKB will advise" : "Choose a workflow…"], ...j.remedies.filter((r) => r.active).map((r) => [r.id, r.name] as [string, string])]} />
+          {j.remedies.length > 1 && <p className="mt-1 text-[12px] text-muted">{j.remedies.map((r) => r.name).join(" and ")} are separate processes with separate requirements. One case follows one process — if charges may fit different processes, they&rsquo;re tracked as separate cases.</p>}
+        </div>
+      )}
       <div className="space-y-3">
         {v.dockets.map((d, di) => (
           <fieldset key={d.id} className="rounded-2xl border border-line p-3.5">

@@ -38,10 +38,12 @@ const day = (days: number) => d(days).slice(0, 10);
 /* ------------------------------------------------------------------ */
 
 const TODO = "To be researched — not verified";
-const placeholderRules = (st: string) => [
-  { id: `${st}-r1`, title: "Expungement eligibility — statute or rule", citation: "", description: `Placeholder. Record the ${st} statute(s) or court rule(s) that govern expungement after researching the official source.`, appliesTo: "To be determined", waitingPeriod: "", notes: TODO },
-  { id: `${st}-r2`, title: "Waiting periods", citation: "", description: "Placeholder. Waiting periods differ by offense and disposition — enter them only from the official source.", appliesTo: "To be determined", waitingPeriod: "", notes: TODO },
+const placeholderRules = (remedyId: string, label: string) => [
+  { id: `${remedyId}-r1`, remedyId, title: `${label} — governing statute or rule`, citation: "", description: `Placeholder. Record the statute(s) or court rule(s) that govern ${label.toLowerCase()} after researching the official source.`, appliesTo: "To be determined", waitingPeriod: "", notes: TODO },
+  { id: `${remedyId}-r2`, remedyId, title: `${label} — waiting periods`, citation: "", description: "Placeholder. Waiting periods differ by offense and disposition — enter them only from the official source.", appliesTo: "To be determined", waitingPeriod: "", notes: TODO },
 ];
+/** Administrative screening questions per workflow. Wording is a placeholder until verified. */
+const crit = (remedyId: string, qs: string[]) => qs.map((question, i) => ({ id: `${remedyId}-q${i + 1}`, remedyId, question, notes: TODO }));
 
 export const EXP_JURISDICTIONS: Jurisdiction[] = [
   {
@@ -52,18 +54,20 @@ export const EXP_JURISDICTIONS: Jurisdiction[] = [
       { id: "LA-ebr", name: "East Baton Rouge Parish", courts: [{ id: "LA-ebr-c1", name: "East Baton Rouge district court (sample entry)", clerk: "Clerk of court (sample)", clerkContact: "(555) 010-2221 · clerk@ebr-sample.example.com" }] },
       { id: "LA-caddo", name: "Caddo Parish", courts: [{ id: "LA-cad-c1", name: "Caddo Parish district court (sample entry)", clerk: "Clerk of court (sample)", clerkContact: "(555) 010-2231" }] },
     ],
+    remedies: [{ id: "LA-exp", name: "Louisiana expungement", short: "LA expungement", description: "Louisiana expungement workflow.", active: true }],
+    criteria: crit("LA-exp", ["Disposition of every charge confirmed from certified court records", "Sentence, probation or parole completion confirmed", "Fines, fees and court costs status confirmed", "Applicable waiting period identified from a verified rule", "Pending charges checked", "Prior expungements checked"]),
     classifications: ["Misdemeanor", "Felony", "To be confirmed"],
-    rules: placeholderRules("LA"),
+    rules: placeholderRules("LA-exp", "Louisiana expungement"),
     requiredDocs: [
-      { id: "LA-d-any", caseType: "Any case", docs: ["Criminal history report", "Arrest report", "Court minutes", "Final disposition"] },
-      { id: "LA-d-conv", caseType: "Conviction", docs: ["Judgment of conviction", "Sentence information", "Probation or parole completion documentation"] },
-      { id: "LA-d-dism", caseType: "Dismissal / acquittal / refusal", docs: ["Dismissal or acquittal documentation"] },
+      { id: "LA-d-any", remedyId: "LA-exp", caseType: "Any case", docs: ["Criminal history report", "Arrest report", "Court minutes", "Final disposition"] },
+      { id: "LA-d-conv", remedyId: "LA-exp", caseType: "Conviction", docs: ["Judgment of conviction", "Sentence information", "Probation or parole completion documentation"] },
+      { id: "LA-d-dism", remedyId: "LA-exp", caseType: "Dismissal / acquittal / refusal", docs: ["Dismissal or acquittal documentation"] },
     ],
-    forms: [{ id: "LA-f1", name: "Expungement motion and supporting forms (identify from the official source)", source: TODO }],
+    forms: [{ id: "LA-f1", remedyId: "LA-exp", name: "Louisiana expungement motion and supporting forms (identify from the official source)", source: TODO }],
     procedures: "Placeholder. Describe the filing procedure (where to file, service requirements, hearing practice) after verifying it with the official sources and the clerk.",
     fees: [
-      { id: "LA-fee1", label: "Court filing / processing fees", kind: "court_filing", payableTo: "Clerk of court", notes: "Amount not entered — confirm with the clerk." },
-      { id: "LA-fee2", label: "Records / agency fees", kind: "government", payableTo: "State and local agencies", notes: "Amount not entered — confirm with each agency." },
+      { id: "LA-fee1", remedyId: "LA-exp", label: "Court filing / processing fees", kind: "court_filing", payableTo: "Clerk of court", notes: "Amount not entered — confirm with the clerk." },
+      { id: "LA-fee2", remedyId: "LA-exp", label: "Records / agency fees", kind: "government", payableTo: "State and local agencies", notes: "Amount not entered — confirm with each agency." },
     ],
     contacts: [{ id: "LA-k1", name: "Sample state records bureau", role: "Criminal history requests", phone: "(555) 010-2290", email: "records@la-bureau-sample.example.com" }],
     custodians: [
@@ -86,18 +90,31 @@ export const EXP_JURISDICTIONS: Jurisdiction[] = [
       { id: "TX-dallas", name: "Dallas County", courts: [{ id: "TX-dal-c1", name: "Dallas County criminal court (sample entry)", clerk: "District clerk (sample)", clerkContact: "(555) 010-3321", daOffice: "District attorney's office (sample)", daContact: "(555) 010-3322" }] },
       { id: "TX-bexar", name: "Bexar County", courts: [{ id: "TX-bex-c1", name: "Bexar County court (sample entry)", clerk: "District clerk (sample)", clerkContact: "(555) 010-3331" }] },
     ],
-    classifications: ["Class C misdemeanor", "Class B misdemeanor", "Class A misdemeanor", "State jail felony", "Felony (degree to confirm)", "To be confirmed"],
-    rules: placeholderRules("TX"),
-    requiredDocs: [
-      { id: "TX-d-any", caseType: "Any case", docs: ["Criminal history report", "Arrest report", "Court minutes", "Final disposition"] },
-      { id: "TX-d-dism", caseType: "Dismissal / acquittal", docs: ["Dismissal or acquittal documentation", "Bill of information or charging document"] },
-      { id: "TX-d-def", caseType: "Deferred adjudication / diversion", docs: ["Judgment of conviction", "Probation or parole completion documentation"] },
+    remedies: [
+      { id: "TX-exp", name: "Texas expunction", short: "TX expunction", description: "Texas expunction workflow — separate requirements and screening from nondisclosure.", active: true },
+      { id: "TX-nd", name: "Texas order of nondisclosure", short: "TX nondisclosure", description: "Texas order of nondisclosure workflow — separate requirements and screening from expunction.", active: true },
     ],
-    forms: [{ id: "TX-f1", name: "Petition and supporting forms (identify from the official source)", source: TODO }],
+    criteria: [
+      ...crit("TX-exp", ["Disposition of every charge confirmed from certified court records (expunction)", "Applicable expunction waiting period identified from a verified rule", "Pending charges checked", "Records from every agency holding the arrest identified"]),
+      ...crit("TX-nd", ["Type of disposition confirmed from certified court records (nondisclosure)", "Completion of community supervision / deferred adjudication confirmed", "Applicable nondisclosure waiting period identified from a verified rule", "Disqualifying offenses or history checked against the verified rule", "Pending charges checked"]),
+    ],
+    classifications: ["Class C misdemeanor", "Class B misdemeanor", "Class A misdemeanor", "State jail felony", "Felony (degree to confirm)", "To be confirmed"],
+    rules: [...placeholderRules("TX-exp", "Texas expunction"), ...placeholderRules("TX-nd", "Texas order of nondisclosure")],
+    requiredDocs: [
+      { id: "TX-exp-any", remedyId: "TX-exp", caseType: "Any case", docs: ["Criminal history report", "Arrest report", "Court minutes", "Final disposition"] },
+      { id: "TX-exp-dism", remedyId: "TX-exp", caseType: "Dismissal / acquittal", docs: ["Dismissal or acquittal documentation", "Bill of information or charging document"] },
+      { id: "TX-nd-any", remedyId: "TX-nd", caseType: "Any case", docs: ["Criminal history report", "Court minutes", "Final disposition"] },
+      { id: "TX-nd-def", remedyId: "TX-nd", caseType: "Deferred adjudication / diversion", docs: ["Judgment of conviction", "Probation or parole completion documentation"] },
+    ],
+    forms: [
+      { id: "TX-f1", remedyId: "TX-exp", name: "Texas expunction petition and supporting forms (identify from the official source)", source: TODO },
+      { id: "TX-f2", remedyId: "TX-nd", name: "Texas nondisclosure petition and supporting forms (identify from the official source)", source: TODO },
+    ],
     procedures: "Placeholder. Texas procedures are configured separately from Louisiana — record them only after verifying with the official sources and the clerk.",
     fees: [
-      { id: "TX-fee1", label: "Court filing fees", kind: "court_filing", payableTo: "District or county clerk", notes: "Amount not entered — confirm with the clerk." },
-      { id: "TX-fee2", label: "Agency fees", kind: "government", payableTo: "State and local agencies", notes: "Amount not entered — confirm with each agency." },
+      { id: "TX-fee1", remedyId: "TX-exp", label: "Expunction court filing fees", kind: "court_filing", payableTo: "District or county clerk", notes: "Amount not entered — confirm with the clerk." },
+      { id: "TX-fee3", remedyId: "TX-nd", label: "Nondisclosure court filing fees", kind: "court_filing", payableTo: "District or county clerk", notes: "Amount not entered — confirm with the clerk." },
+      { id: "TX-fee2", remedyId: "TX-exp", label: "Agency fees", kind: "government", payableTo: "State and local agencies", notes: "Amount not entered — confirm with each agency." },
     ],
     contacts: [{ id: "TX-k1", name: "Sample state records repository", role: "Criminal history requests", phone: "(555) 010-3390", email: "records@tx-repo-sample.example.com" }],
     custodians: [
@@ -122,13 +139,16 @@ export const EXP_SERVICES: ServiceType[] = [
   { id: "prep", name: "Screening & document preparation", description: "Administrative screening and preparation of documents for the client to review and file.", active: true },
   { id: "full", name: "Document preparation & filing coordination", description: "Preparation plus coordination of filing and court follow-up.", active: true },
 ];
-const price = (serviceTypeId: string, state: string, complexity: PriceRule["complexity"], fee: number): PriceRule => ({ id: `p-${serviceTypeId}-${state}-${complexity}`, serviceTypeId, state, complexity, fee });
+const price = (serviceTypeId: string, remedyId: string, complexity: PriceRule["complexity"], fee: number): PriceRule => ({ id: `p-${serviceTypeId}-${remedyId}-${complexity}`, serviceTypeId, remedyId, complexity, fee });
+/** Sample MKB service prices (fictional, admin-editable). Government fees are never priced here. */
 export const EXP_PRICES: PriceRule[] = [
   price("records", "Any", "standard", 150), price("records", "Any", "moderate", 225), price("records", "Any", "complex", 325),
-  price("prep", "LA", "standard", 450), price("prep", "LA", "moderate", 600), price("prep", "LA", "complex", 800),
-  price("prep", "TX", "standard", 425), price("prep", "TX", "moderate", 575), price("prep", "TX", "complex", 775),
-  price("full", "LA", "standard", 750), price("full", "LA", "moderate", 950), price("full", "LA", "complex", 1250),
-  price("full", "TX", "standard", 700), price("full", "TX", "moderate", 900), price("full", "TX", "complex", 1200),
+  price("prep", "LA-exp", "standard", 450), price("prep", "LA-exp", "moderate", 600), price("prep", "LA-exp", "complex", 800),
+  price("prep", "TX-exp", "standard", 425), price("prep", "TX-exp", "moderate", 575), price("prep", "TX-exp", "complex", 775),
+  price("prep", "TX-nd", "standard", 450), price("prep", "TX-nd", "moderate", 600), price("prep", "TX-nd", "complex", 800),
+  price("full", "LA-exp", "standard", 750), price("full", "LA-exp", "moderate", 950), price("full", "LA-exp", "complex", 1250),
+  price("full", "TX-exp", "standard", 700), price("full", "TX-exp", "moderate", 900), price("full", "TX-exp", "complex", 1200),
+  price("full", "TX-nd", "standard", 750), price("full", "TX-nd", "moderate", 950), price("full", "TX-nd", "complex", 1250),
 ];
 
 /* ------------------------------------------------------------------ */
@@ -139,7 +159,7 @@ const ch = (id: string, description: string, disposition: Charge["disposition"],
 const dk = (id: string, court: string, docketNumber: string, charges: Charge[]): Docket => ({ id, court, docketNumber, charges });
 type RecSeed = [docType: string, kind: RecordItem["kind"], status: RecordItem["status"], extra?: Partial<RecordItem>];
 const recs = (caseId: string, list: RecSeed[]): RecordItem[] => list.map(([docType, kind, status, extra], i) => ({ id: `${caseId}-rec${i + 1}`, docType, kind, status, required: true, ...extra }));
-const screening = (o: Partial<Screening> = {}): Screening => ({ ruleIds: [], offenseCategory: "", dispositionSummary: "", sentenceCompleted: "unknown", waitingPeriod: "", waitingPeriodMet: "unknown", obligationsOutstanding: "unknown", pendingCharges: "unknown", onSupervision: "unknown", priorExpungements: "unknown", supportingDocsComplete: "unknown", missingInfo: "", disqualifyingIssues: "", legalReviewRequired: false, outcome: "Information Incomplete", reviews: [], ...o });
+const screening = (o: Partial<Screening> = {}): Screening => ({ ruleIds: [], offenseCategory: "", dispositionSummary: "", sentenceCompleted: "unknown", waitingPeriod: "", waitingPeriodMet: "unknown", obligationsOutstanding: "unknown", pendingCharges: "unknown", onSupervision: "unknown", priorExpungements: "unknown", supportingDocsComplete: "unknown", missingInfo: "", disqualifyingIssues: "", legalReviewRequired: false, answers: {}, outcome: "Information Incomplete", reviews: [], ...o });
 const hist = (byId: string, ...events: [string, StatusEvent["status"], string?][]): StatusEvent[] => events.map(([at, status, note]) => ({ at, status, byId, note }));
 const assign = (main: string, o: Partial<Record<AssignmentRole, string>> = {}) => Object.fromEntries(ASSIGNMENT_ROLES.map((r) => [r, o[r] ?? main])) as Record<AssignmentRole, string>;
 const intake = (o: Partial<Intake>): Intake => ({
@@ -184,7 +204,7 @@ export const EXP_MATTERS: ExpMatter[] = [
 export const EXP_CASES: ExpCase[] = [
   // Jordan — LA, dismissed, records verified, awaiting review.
   mkCase({
-    id: "EXP-2041-C1", number: "EXP-2041-C1", matterId: "EXP-2041", clientId: "c-1001", jurisdictionId: "J-LA", state: "LA", localityId: "LA-orleans", locality: "Orleans Parish", arrestingAgency: "City police (sample)", arrestDate: "2016-08-14", arrestNumber: "SAMPLE-A-160814-77", arrestingJurisdiction: "Orleans Parish",
+    id: "EXP-2041-C1", number: "EXP-2041-C1", matterId: "EXP-2041", clientId: "c-1001", jurisdictionId: "J-LA", state: "LA", remedyId: "LA-exp", localityId: "LA-orleans", locality: "Orleans Parish", arrestingAgency: "City police (sample)", arrestDate: "2016-08-14", arrestNumber: "SAMPLE-A-160814-77", arrestingJurisdiction: "Orleans Parish",
     dockets: [dk("dk1", "Orleans Parish criminal court (sample entry)", "SAMPLE-D-551204", [ch("c1", "Simple possession (sample)", "Dismissed", { classification: "Misdemeanor", dispositionDate: "2017-01-20" })])],
     sentenceCompleted: "yes", obligations: "none", resolution: "Dismissed", assignedTo: "s-jp", status: "Not Started", createdAt: d(-15),
     records: [["Criminal history report", "criminal_history", "verified", { custodianId: "LA-cu5", custodianName: "State criminal history repository (sample)", requestedAt: day(-14), method: "Mail", fee: 26, feePaid: true, receivedAt: day(-6), docId: "exp2041-d1" }], ["Arrest report", "arrest", "verified", { custodianId: "LA-cu3", custodianName: "New Orleans police records (sample)", requestedAt: day(-14), method: "Online portal", fee: 15, feePaid: true, receivedAt: day(-9), docId: "exp2041-d2" }], ["Court minutes", "court_minutes", "verified", { custodianId: "LA-cu1", custodianName: "Orleans Parish clerk — criminal records (sample)", requestedAt: day(-14), method: "In person", fee: 10, feePaid: true, receivedAt: day(-5), docId: "exp2041-d3" }], ["Dismissal or acquittal documentation", "disposition", "received", { custodianId: "LA-cu1", custodianName: "Orleans Parish clerk — criminal records (sample)", requestedAt: day(-14), method: "In person", receivedAt: day(-5), docId: "exp2041-d4" }]],
@@ -192,17 +212,25 @@ export const EXP_CASES: ExpCase[] = [
   }),
   // Casey — TX case: 1 docket, 2 charges; documents being prepared.
   mkCase({
-    id: "EXP-2042-C1", number: "EXP-2042-C1", matterId: "EXP-2042", clientId: "c-1004", jurisdictionId: "J-TX", state: "TX", localityId: "TX-harris", locality: "Harris County", arrestingAgency: "City police (sample)", arrestDate: "2017-03-02", arrestNumber: "SAMPLE-TXA-170302", arrestingJurisdiction: "Harris County",
-    dockets: [dk("dk1", "Harris County criminal court (sample entry)", "SAMPLE-TX-2017-00418", [ch("c1", "Theft (sample description)", "Dismissed", { classification: "Class B misdemeanor", dispositionDate: "2017-09-11" }), ch("c2", "Criminal trespass (sample description)", "Deferred adjudication", { classification: "Class B misdemeanor", dispositionDate: "2017-09-11", sentence: "Community supervision — 6 months (sample)" })])],
-    supervision: "Community supervision completed 2018 (sample)", sentenceCompleted: "yes", obligations: "paid", complexity: "moderate", assignedTo: "s-jp", status: "Preparing", createdAt: d(-27),
+    id: "EXP-2042-C1", number: "EXP-2042-C1", matterId: "EXP-2042", clientId: "c-1004", jurisdictionId: "J-TX", state: "TX", remedyId: "TX-exp", localityId: "TX-harris", locality: "Harris County", arrestingAgency: "City police (sample)", arrestDate: "2017-03-02", arrestNumber: "SAMPLE-TXA-170302", arrestingJurisdiction: "Harris County",
+    dockets: [dk("dk1", "Harris County criminal court (sample entry)", "SAMPLE-TX-2017-00418", [ch("c1", "Theft (sample description)", "Dismissed", { classification: "Class B misdemeanor", dispositionDate: "2017-09-11" }), ch("c1b", "Possession of drug paraphernalia (sample description)", "Dismissed", { classification: "Class C misdemeanor", dispositionDate: "2017-09-11" })])],
+    sentenceCompleted: "yes", obligations: "none", complexity: "moderate", assignedTo: "s-jp", status: "Preparing", createdAt: d(-27),
     records: [["Criminal history report", "criminal_history", "verified", { custodianId: "TX-cu6", custodianName: "State criminal history repository (sample)", requestedAt: day(-26), method: "Online portal", fee: 10, feePaid: true, receivedAt: day(-25), docId: "exp2042-d1" }], ["Court minutes", "court_minutes", "verified", { custodianId: "TX-cu1", custodianName: "Harris County district clerk (sample)", requestedAt: day(-26), method: "Online portal", fee: 12, feePaid: true, receivedAt: day(-20), docId: "exp2042-d2" }], ["Final disposition", "disposition", "verified", { custodianId: "TX-cu1", custodianName: "Harris County district clerk (sample)", requestedAt: day(-26), method: "Online portal", receivedAt: day(-20), docId: "exp2042-d3" }], ["Probation or parole completion documentation", "other", "verified", { method: "Client provided", receivedAt: day(-18), docId: "exp2042-d4" }]],
-    screening: { offenseCategory: "Class B misdemeanor (2 charges)", dispositionSummary: "One dismissed; one deferred adjudication, supervision completed", sentenceCompleted: "yes", waitingPeriod: "Not entered — jurisdiction rules not verified", waitingPeriodMet: "unknown", obligationsOutstanding: "no", pendingCharges: "no", onSupervision: "no", priorExpungements: "no", supportingDocsComplete: "yes", legalReviewRequired: true, outcome: "Administrative Processing Approved", reviews: [{ id: "rv1", at: d(-15), byId: "s-jp", outcome: "Attorney / Qualified Legal Review Needed", sources: ["Court minutes", "Final disposition"], explanation: "Two charges with different dispositions — sent for qualified legal review before preparing documents." }, { id: "rv2", at: d(-12), byId: "s-mk", reviewerName: "Sample Partner Attorney (fictional)", legal: true, outcome: "Administrative Processing Approved", sources: ["Partner attorney review memo (sample)"], explanation: "Qualified reviewer confirmed MKB may prepare documents for the client's review. Outcome is decided by the court." }] },
+    screening: { offenseCategory: "Class B / Class C misdemeanor (2 charges)", dispositionSummary: "Both charges on this cause dismissed", sentenceCompleted: "yes", waitingPeriod: "Not entered — jurisdiction rules not verified", waitingPeriodMet: "unknown", obligationsOutstanding: "no", pendingCharges: "no", onSupervision: "no", priorExpungements: "no", supportingDocsComplete: "yes", legalReviewRequired: true, outcome: "Administrative Processing Approved", reviews: [{ id: "rv1", at: d(-15), byId: "s-jp", outcome: "Attorney / Qualified Legal Review Needed", sources: ["Court minutes", "Final disposition"], explanation: "Multiple charges on one cause — sent for qualified legal review before preparing documents." }, { id: "rv2", at: d(-12), byId: "s-mk", reviewerName: "Sample Partner Attorney (fictional)", legal: true, outcome: "Administrative Processing Approved", sources: ["Partner attorney review memo (sample)"], explanation: "Qualified reviewer confirmed MKB may prepare documents for the client's review. Outcome is decided by the court." }] },
     prep: { status: "in_progress", forms: [{ id: "f1", name: "Petition (per verified jurisdiction forms)", source: "To be identified from official source", status: "drafted", docId: "exp2042-d5" }, { id: "f2", name: "Proposed order (per verified jurisdiction forms)", source: "To be identified from official source", status: "needed" }], missing: ["Confirm current mailing address for service"] },
     history: hist("s-jp", [d(-27), "Not Started", "case created"], [d(-11), "Preparing", "screening approved after qualified legal review"]),
   }),
+  // Casey — same Texas arrest, separate cause: deferred adjudication → its own nondisclosure case (never combined with expunction).
+  mkCase({
+    id: "EXP-2042-C3", number: "EXP-2042-C3", matterId: "EXP-2042", clientId: "c-1004", jurisdictionId: "J-TX", state: "TX", remedyId: "TX-nd", localityId: "TX-harris", locality: "Harris County", arrestingAgency: "City police (sample)", arrestDate: "2017-03-02", arrestNumber: "SAMPLE-TXA-170302", arrestingJurisdiction: "Harris County",
+    dockets: [dk("dk1", "Harris County criminal court (sample entry)", "SAMPLE-TX-2017-00419", [ch("c1", "Criminal trespass (sample description)", "Deferred adjudication", { classification: "Class B misdemeanor", dispositionDate: "2017-09-11", sentence: "Community supervision — 6 months (sample)" })])],
+    supervision: "Community supervision completed 2018 (sample)", sentenceCompleted: "yes", obligations: "paid", assignedTo: "s-jp", status: "Not Started", createdAt: d(-27), serviceType: "prep",
+    records: [["Criminal history report", "criminal_history", "verified", { custodianId: "TX-cu6", custodianName: "State criminal history repository (sample)", requestedAt: day(-26), method: "Online portal", receivedAt: day(-25), docId: "exp2042-d1" }], ["Court minutes", "court_minutes", "verified", { custodianId: "TX-cu1", custodianName: "Harris County district clerk (sample)", requestedAt: day(-26), method: "Online portal", fee: 12, feePaid: true, receivedAt: day(-20), docId: "exp2042-d12" }], ["Judgment of conviction", "disposition", "verified", { custodianId: "TX-cu1", custodianName: "Harris County district clerk (sample)", requestedAt: day(-26), method: "Online portal", receivedAt: day(-20), docId: "exp2042-d13" }], ["Probation or parole completion documentation", "other", "verified", { method: "Client provided", receivedAt: day(-18), docId: "exp2042-d4" }]],
+    screening: { offenseCategory: "Class B misdemeanor", dispositionSummary: "Deferred adjudication; supervision completed (sample)", sentenceCompleted: "yes", obligationsOutstanding: "no", pendingCharges: "no", onSupervision: "no", priorExpungements: "no", supportingDocsComplete: "yes", outcome: "Ready for Review" },
+  }),
   // Casey — LA case: 1 arrest, 2 dockets; awaiting client approval.
   mkCase({
-    id: "EXP-2042-C2", number: "EXP-2042-C2", matterId: "EXP-2042", clientId: "c-1004", jurisdictionId: "J-LA", state: "LA", localityId: "LA-jefferson", locality: "Jefferson Parish", arrestingAgency: "Parish sheriff (sample)", arrestDate: "2020-05-19", arrestNumber: "SAMPLE-JP-200519", arrestingJurisdiction: "Jefferson Parish",
+    id: "EXP-2042-C2", number: "EXP-2042-C2", matterId: "EXP-2042", clientId: "c-1004", jurisdictionId: "J-LA", state: "LA", remedyId: "LA-exp", localityId: "LA-jefferson", locality: "Jefferson Parish", arrestingAgency: "Parish sheriff (sample)", arrestDate: "2020-05-19", arrestNumber: "SAMPLE-JP-200519", arrestingJurisdiction: "Jefferson Parish",
     dockets: [dk("dk1", "Jefferson Parish district court (sample entry)", "SAMPLE-JP-20-1187", [ch("c1", "Disturbing the peace (sample description)", "Refused / not prosecuted", { classification: "Misdemeanor", dispositionDate: "2020-07-01" })]), dk("dk2", "Jefferson Parish district court (sample entry)", "SAMPLE-JP-20-1188", [ch("c2", "Criminal mischief (sample description)", "Convicted", { classification: "Misdemeanor", convictionDate: "2020-10-14", sentence: "Fine and 6 months probation (sample)" })])],
     supervision: "Probation completed 2021 (sample)", sentenceCompleted: "yes", obligations: "paid", complexity: "moderate", assignedTo: "s-jp", status: "Awaiting Client Approval", createdAt: d(-27),
     records: [["Criminal history report", "criminal_history", "verified", { custodianId: "LA-cu5", custodianName: "State criminal history repository (sample)", requestedAt: day(-26), method: "Mail", fee: 26, feePaid: true, receivedAt: day(-17), docId: "exp2042-d6" }], ["Court minutes", "court_minutes", "verified", { custodianId: "LA-cu2", custodianName: "Jefferson Parish clerk (sample)", requestedAt: day(-26), method: "In person", fee: 20, feePaid: true, receivedAt: day(-19), docId: "exp2042-d7" }], ["Judgment of conviction", "disposition", "verified", { custodianId: "LA-cu2", custodianName: "Jefferson Parish clerk (sample)", requestedAt: day(-26), method: "In person", receivedAt: day(-19), docId: "exp2042-d8" }], ["Probation or parole completion documentation", "other", "verified", { method: "Client provided", receivedAt: day(-16), docId: "exp2042-d9" }]],
@@ -212,7 +240,7 @@ export const EXP_CASES: ExpCase[] = [
   }),
   // Quinn — TX Travis: awaiting criminal records.
   mkCase({
-    id: "EXP-2043-C1", number: "EXP-2043-C1", matterId: "EXP-2043", clientId: "c-1010", jurisdictionId: "J-TX", state: "TX", localityId: "TX-travis", locality: "Travis County", arrestingAgency: "County sheriff (sample)", arrestDate: "2014-11-03", arrestNumber: "SAMPLE-TR-141103", arrestingJurisdiction: "Travis County",
+    id: "EXP-2043-C1", number: "EXP-2043-C1", matterId: "EXP-2043", clientId: "c-1010", jurisdictionId: "J-TX", state: "TX", remedyId: "TX-exp", localityId: "TX-travis", locality: "Travis County", arrestingAgency: "County sheriff (sample)", arrestDate: "2014-11-03", arrestNumber: "SAMPLE-TR-141103", arrestingJurisdiction: "Travis County",
     dockets: [dk("dk1", "Travis County court (sample entry)", "SAMPLE-TR-14-0902", [ch("c1", "Charge description pending records", "Unknown")])],
     assignedTo: "s-al", status: "Not Started", createdAt: d(-7),
     records: [["Criminal history report", "criminal_history", "requested", { custodianId: "TX-cu6", custodianName: "State criminal history repository (sample)", requestedAt: day(-6), method: "Online portal", fee: 10, feePaid: true }], ["Arrest report", "arrest", "not_requested", { missingInfo: "Need signed release from client first" }], ["Court minutes", "court_minutes", "not_requested"]],
@@ -220,7 +248,7 @@ export const EXP_CASES: ExpCase[] = [
   }),
   // Quinn — TX Dallas: awaiting court minutes.
   mkCase({
-    id: "EXP-2043-C2", number: "EXP-2043-C2", matterId: "EXP-2043", clientId: "c-1010", jurisdictionId: "J-TX", state: "TX", localityId: "TX-dallas", locality: "Dallas County", arrestingAgency: "City police (sample)", arrestDate: "2015-06-21", arrestNumber: "SAMPLE-DL-150621",
+    id: "EXP-2043-C2", number: "EXP-2043-C2", matterId: "EXP-2043", clientId: "c-1010", jurisdictionId: "J-TX", state: "TX", remedyId: "TX-exp", localityId: "TX-dallas", locality: "Dallas County", arrestingAgency: "City police (sample)", arrestDate: "2015-06-21", arrestNumber: "SAMPLE-DL-150621",
     dockets: [dk("dk1", "Dallas County criminal court (sample entry)", "SAMPLE-DL-15-3310", [ch("c1", "Possession of a controlled substance (sample)", "Acquitted / not guilty", { classification: "To be confirmed", dispositionDate: "2016-02-09" })])],
     assignedTo: "s-al", status: "Not Started", createdAt: d(-7),
     records: [["Criminal history report", "criminal_history", "verified", { custodianId: "TX-cu6", custodianName: "State criminal history repository (sample)", requestedAt: day(-6), method: "Online portal", fee: 10, feePaid: true, receivedAt: day(-5), docId: "exp2043-d1" }], ["Court minutes", "court_minutes", "requested", { custodianId: "TX-cu3", custodianName: "Dallas County district clerk (sample)", requestedAt: day(-5), method: "Mail", fee: 15, feePaid: false }], ["Dismissal or acquittal documentation", "disposition", "incomplete", { custodianId: "TX-cu3", custodianName: "Dallas County district clerk (sample)", requestedAt: day(-5), method: "Mail", receivedAt: day(-1), docId: "exp2043-d2", missingInfo: "Copy is missing the judge's signature page." }]],
@@ -228,7 +256,7 @@ export const EXP_CASES: ExpCase[] = [
   }),
   // Quinn — LA EBR: flagged for legal review (possible pending charge).
   mkCase({
-    id: "EXP-2043-C3", number: "EXP-2043-C3", matterId: "EXP-2043", clientId: "c-1010", jurisdictionId: "J-LA", state: "LA", localityId: "LA-ebr", locality: "East Baton Rouge Parish", arrestingAgency: "City police (sample)", arrestDate: "2018-09-30", arrestNumber: "SAMPLE-BR-180930",
+    id: "EXP-2043-C3", number: "EXP-2043-C3", matterId: "EXP-2043", clientId: "c-1010", jurisdictionId: "J-LA", state: "LA", remedyId: "LA-exp", localityId: "LA-ebr", locality: "East Baton Rouge Parish", arrestingAgency: "City police (sample)", arrestDate: "2018-09-30", arrestNumber: "SAMPLE-BR-180930",
     dockets: [dk("dk1", "East Baton Rouge district court (sample entry)", "SAMPLE-BR-18-7781", [ch("c1", "Simple battery (sample description)", "Convicted", { classification: "Misdemeanor", convictionDate: "2019-03-12", sentence: "Fine (sample)" })])],
     sentenceCompleted: "yes", obligations: "unknown", assignedTo: "s-jp", status: "Not Started", createdAt: d(-7),
     records: [["Criminal history report", "criminal_history", "verified", { custodianId: "LA-cu5", custodianName: "State criminal history repository (sample)", requestedAt: day(-6), method: "Mail", fee: 26, feePaid: true, receivedAt: day(-2), docId: "exp2043-d3" }], ["Court minutes", "court_minutes", "verified", { custodianId: "LA-cu6", custodianName: "East Baton Rouge clerk (sample)", requestedAt: day(-6), method: "Mail", fee: 10, feePaid: true, receivedAt: day(-2), docId: "exp2043-d4" }], ["Judgment of conviction", "disposition", "verified", { custodianId: "LA-cu6", custodianName: "East Baton Rouge clerk (sample)", requestedAt: day(-6), method: "Mail", receivedAt: day(-2), docId: "exp2043-d5" }]],
@@ -237,7 +265,7 @@ export const EXP_CASES: ExpCase[] = [
   }),
   // Taylor — LA Orleans: hearing scheduled.
   mkCase({
-    id: "EXP-2044-C1", number: "EXP-2044-C1", matterId: "EXP-2044", clientId: "c-1012", jurisdictionId: "J-LA", state: "LA", localityId: "LA-orleans", locality: "Orleans Parish", arrestingAgency: "City police (sample)", arrestDate: "2015-02-11", arrestNumber: "SAMPLE-OR-150211",
+    id: "EXP-2044-C1", number: "EXP-2044-C1", matterId: "EXP-2044", clientId: "c-1012", jurisdictionId: "J-LA", state: "LA", remedyId: "LA-exp", localityId: "LA-orleans", locality: "Orleans Parish", arrestingAgency: "City police (sample)", arrestDate: "2015-02-11", arrestNumber: "SAMPLE-OR-150211",
     dockets: [dk("dk1", "Orleans Parish criminal court (sample entry)", "SAMPLE-OR-15-2290", [ch("c1", "Theft (sample description)", "Diverted / pretrial intervention", { classification: "Misdemeanor", dispositionDate: "2015-12-01" })])],
     sentenceCompleted: "yes", obligations: "paid", assignedTo: "s-jp", status: "Hearing Scheduled", createdAt: d(-72),
     records: [["Criminal history report", "criminal_history", "verified", { requestedAt: day(-70), method: "Mail", fee: 26, feePaid: true, receivedAt: day(-60), docId: "exp2044-d1", custodianName: "State criminal history repository (sample)" }], ["Court minutes", "court_minutes", "verified", { requestedAt: day(-70), method: "In person", fee: 10, feePaid: true, receivedAt: day(-62), docId: "exp2044-d2", custodianName: "Orleans Parish clerk — criminal records (sample)" }], ["Final disposition", "disposition", "verified", { requestedAt: day(-70), method: "In person", receivedAt: day(-62), docId: "exp2044-d3", custodianName: "Orleans Parish clerk — criminal records (sample)" }]],
@@ -252,7 +280,7 @@ export const EXP_CASES: ExpCase[] = [
   }),
   // Morgan — TX Bexar: completed with verified final order.
   mkCase({
-    id: "EXP-2047-C1", number: "EXP-2047-C1", matterId: "EXP-2047", clientId: "c-1009", jurisdictionId: "J-TX", state: "TX", localityId: "TX-bexar", locality: "Bexar County", arrestingAgency: "City police (sample)", arrestDate: "2012-04-22", arrestNumber: "SAMPLE-BX-120422",
+    id: "EXP-2047-C1", number: "EXP-2047-C1", matterId: "EXP-2047", clientId: "c-1009", jurisdictionId: "J-TX", state: "TX", remedyId: "TX-exp", localityId: "TX-bexar", locality: "Bexar County", arrestingAgency: "City police (sample)", arrestDate: "2012-04-22", arrestNumber: "SAMPLE-BX-120422",
     dockets: [dk("dk1", "Bexar County court (sample entry)", "SAMPLE-BX-12-6604", [ch("c1", "Criminal mischief (sample description)", "Dismissed", { classification: "Class C misdemeanor", dispositionDate: "2012-08-30" })])],
     sentenceCompleted: "yes", obligations: "none", assignedTo: "s-jp", status: "Completed", createdAt: d(-157),
     records: [["Criminal history report", "criminal_history", "verified", { requestedAt: day(-155), method: "Online portal", fee: 10, feePaid: true, receivedAt: day(-150), docId: "exp2047-d1", custodianName: "State criminal history repository (sample)" }], ["Court minutes", "court_minutes", "verified", { requestedAt: day(-155), method: "Online portal", fee: 12, feePaid: true, receivedAt: day(-148), docId: "exp2047-d2", custodianName: "Bexar County district clerk (sample)" }], ["Dismissal or acquittal documentation", "disposition", "verified", { requestedAt: day(-155), method: "Online portal", receivedAt: day(-148), docId: "exp2047-d3", custodianName: "Bexar County district clerk (sample)" }]],
@@ -263,7 +291,7 @@ export const EXP_CASES: ExpCase[] = [
   }),
   // Morgan — LA Caddo: on hold (court costs outstanding).
   mkCase({
-    id: "EXP-2047-C2", number: "EXP-2047-C2", matterId: "EXP-2047", clientId: "c-1009", jurisdictionId: "J-LA", state: "LA", localityId: "LA-caddo", locality: "Caddo Parish", arrestingAgency: "Parish sheriff (sample)", arrestDate: "2016-01-09", arrestNumber: "SAMPLE-CD-160109",
+    id: "EXP-2047-C2", number: "EXP-2047-C2", matterId: "EXP-2047", clientId: "c-1009", jurisdictionId: "J-LA", state: "LA", remedyId: "LA-exp", localityId: "LA-caddo", locality: "Caddo Parish", arrestingAgency: "Parish sheriff (sample)", arrestDate: "2016-01-09", arrestNumber: "SAMPLE-CD-160109",
     dockets: [dk("dk1", "Caddo Parish district court (sample entry)", "SAMPLE-CD-16-0450", [ch("c1", "Charge description (sample)", "Convicted", { classification: "Misdemeanor", convictionDate: "2016-06-02", sentence: "Fine and court costs (sample)" })])],
     obligations: "outstanding", sentenceCompleted: "no", assignedTo: "s-jp", status: "On Hold", holdFrom: "Not Started", holdReason: "Client is paying outstanding court costs; resume when the clerk confirms payment.", createdAt: d(-90),
     records: [["Criminal history report", "criminal_history", "verified", { requestedAt: day(-88), method: "Mail", fee: 26, feePaid: true, receivedAt: day(-80), docId: "exp2047-d7", custodianName: "State criminal history repository (sample)" }], ["Court minutes", "court_minutes", "verified", { requestedAt: day(-88), method: "Mail", fee: 10, feePaid: true, receivedAt: day(-78), docId: "exp2047-d8", custodianName: "Caddo Parish clerk (sample)" }]],

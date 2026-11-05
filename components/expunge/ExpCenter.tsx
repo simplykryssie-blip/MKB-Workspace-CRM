@@ -15,8 +15,7 @@ import { Kpi } from "@/components/biz/BizBits";
 import { STAFF, SAMPLE_NOW, staffById } from "@/lib/sample/clients";
 import { useClients } from "@/lib/store/clients-store";
 import { matterCases, useExp } from "@/lib/store/exp-store";
-import { STATES } from "@/lib/biz/config";
-import { ASSIGNMENT_ROLES, CASE_STATUSES, COMPLEXITY, EXP_ROLES, PHASES, RECORD_META, SCREENING_OUTCOMES, chargeCount, verifiedLabel, type Complexity, type ExpMatter, type Jurisdiction, type Phase } from "@/lib/expunge/config";
+import { ASSIGNMENT_ROLES, CASE_STATUSES, COMPLEXITY, EXP_ROLES, RELEASE_STATES, PHASES, RECORD_META, SCREENING_OUTCOMES, chargeCount, verifiedLabel, type Complexity, type ExpMatter, type Jurisdiction, type Phase } from "@/lib/expunge/config";
 import { caseDeadline, casePhase, matterPhase, nextAction } from "@/lib/expunge/derive";
 import { fmtDate, fmtDateTime, relTime, usd } from "@/lib/format";
 import type { Client } from "@/lib/types";
@@ -229,13 +228,16 @@ function CasesTab({ byId }: { byId: Map<string, Client> }) {
   const [status, setStatus] = useState("all");
   const [outcome, setOutcome] = useState("all");
   const [staff, setStaff] = useState("all");
+  const [remedy, setRemedy] = useState("all");
   const M = (id: string) => exp.matters.find((m) => m.id === id)!;
-  const rows = exp.cases.filter((c) => (state === "all" || c.state === state) && (status === "all" || c.status === status) && (outcome === "all" || c.screening.outcome === outcome) && (staff === "all" || c.assignedTo === staff));
+  const remName = (c: { jurisdictionId: string; remedyId?: string }) => exp.jurisdictions.find((j) => j.id === c.jurisdictionId)?.remedies.find((r) => r.id === c.remedyId)?.short ?? "Workflow not set";
+  const rows = exp.cases.filter((c) => (remedy === "all" || (c.remedyId ?? "none") === remedy) && (state === "all" || c.state === state) && (status === "all" || c.status === status) && (outcome === "all" || c.screening.outcome === outcome) && (staff === "all" || c.assignedTo === staff));
   const sel = "h-10 rounded-xl border border-line bg-surface px-2.5 text-[13.5px] text-ink-2";
   return (
     <Card>
       <div className="flex flex-wrap items-center gap-2 p-4 sm:px-6">
         <select aria-label="State" value={state} onChange={(e) => setState(e.target.value)} className={sel}><option value="all">All jurisdictions</option>{exp.jurisdictions.map((j) => <option key={j.id} value={j.state}>{j.stateName}</option>)}</select>
+        <select aria-label="Workflow" value={remedy} onChange={(e) => setRemedy(e.target.value)} className={sel}><option value="all">All workflows</option>{exp.jurisdictions.flatMap((j) => j.remedies).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}<option value="none">Workflow not set</option></select>
         <select aria-label="Filing status" value={status} onChange={(e) => setStatus(e.target.value)} className={sel}><option value="all">All filing statuses</option>{CASE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select>
         <select aria-label="Screening outcome" value={outcome} onChange={(e) => setOutcome(e.target.value)} className={sel}><option value="all">All screening outcomes</option>{SCREENING_OUTCOMES.map((s) => <option key={s} value={s}>{s}</option>)}</select>
         <select aria-label="Assigned staff" value={staff} onChange={(e) => setStaff(e.target.value)} className={sel}><option value="all">All staff</option>{STAFF.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
@@ -243,14 +245,14 @@ function CasesTab({ byId }: { byId: Map<string, Client> }) {
       <p className="px-4 pb-2 text-[12.5px] text-muted sm:px-6">Showing {rows.length} of {exp.cases.length} cases · each arrest or court case has its own record</p>
       <div className="overflow-x-auto border-t border-line">
         <table className="w-full min-w-[980px] text-left text-[13.5px]">
-          <thead className="bg-surface-2 text-[12px] font-semibold uppercase tracking-wide text-muted"><tr><th className="px-5 py-2.5">Case</th><th className="px-3 py-2.5">Client</th><th className="px-3 py-2.5">Jurisdiction</th><th className="px-3 py-2.5">Dockets · charges</th><th className="px-3 py-2.5">Screening</th><th className="px-3 py-2.5">Filing status</th><th className="px-3 py-2.5 pr-5">Assigned</th></tr></thead>
+          <thead className="bg-surface-2 text-[12px] font-semibold uppercase tracking-wide text-muted"><tr><th className="px-5 py-2.5">Case</th><th className="px-3 py-2.5">Client</th><th className="px-3 py-2.5">Jurisdiction · workflow</th><th className="px-3 py-2.5">Dockets · charges</th><th className="px-3 py-2.5">Screening</th><th className="px-3 py-2.5">Filing status</th><th className="px-3 py-2.5 pr-5">Assigned</th></tr></thead>
           <tbody>
             {rows.length === 0 && <tr><td colSpan={7} className="px-6 py-10 text-center text-muted">No cases match.</td></tr>}
             {rows.map((c) => (
               <tr key={c.id} onClick={() => router.push(caseHref(c))} className="cursor-pointer border-b border-line last:border-0 hover:bg-surface-hover">
                 <td className="px-5 py-3"><Link href={caseHref(c)} onClick={(e) => e.stopPropagation()} className="font-semibold text-ink hover:text-accent">{c.number}</Link><div className="text-[12px] text-muted">{casePhase(c, M(c.matterId))}{c.draft ? " · draft from portal" : ""}</div></td>
                 <td className="px-3 py-3 text-ink">{byId.get(c.clientId)?.name}</td>
-                <td className="px-3 py-3 text-ink-2">{c.state} · {c.locality}</td>
+                <td className="px-3 py-3 text-ink-2">{c.state} · {c.locality}<div className="text-[12px] font-medium text-accent-ink">{remName(c)}</div></td>
                 <td className="px-3 py-3 text-ink-2">{exp.can.criminalHistory ? `${c.dockets.length} · ${chargeCount(c)}` : <span className="inline-flex items-center gap-1 text-muted"><Lock size={12} /> restricted</span>}</td>
                 <td className="px-3 py-3">{exp.can.screening ? <OutcomeBadge o={c.screening.outcome} /> : <span className="text-muted">restricted</span>}</td>
                 <td className="px-3 py-3"><StatusBadge s={c.status} /></td>
@@ -321,53 +323,50 @@ function RecordsTab({ byId }: { byId: Map<string, Client> }) {
 
 /* ================================================================== */
 
-type ListKey = "rules" | "requiredDocs" | "forms" | "fees" | "contacts" | "custodians";
+type ListKey = "rules" | "requiredDocs" | "forms" | "fees" | "contacts" | "custodians" | "criteria";
 const nid = (p: string) => `${p}-${Math.random().toString(36).slice(2, 7)}`;
 
 function JurisdictionsTab() {
   const exp = useExp();
   const toast = useToast();
-  const [id, setId] = useState(exp.jurisdictions[0].id);
+  const release = exp.jurisdictions.filter((j) => (RELEASE_STATES as readonly string[]).includes(j.state));
+  const [id, setId] = useState(release[0].id);
   const src = exp.jurisdictions.find((j) => j.id === id)!;
   const [v, setV] = useState<Jurisdiction>(structuredClone(src));
-  const [addState, setAddState] = useState("");
+  const [rem, setRem] = useState(src.remedies[0]?.id ?? "");
   const [cls, setCls] = useState("");
   useEffect(() => setV(structuredClone(exp.jurisdictions.find((j) => j.id === id)!)), [id, exp.jurisdictions]);
   const admin = exp.can.admin;
   const dirty = JSON.stringify(v) !== JSON.stringify(src);
+  const remedy = v.remedies.find((r) => r.id === rem) ?? v.remedies[0];
   const upList = <K extends ListKey>(k: K, i: number, patch: Partial<Jurisdiction[K][number]>) => setV({ ...v, [k]: (v[k] as Jurisdiction[K][number][]).map((x, j) => (j === i ? { ...x, ...patch } : x)) });
   const rmList = (k: ListKey, i: number) => setV({ ...v, [k]: (v[k] as unknown[]).filter((_, j) => j !== i) });
-  const verifyItem = (k: "rules" | "forms" | "fees" | "requiredDocs", i: number) => upList(k, i, { lastVerifiedAt: SAMPLE_NOW.toISOString(), verifiedBy: "s-mk" } as never);
+  const stamp = { lastVerifiedAt: SAMPLE_NOW.toISOString(), verifiedBy: "s-mk" };
   const inp = "h-9 w-full rounded-lg border border-line bg-surface px-2.5 text-[13px] text-ink disabled:opacity-70";
   const VBadge = ({ x }: { x: { lastVerifiedAt?: string } }) => x.lastVerifiedAt ? <Badge tone="success" icon={BadgeCheck}>{verifiedLabel(x)}</Badge> : <Badge tone="warning" icon={ShieldAlert}>Not verified</Badge>;
+  const mine = <T extends { remedyId: string }>(list: T[]) => list.map((x, i) => ({ x, i })).filter(({ x }) => x.remedyId === remedy?.id);
+  const pick = (j: Jurisdiction) => { setId(j.id); setV(structuredClone(j)); setRem(j.remedies[0]?.id ?? ""); };
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-2">
         <div role="radiogroup" aria-label="Jurisdiction" className="inline-flex flex-wrap rounded-xl bg-surface-2 p-1 ring-1 ring-line">
-          {exp.jurisdictions.map((j) => <button key={j.id} role="radio" aria-checked={id === j.id} onClick={() => { setId(j.id); setV(structuredClone(j)); }} className={`h-8 rounded-lg px-3 text-[13px] font-medium ${id === j.id ? "bg-surface text-accent shadow-soft" : "text-muted"}`}>{j.stateName}{!j.active ? " (inactive)" : ""}</button>)}
+          {release.map((j) => <button key={j.id} role="radio" aria-checked={id === j.id} onClick={() => pick(j)} className={`h-8 rounded-lg px-3 text-[13px] font-medium ${id === j.id ? "bg-surface text-accent shadow-soft" : "text-muted"}`}>{j.stateName}</button>)}
         </div>
-        {admin && (
-          <span className="ml-auto inline-flex items-center gap-2">
-            <select aria-label="Add a state" value={addState} onChange={(e) => setAddState(e.target.value)} className="h-9 rounded-lg border border-line bg-surface px-2 text-[13px] text-ink-2"><option value="">Add another state…</option>{STATES.filter(([c]) => !exp.jurisdictions.some((j) => j.state === c)).map(([c, n]) => <option key={c} value={c}>{n}</option>)}</select>
-            <Button size="sm" icon={Plus} disabled={!addState} onClick={() => { const name = STATES.find(([c]) => c === addState)![1]; const j: Jurisdiction = { id: `J-${addState}`, state: addState, stateName: name, localityLabel: addState === "LA" ? "Parish" : "County", active: false, localities: [], classifications: [], rules: [], requiredDocs: [], forms: [], procedures: "", fees: [], contacts: [], custodians: [], sources: [], verificationNotes: "Not configured yet." }; exp.saveJurisdiction(j); setId(j.id); setAddState(""); toast(`${name} added (inactive until configured)`); }}>Add</Button>
-          </span>
-        )}
+        <span className="text-[12.5px] text-muted">This release supports Louisiana and Texas only. The structure allows more states later; none are active or offered.</span>
       </div>
       {!admin && <p className="flex items-center gap-2 text-[13px] text-muted"><Lock size={14} /> Read-only — only the owner/administrator can change jurisdiction rules.</p>}
       <div className="flex items-start gap-2 rounded-2xl border border-warning/40 bg-warning-soft/50 px-4 py-3 text-[13px] text-warning-ink">
         <ShieldAlert size={16} className="mt-0.5 shrink-0" />
-        <span>Each state is configured on its own — {v.stateName} settings are never applied to another state&rsquo;s cases. Leave statutes, waiting periods and fees blank until they&rsquo;re confirmed with the official source, then record the verification.</span>
+        <span>{v.stateName} is configured on its own and never applied to another state. Every statute, waiting period, form and fee must be confirmed against an authoritative source and carry a last-verified date before screening can rely on it.</span>
       </div>
 
       <fieldset disabled={!admin} className="space-y-5">
         <Card>
-          <CardHeader icon={Landmark} title={`${v.stateName} — jurisdiction`} subtitle={verifiedLabel(v)} action={<div className="flex flex-wrap gap-2">{admin && <Button size="sm" onClick={() => setV({ ...v, lastVerifiedAt: SAMPLE_NOW.toISOString(), verifiedBy: "s-mk" })}>Mark jurisdiction verified</Button>}<Button size="sm" variant="primary" disabled={!dirty} onClick={() => { exp.saveJurisdiction(v); toast(`${v.stateName} saved`); }}>Save {v.stateName}</Button></div>} />
-          <div className="grid gap-4 px-5 pb-5 sm:grid-cols-3 sm:px-6">
-            <SelectField id="jr-label" label="Local unit" value={v.localityLabel} onChange={(e) => setV({ ...v, localityLabel: e.target.value as Jurisdiction["localityLabel"] })} options={[["Parish", "Parish"], ["County", "County"]]} />
-            <SelectField id="jr-active" label="Available for new cases" value={v.active ? "yes" : "no"} onChange={(e) => setV({ ...v, active: e.target.value === "yes" })} options={[["yes", "Yes"], ["no", "No"]]} />
-            <div className="sm:col-span-3"><TextArea id="jr-vnotes" label="Staff verification notes" value={v.verificationNotes} onChange={(e) => setV({ ...v, verificationNotes: e.target.value })} /></div>
-            <div className="sm:col-span-3"><TextArea id="jr-proc" label="Filing procedures" value={v.procedures} onChange={(e) => setV({ ...v, procedures: e.target.value })} /></div>
-            <div className="sm:col-span-3">
+          <CardHeader icon={Landmark} title={`${v.stateName} — jurisdiction`} subtitle={verifiedLabel(v)} action={<div className="flex flex-wrap gap-2">{admin && <Button size="sm" onClick={() => setV({ ...v, ...stamp })}>Mark jurisdiction verified</Button>}<Button size="sm" variant="primary" disabled={!dirty} onClick={() => { exp.saveJurisdiction(v); toast(`${v.stateName} saved`); }}>Save {v.stateName}</Button></div>} />
+          <div className="grid gap-4 px-5 pb-5 sm:grid-cols-2 sm:px-6">
+            <div className="sm:col-span-2"><TextArea id="jr-vnotes" label="Staff verification notes" value={v.verificationNotes} onChange={(e) => setV({ ...v, verificationNotes: e.target.value })} /></div>
+            <div className="sm:col-span-2"><TextArea id="jr-proc" label="Filing procedures" value={v.procedures} onChange={(e) => setV({ ...v, procedures: e.target.value })} /></div>
+            <div className="sm:col-span-2">
               <span className="mb-1.5 block text-[13px] font-medium text-ink-2">Offense classifications</span>
               <div className="flex flex-wrap items-center gap-1.5">
                 {v.classifications.map((c) => <span key={c} className="inline-flex items-center gap-1 rounded-full border border-line px-2.5 py-1 text-[12.5px] text-ink-2">{c}{admin && <button type="button" aria-label={`Remove ${c}`} onClick={() => setV({ ...v, classifications: v.classifications.filter((x) => x !== c) })} className="text-muted hover:text-danger"><X size={12} /></button>}</span>)}
@@ -377,19 +376,40 @@ function JurisdictionsTab() {
           </div>
         </Card>
 
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[13px] font-semibold text-ink-2">Workflow:</span>
+          <div role="radiogroup" aria-label="Workflow" className="inline-flex flex-wrap rounded-xl bg-surface-2 p-1 ring-1 ring-line">
+            {v.remedies.map((r) => <button key={r.id} type="button" role="radio" aria-checked={remedy?.id === r.id} onClick={() => setRem(r.id)} className={`h-8 rounded-lg px-3 text-[13px] font-medium ${remedy?.id === r.id ? "bg-surface text-accent shadow-soft" : "text-muted"}`}>{r.name}</button>)}
+          </div>
+          {v.remedies.length > 1 && <span className="text-[12.5px] text-muted">Separate requirements, screening criteria, checklists, forms and fees — never combined.</span>}
+        </div>
+
         <Card>
-          <CardHeader icon={Scale} title="Statutes, rules and waiting periods" subtitle="Each rule needs a citation, source and verification before screening can rely on it" action={admin && <Button size="sm" icon={Plus} onClick={() => setV({ ...v, rules: [...v.rules, { id: nid("r"), title: "", citation: "", description: "", appliesTo: "", waitingPeriod: "" }] })}>Add rule</Button>} />
+          <CardHeader icon={Scale} title={`${remedy?.name} — statutes, rules and waiting periods`} subtitle="A rule can only be marked verified once its citation and official source are entered" action={admin && <Button size="sm" icon={Plus} onClick={() => setV({ ...v, rules: [...v.rules, { id: nid("r"), remedyId: remedy!.id, title: "", citation: "", description: "", appliesTo: "", waitingPeriod: "" }] })}>Add rule</Button>} />
           <ul className="divide-y divide-line border-t border-line">
-            {v.rules.length === 0 && <li className="px-6 py-6 text-center text-[13px] text-muted">No rules configured.</li>}
-            {v.rules.map((r, i) => (
+            {mine(v.rules).length === 0 && <li className="px-6 py-6 text-center text-[13px] text-muted">No rules configured.</li>}
+            {mine(v.rules).map(({ x: r, i }, n) => (
               <li key={r.id} className="grid gap-2 px-5 py-4 sm:grid-cols-2 sm:px-6">
-                <input aria-label={`Rule ${i + 1} title`} className={inp} value={r.title} placeholder="Title" onChange={(e) => upList("rules", i, { title: e.target.value })} />
-                <input aria-label={`Rule ${i + 1} citation`} className={inp} value={r.citation} placeholder="Statute or rule citation (blank until verified)" onChange={(e) => upList("rules", i, { citation: e.target.value, lastVerifiedAt: undefined })} />
-                <input aria-label={`Rule ${i + 1} applies to`} className={inp} value={r.appliesTo} placeholder="Applies to (offense / disposition)" onChange={(e) => upList("rules", i, { appliesTo: e.target.value })} />
-                <input aria-label={`Rule ${i + 1} waiting period`} className={inp} value={r.waitingPeriod} placeholder="Waiting period (blank until verified)" onChange={(e) => upList("rules", i, { waitingPeriod: e.target.value, lastVerifiedAt: undefined })} />
-                <input aria-label={`Rule ${i + 1} source`} className={`${inp} sm:col-span-2`} value={r.sourceUrl ?? ""} placeholder="Official source link" onChange={(e) => upList("rules", i, { sourceUrl: e.target.value || undefined })} />
-                <textarea aria-label={`Rule ${i + 1} description`} className={`${inp} h-auto min-h-[60px] py-2 sm:col-span-2`} value={r.description} onChange={(e) => upList("rules", i, { description: e.target.value })} />
-                <div className="flex flex-wrap items-center gap-2 sm:col-span-2"><VBadge x={r} />{r.notes && <span className="text-[12px] text-muted">{r.notes}</span>}{admin && <><Button size="sm" variant="ghost" className="ml-auto" disabled={!r.citation.trim() || !r.sourceUrl} title={!r.citation.trim() || !r.sourceUrl ? "Add the citation and official source first" : undefined} onClick={() => verifyItem("rules", i)}>Mark verified</Button><Button size="sm" variant="ghost" icon={Trash2} aria-label={`Remove rule ${i + 1}`} onClick={() => rmList("rules", i)} /></>}</div>
+                <input aria-label={`Rule ${n + 1} title`} className={inp} value={r.title} placeholder="Title" onChange={(e) => upList("rules", i, { title: e.target.value })} />
+                <input aria-label={`Rule ${n + 1} citation`} className={inp} value={r.citation} placeholder="Statute or rule citation (blank until verified)" onChange={(e) => upList("rules", i, { citation: e.target.value, lastVerifiedAt: undefined })} />
+                <input aria-label={`Rule ${n + 1} applies to`} className={inp} value={r.appliesTo} placeholder="Applies to (offense / disposition)" onChange={(e) => upList("rules", i, { appliesTo: e.target.value })} />
+                <input aria-label={`Rule ${n + 1} waiting period`} className={inp} value={r.waitingPeriod} placeholder="Waiting period (blank until verified)" onChange={(e) => upList("rules", i, { waitingPeriod: e.target.value, lastVerifiedAt: undefined })} />
+                <input aria-label={`Rule ${n + 1} source`} className={`${inp} sm:col-span-2`} value={r.sourceUrl ?? ""} placeholder="Authoritative source link" onChange={(e) => upList("rules", i, { sourceUrl: e.target.value || undefined, lastVerifiedAt: undefined })} />
+                <textarea aria-label={`Rule ${n + 1} description`} className={`${inp} h-auto min-h-[60px] py-2 sm:col-span-2`} value={r.description} onChange={(e) => upList("rules", i, { description: e.target.value })} />
+                <div className="flex flex-wrap items-center gap-2 sm:col-span-2"><VBadge x={r} />{r.notes && !r.lastVerifiedAt && <span className="text-[12px] text-muted">{r.notes}</span>}{admin && <><Button size="sm" variant="ghost" className="ml-auto" disabled={!r.citation.trim() || !r.sourceUrl} title={!r.citation.trim() || !r.sourceUrl ? "Add the citation and authoritative source first" : undefined} onClick={() => upList("rules", i, stamp)}>Mark verified</Button><Button size="sm" variant="ghost" icon={Trash2} aria-label={`Remove rule ${n + 1}`} onClick={() => rmList("rules", i)} /></>}</div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+
+        <Card>
+          <CardHeader icon={ClipboardList} title={`${remedy?.name} — screening criteria`} subtitle="Administrative questions staff confirm for this workflow only. Wording is verified like a rule." action={admin && <Button size="sm" icon={Plus} onClick={() => setV({ ...v, criteria: [...v.criteria, { id: nid("q"), remedyId: remedy!.id, question: "" }] })}>Add criterion</Button>} />
+          <ul className="divide-y divide-line border-t border-line">
+            {mine(v.criteria).map(({ x: q, i }, n) => (
+              <li key={q.id} className="flex flex-wrap items-center gap-2 px-5 py-3 sm:px-6">
+                <input aria-label={`Criterion ${n + 1}`} className={`${inp} min-w-[240px] flex-1`} value={q.question} onChange={(e) => upList("criteria", i, { question: e.target.value, lastVerifiedAt: undefined })} />
+                <VBadge x={q} />
+                {admin && <><Button size="sm" variant="ghost" disabled={!q.question.trim()} onClick={() => upList("criteria", i, stamp)}>Mark verified</Button><Button size="sm" variant="ghost" icon={Trash2} aria-label={`Remove criterion ${n + 1}`} onClick={() => rmList("criteria", i)} /></>}
               </li>
             ))}
           </ul>
@@ -397,39 +417,39 @@ function JurisdictionsTab() {
 
         <div className="grid grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-2">
           <Card>
-            <CardHeader icon={FileSearch} title="Required documents by case type" action={admin && <Button size="sm" icon={Plus} onClick={() => setV({ ...v, requiredDocs: [...v.requiredDocs, { id: nid("rd"), caseType: "", docs: [] }] })}>Add</Button>} />
+            <CardHeader icon={FileSearch} title={`${remedy?.short} — required documents`} action={admin && <Button size="sm" icon={Plus} onClick={() => setV({ ...v, requiredDocs: [...v.requiredDocs, { id: nid("rd"), remedyId: remedy!.id, caseType: "", docs: [] }] })}>Add</Button>} />
             <ul className="divide-y divide-line border-t border-line">
-              {v.requiredDocs.map((r, i) => (
+              {mine(v.requiredDocs).map(({ x: r, i }, n) => (
                 <li key={r.id} className="space-y-2 px-5 py-3 sm:px-6">
-                  <div className="flex gap-2"><input aria-label={`Case type ${i + 1}`} className={inp} value={r.caseType} placeholder="Case type (e.g. Any case, Conviction)" onChange={(e) => upList("requiredDocs", i, { caseType: e.target.value })} />{admin && <Button size="sm" variant="ghost" icon={Trash2} aria-label={`Remove case type ${i + 1}`} onClick={() => rmList("requiredDocs", i)} />}</div>
-                  <textarea aria-label={`Documents for case type ${i + 1}`} className={`${inp} h-auto min-h-[70px] py-2`} value={r.docs.join("\n")} onChange={(e) => upList("requiredDocs", i, { docs: e.target.value.split("\n") })} />
-                  <VBadge x={r} />
+                  <div className="flex gap-2"><input aria-label={`Case type ${n + 1}`} className={inp} value={r.caseType} placeholder="Case type (e.g. Any case, Conviction)" onChange={(e) => upList("requiredDocs", i, { caseType: e.target.value, lastVerifiedAt: undefined })} />{admin && <Button size="sm" variant="ghost" icon={Trash2} aria-label={`Remove case type ${n + 1}`} onClick={() => rmList("requiredDocs", i)} />}</div>
+                  <textarea aria-label={`Documents for case type ${n + 1}`} className={`${inp} h-auto min-h-[70px] py-2`} value={r.docs.join("\n")} onChange={(e) => upList("requiredDocs", i, { docs: e.target.value.split("\n"), lastVerifiedAt: undefined })} />
+                  <div className="flex items-center gap-2"><VBadge x={r} />{admin && <Button size="sm" variant="ghost" className="ml-auto" onClick={() => upList("requiredDocs", i, stamp)}>Mark verified</Button>}</div>
                 </li>
               ))}
             </ul>
           </Card>
           <Card>
-            <CardHeader icon={Receipt} title="Government fees" subtitle="Amounts stay blank until confirmed" action={admin && <Button size="sm" icon={Plus} onClick={() => setV({ ...v, fees: [...v.fees, { id: nid("fee"), label: "", kind: "court_filing", payableTo: "" }] })}>Add</Button>} />
+            <CardHeader icon={Receipt} title={`${remedy?.short} — government fees`} subtitle="Amounts stay blank until confirmed" action={admin && <Button size="sm" icon={Plus} onClick={() => setV({ ...v, fees: [...v.fees, { id: nid("fee"), remedyId: remedy!.id, label: "", kind: "court_filing", payableTo: "" }] })}>Add</Button>} />
             <ul className="divide-y divide-line border-t border-line">
-              {v.fees.map((f, i) => (
+              {mine(v.fees).map(({ x: f, i }, n) => (
                 <li key={f.id} className="grid gap-2 px-5 py-3 sm:grid-cols-2 sm:px-6">
-                  <input aria-label={`Fee ${i + 1} label`} className={inp} value={f.label} placeholder="Fee" onChange={(e) => upList("fees", i, { label: e.target.value })} />
-                  <select aria-label={`Fee ${i + 1} type`} className={inp} value={f.kind} onChange={(e) => upList("fees", i, { kind: e.target.value as typeof f.kind })}><option value="court_filing">Court filing fee</option><option value="clerk">Clerk fee</option><option value="government">Government fee</option><option value="records">Records request fee</option></select>
-                  <input aria-label={`Fee ${i + 1} amount`} className={inp} type="number" min={0} step="0.01" value={f.amount ?? ""} placeholder="Amount (blank until verified)" onChange={(e) => upList("fees", i, { amount: e.target.value === "" ? undefined : Number(e.target.value), lastVerifiedAt: undefined })} />
-                  <input aria-label={`Fee ${i + 1} payable to`} className={inp} value={f.payableTo} placeholder="Payable to" onChange={(e) => upList("fees", i, { payableTo: e.target.value })} />
-                  <div className="flex items-center gap-2 sm:col-span-2"><VBadge x={f} />{f.notes && <span className="text-[12px] text-muted">{f.notes}</span>}{admin && <><Button size="sm" variant="ghost" className="ml-auto" disabled={f.amount == null} onClick={() => verifyItem("fees", i)}>Mark verified</Button><Button size="sm" variant="ghost" icon={Trash2} aria-label={`Remove fee ${i + 1}`} onClick={() => rmList("fees", i)} /></>}</div>
+                  <input aria-label={`Fee ${n + 1} label`} className={inp} value={f.label} placeholder="Fee" onChange={(e) => upList("fees", i, { label: e.target.value })} />
+                  <select aria-label={`Fee ${n + 1} type`} className={inp} value={f.kind} onChange={(e) => upList("fees", i, { kind: e.target.value as typeof f.kind })}><option value="court_filing">Court filing fee</option><option value="clerk">Clerk fee</option><option value="government">Government fee</option><option value="records">Records request fee</option></select>
+                  <input aria-label={`Fee ${n + 1} amount`} className={inp} type="number" min={0} step="0.01" value={f.amount ?? ""} placeholder="Amount (blank until verified)" onChange={(e) => upList("fees", i, { amount: e.target.value === "" ? undefined : Number(e.target.value), lastVerifiedAt: undefined })} />
+                  <input aria-label={`Fee ${n + 1} payable to`} className={inp} value={f.payableTo} placeholder="Payable to" onChange={(e) => upList("fees", i, { payableTo: e.target.value })} />
+                  <div className="flex items-center gap-2 sm:col-span-2"><VBadge x={f} />{f.notes && <span className="text-[12px] text-muted">{f.notes}</span>}{admin && <><Button size="sm" variant="ghost" className="ml-auto" disabled={f.amount == null} onClick={() => upList("fees", i, stamp)}>Mark verified</Button><Button size="sm" variant="ghost" icon={Trash2} aria-label={`Remove fee ${n + 1}`} onClick={() => rmList("fees", i)} /></>}</div>
                 </li>
               ))}
             </ul>
           </Card>
           <Card>
-            <CardHeader icon={FileText} title="Filing forms" action={admin && <Button size="sm" icon={Plus} onClick={() => setV({ ...v, forms: [...v.forms, { id: nid("f"), name: "", source: "" }] })}>Add</Button>} />
+            <CardHeader icon={FileText} title={`${remedy?.short} — filing forms`} action={admin && <Button size="sm" icon={Plus} onClick={() => setV({ ...v, forms: [...v.forms, { id: nid("f"), remedyId: remedy!.id, name: "", source: "" }] })}>Add</Button>} />
             <ul className="divide-y divide-line border-t border-line">
-              {v.forms.map((f, i) => (
+              {mine(v.forms).map(({ x: f, i }, n) => (
                 <li key={f.id} className="grid gap-2 px-5 py-3 sm:grid-cols-2 sm:px-6">
-                  <input aria-label={`Form ${i + 1} name`} className={inp} value={f.name} placeholder="Form name" onChange={(e) => upList("forms", i, { name: e.target.value })} />
-                  <input aria-label={`Form ${i + 1} link`} className={inp} value={f.url ?? ""} placeholder="Official form link" onChange={(e) => upList("forms", i, { url: e.target.value || undefined })} />
-                  <div className="flex items-center gap-2 sm:col-span-2"><VBadge x={f} /><span className="text-[12px] text-muted">{f.source}</span>{admin && <><Button size="sm" variant="ghost" className="ml-auto" disabled={!f.url} onClick={() => verifyItem("forms", i)}>Mark verified</Button><Button size="sm" variant="ghost" icon={Trash2} aria-label={`Remove form ${i + 1}`} onClick={() => rmList("forms", i)} /></>}</div>
+                  <input aria-label={`Form ${n + 1} name`} className={inp} value={f.name} placeholder="Form name" onChange={(e) => upList("forms", i, { name: e.target.value })} />
+                  <input aria-label={`Form ${n + 1} link`} className={inp} value={f.url ?? ""} placeholder="Official form link" onChange={(e) => upList("forms", i, { url: e.target.value || undefined, lastVerifiedAt: undefined })} />
+                  <div className="flex items-center gap-2 sm:col-span-2"><VBadge x={f} /><span className="text-[12px] text-muted">{f.source}</span>{admin && <><Button size="sm" variant="ghost" className="ml-auto" disabled={!f.url} onClick={() => upList("forms", i, stamp)}>Mark verified</Button><Button size="sm" variant="ghost" icon={Trash2} aria-label={`Remove form ${n + 1}`} onClick={() => rmList("forms", i)} /></>}</div>
                 </li>
               ))}
             </ul>
@@ -464,7 +484,7 @@ function JurisdictionsTab() {
             </ul>
           </Card>
           <Card>
-            <CardHeader icon={Users} title="Court & agency contacts · official sources" action={admin && <div className="flex gap-2"><Button size="sm" icon={Plus} onClick={() => setV({ ...v, contacts: [...v.contacts, { id: nid("k"), name: "", role: "" }] })}>Contact</Button><Button size="sm" icon={Plus} onClick={() => setV({ ...v, sources: [...v.sources, { label: "" }] })}>Source</Button></div>} />
+            <CardHeader icon={Users} title="Court & agency contacts · authoritative sources" action={admin && <div className="flex gap-2"><Button size="sm" icon={Plus} onClick={() => setV({ ...v, contacts: [...v.contacts, { id: nid("k"), name: "", role: "" }] })}>Contact</Button><Button size="sm" icon={Plus} onClick={() => setV({ ...v, sources: [...v.sources, { label: "" }] })}>Source</Button></div>} />
             <ul className="divide-y divide-line border-t border-line">
               {v.contacts.map((k, i) => (
                 <li key={k.id} className="grid gap-2 px-5 py-3 sm:grid-cols-2 sm:px-6">
@@ -476,7 +496,7 @@ function JurisdictionsTab() {
               ))}
               {v.sources.map((s, i) => (
                 <li key={`s${i}`} className="grid gap-2 px-5 py-3 sm:grid-cols-2 sm:px-6">
-                  <input aria-label={`Source ${i + 1} label`} className={inp} value={s.label} placeholder="Official source" onChange={(e) => setV({ ...v, sources: v.sources.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })} />
+                  <input aria-label={`Source ${i + 1} label`} className={inp} value={s.label} placeholder="Authoritative source" onChange={(e) => setV({ ...v, sources: v.sources.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })} />
                   <input aria-label={`Source ${i + 1} link`} className={inp} value={s.url ?? ""} placeholder="https://" onChange={(e) => setV({ ...v, sources: v.sources.map((x, j) => (j === i ? { ...x, url: e.target.value || undefined } : x)) })} />
                 </li>
               ))}
@@ -494,16 +514,16 @@ function PricingTab() {
   const exp = useExp();
   const toast = useToast();
   const admin = exp.can.admin;
-  const [st, setSt] = useState("LA");
+  const remedies = [{ id: "Any", short: "Any workflow" }, ...exp.jurisdictions.filter((j) => j.active).flatMap((j) => j.remedies.filter((r) => r.active))];
+  const [rid, setRid] = useState("LA-exp");
   const [svc, setSvc] = useState({ name: "", description: "" });
-  const states = ["Any", ...exp.jurisdictions.map((j) => j.state)];
   const cx: Complexity[] = ["standard", "moderate", "complex"];
   return (
     <div className="space-y-5">
       {!admin && <p className="flex items-center gap-2 text-[13px] text-muted"><Lock size={14} /> Read-only — only the owner/administrator can change pricing.</p>}
       <Card>
-        <CardHeader icon={Receipt} title="MKB service pricing" subtitle="Per case, by service type, jurisdiction and complexity. Government, court, clerk and records fees are billed separately at cost." action={
-          <div role="radiogroup" aria-label="Pricing jurisdiction" className="inline-flex rounded-xl bg-surface-2 p-1 ring-1 ring-line">{states.map((s) => <button key={s} role="radio" aria-checked={st === s} onClick={() => setSt(s)} className={`h-8 rounded-lg px-3 text-[13px] font-medium ${st === s ? "bg-surface text-accent shadow-soft" : "text-muted"}`}>{s === "Any" ? "Any state" : s}</button>)}</div>
+        <CardHeader icon={Receipt} title="MKB service pricing" subtitle="Per case, by service type, workflow and complexity. Court, clerk, government and records fees are billed separately at cost." action={
+          <div role="radiogroup" aria-label="Pricing workflow" className="inline-flex flex-wrap rounded-xl bg-surface-2 p-1 ring-1 ring-line">{remedies.map((r) => <button key={r.id} role="radio" aria-checked={rid === r.id} onClick={() => setRid(r.id)} className={`h-8 rounded-lg px-3 text-[13px] font-medium ${rid === r.id ? "bg-surface text-accent shadow-soft" : "text-muted"}`}>{r.short}</button>)}</div>
         } />
         <div className="overflow-x-auto border-t border-line">
           <table className="w-full min-w-[640px] text-left text-[13.5px]">
@@ -513,10 +533,10 @@ function PricingTab() {
                 <tr key={s.id} className="border-b border-line last:border-0">
                   <td className="px-5 py-3"><div className="font-medium text-ink">{s.name}{!s.active && <span className="ml-1.5"><Badge tone="neutral">Inactive</Badge></span>}</div><div className="text-[12px] text-muted">{s.description}</div></td>
                   {cx.map((c) => {
-                    const p = exp.prices.find((x) => x.serviceTypeId === s.id && x.state === st && x.complexity === c);
+                    const p = exp.prices.find((x) => x.serviceTypeId === s.id && x.remedyId === rid && x.complexity === c);
                     return (
                       <td key={c} className="px-3 py-3">
-                        <input aria-label={`${s.name} ${st} ${c} price`} type="number" min={0} step="1" disabled={!admin} defaultValue={p?.fee ?? ""} key={`${s.id}-${st}-${c}-${p?.fee}`} placeholder={st === "Any" ? "—" : "uses Any"} onBlur={(e) => { const val = e.target.value; if (val === "" && p) { exp.deletePrice(p.id); toast("Price removed"); } else if (val !== "" && Number(val) >= 0 && Number(val) !== p?.fee) { exp.savePrice({ id: p?.id ?? `p-${s.id}-${st}-${c}`, serviceTypeId: s.id, state: st, complexity: c, fee: Number(val) }); toast("Price saved"); } }} className="h-9 w-28 rounded-lg border border-line bg-surface px-2.5 text-right tabular-nums text-ink disabled:opacity-70" />
+                        <input aria-label={`${s.name} ${rid} ${c} price`} type="number" min={0} step="1" disabled={!admin} defaultValue={p?.fee ?? ""} key={`${s.id}-${rid}-${c}-${p?.fee}`} placeholder={rid === "Any" ? "—" : "uses Any"} onBlur={(e) => { const val = e.target.value; if (val === "" && p) { exp.deletePrice(p.id); toast("Price removed"); } else if (val !== "" && Number(val) >= 0 && Number(val) !== p?.fee) { exp.savePrice({ id: p?.id ?? `p-${s.id}-${rid}-${c}`, serviceTypeId: s.id, remedyId: rid, complexity: c, fee: Number(val) }); toast("Price saved"); } }} className="h-9 w-28 rounded-lg border border-line bg-surface px-2.5 text-right tabular-nums text-ink disabled:opacity-70" />
                       </td>
                     );
                   })}
@@ -525,7 +545,7 @@ function PricingTab() {
             </tbody>
           </table>
         </div>
-        <p className="border-t border-line px-5 py-3 text-[12px] text-muted sm:px-6">{COMPLEXITY.moderate} · {COMPLEXITY.complex}. A blank state price falls back to &ldquo;Any state&rdquo;; if neither is set, staff enter the fee when invoicing.</p>
+        <p className="border-t border-line px-5 py-3 text-[12px] text-muted sm:px-6">{COMPLEXITY.moderate} · {COMPLEXITY.complex}. A blank workflow price falls back to &ldquo;Any workflow&rdquo;; if neither is set, staff enter the fee when invoicing.</p>
       </Card>
       {admin && (
         <Card>
@@ -553,8 +573,8 @@ function TeamTab({ byId }: { byId: Map<string, Client> }) {
         <CardHeader icon={ShieldCheck} title="Role access (preview)" subtitle="Owner-controlled roles. Use “Viewing as” at the top to preview each role. Enforced on the server in Phase 3." />
         <div className="overflow-x-auto border-t border-line">
           <table className="w-full min-w-[640px] text-left text-[13.5px]">
-            <thead className="bg-surface-2 text-[12px] font-semibold uppercase tracking-wide text-muted"><tr><th className="px-5 py-2.5">Role</th><th className="px-3 py-2.5">Criminal history</th><th className="px-3 py-2.5">Edit cases</th><th className="px-3 py-2.5">Screening</th><th className="px-3 py-2.5">Billing</th><th className="px-3 py-2.5">Admin (rules, pricing)</th></tr></thead>
-            <tbody>{Object.entries(EXP_ROLES).map(([k, r]) => <tr key={k} className={`border-b border-line last:border-0 ${exp.role === k ? "bg-accent-soft/40" : ""}`}><td className="px-5 py-2.5 font-medium text-ink">{r.label}</td>{[r.criminalHistory, r.edit, r.screening, r.billing, r.admin].map((x, i) => <td key={i} className="px-3 py-2.5">{x ? <Badge tone="success">Yes</Badge> : <Badge tone="neutral">No</Badge>}</td>)}</tr>)}</tbody>
+            <thead className="bg-surface-2 text-[12px] font-semibold uppercase tracking-wide text-muted"><tr><th className="px-5 py-2.5">Role</th><th className="px-3 py-2.5">Criminal history</th><th className="px-3 py-2.5">Edit cases</th><th className="px-3 py-2.5">Screening</th><th className="px-3 py-2.5">Billing</th><th className="px-3 py-2.5">Reveal SSN</th><th className="px-3 py-2.5">Admin (rules, pricing)</th></tr></thead>
+            <tbody>{Object.entries(EXP_ROLES).map(([k, r]) => <tr key={k} className={`border-b border-line last:border-0 ${exp.role === k ? "bg-accent-soft/40" : ""}`}><td className="px-5 py-2.5 font-medium text-ink">{r.label}</td>{[r.criminalHistory, r.edit, r.screening, r.billing, r.revealSsn, r.admin].map((x, i) => <td key={i} className="px-3 py-2.5">{x ? <Badge tone="success">Yes</Badge> : <Badge tone="neutral">No</Badge>}</td>)}</tr>)}</tbody>
           </table>
         </div>
       </Card>

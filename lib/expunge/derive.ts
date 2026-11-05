@@ -75,6 +75,15 @@ export function approvalBlockers(c: ExpCase, j?: Jurisdiction): string[] {
   if (unverified.length) out.push(`${unverified.length} required record(s) not verified`);
   if (!j) out.push("No jurisdiction configured");
   else if (!j.lastVerifiedAt) out.push(`${j.stateName} jurisdiction rules have not been verified by an administrator`);
+  const remedy = j?.remedies.find((r) => r.id === c.remedyId);
+  if (!remedy) out.push("No workflow (service type) chosen for this case");
+  else {
+    const rules = j!.rules.filter((r) => r.remedyId === remedy.id);
+    if (!rules.length) out.push(`No ${remedy.name} rules configured`);
+    else if (rules.some((r) => !r.lastVerifiedAt)) out.push(`${remedy.name} rules are not all verified against an authoritative source`);
+    const crit = j!.criteria.filter((q) => q.remedyId === remedy.id);
+    if (crit.some((q) => c.screening.answers[q.id] !== "yes")) out.push(`${remedy.name} screening criteria not all confirmed`);
+  }
   if (c.screening.legalReviewRequired && !c.screening.reviews.some((r) => r.legal)) out.push("Qualified legal review is required and not recorded");
   if (c.screening.pendingCharges === "yes" || c.screening.obligationsOutstanding === "yes") out.push("Open issues flagged (pending charges or outstanding obligations)");
   return out;
@@ -111,7 +120,7 @@ export function caseDeadline(c: ExpCase): string | undefined {
   return pending.sort()[0];
 }
 
-/** Price lookup: exact state first, then "Any". No match → no price (configure it). */
-export function priceFor(prices: PriceRule[], serviceTypeId: string, state: string, complexity: Complexity) {
-  return prices.find((p) => p.serviceTypeId === serviceTypeId && p.state === state && p.complexity === complexity) ?? prices.find((p) => p.serviceTypeId === serviceTypeId && p.state === "Any" && p.complexity === complexity);
+/** Price lookup: exact workflow first, then "Any". No match → no price (configure it). */
+export function priceFor(prices: PriceRule[], serviceTypeId: string, remedyId: string | undefined, complexity: Complexity) {
+  return prices.find((p) => p.serviceTypeId === serviceTypeId && p.remedyId === remedyId && p.complexity === complexity) ?? prices.find((p) => p.serviceTypeId === serviceTypeId && p.remedyId === "Any" && p.complexity === complexity);
 }

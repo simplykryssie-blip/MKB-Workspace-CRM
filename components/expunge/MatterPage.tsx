@@ -21,7 +21,7 @@ import { casePhase, matterPhase, nextAction, priceFor } from "@/lib/expunge/deri
 import { fmtDate, fmtDateTime, relTime, usd } from "@/lib/format";
 import { maskDOB } from "@/lib/validation";
 import type { Client, InvoiceLine } from "@/lib/types";
-import { CaseEditor, Masked, NotLegalAdvice, OutcomeBadge, OwnerBadge, PhaseBadge, Restricted, RoleSwitcher, SecurityNote, StatusBadge, TriField, blankCase, caseErrors, caseHref, portalHref, useHashTab, type CaseDraft } from "./ExpParts";
+import { CaseEditor, SsnField, Masked, NotLegalAdvice, OutcomeBadge, OwnerBadge, PhaseBadge, Restricted, RoleSwitcher, SecurityNote, StatusBadge, TriField, blankCase, caseErrors, caseHref, portalHref, useHashTab, type CaseDraft } from "./ExpParts";
 
 const TABS = [
   { key: "cases", label: "Cases", icon: ClipboardList },
@@ -74,7 +74,7 @@ export function MatterPage({ id }: { id: string }) {
             <RoleSwitcher />
             <Button size="sm" icon={Eye} href={portalHref(c.id)}>Client portal view</Button>
             {(m.intake.status === "inquiry") && <Button size="sm" variant="primary" icon={Send} disabled={!exp.can.edit} onClick={() => { exp.sendIntake(m.id); toast("Intake sent to the client"); }}>Send intake</Button>}
-            {m.intake.status === "submitted" && <Button size="sm" variant="primary" icon={ShieldCheck} disabled={!exp.can.criminalHistory} onClick={() => { exp.reviewIntake(m.id, "s-jp"); toast("Intake reviewed — cases opened"); }}>Mark intake reviewed</Button>}
+            {m.intake.status === "submitted" && <Button size="sm" variant="primary" icon={ShieldCheck} disabled={!exp.can.criminalHistory} onClick={() => { const n = exp.reviewIntake(m.id, "s-jp"); toast(n ? `Intake reviewed — ${n} case(s) still need a workflow chosen` : "Intake reviewed — cases opened"); }}>Mark intake reviewed</Button>}
           </div>
         </div>
       </section>
@@ -119,6 +119,7 @@ function CasesTab({ m }: { m: ExpMatter }) {
             <Link key={c.id} href={caseHref(c)} className="block rounded-2xl border border-line bg-surface p-4 shadow-soft transition hover:-translate-y-0.5 hover:shadow-pop">
               <div className="flex flex-wrap items-center gap-2"><span className="font-mono text-[12.5px] font-semibold text-ink">{c.number}</span>{c.draft && <Badge tone="warning">Draft from client portal</Badge>}<span className="ml-auto"><StatusBadge s={c.status} /></span></div>
               <div className="mt-1 text-[14.5px] font-semibold text-ink">{c.state === "LA" ? "Louisiana" : c.state === "TX" ? "Texas" : c.state} · {c.locality || "locality not set"}</div>
+              <div className="text-[12.5px] font-medium text-accent-ink">{exp.jurisdictions.find((j) => j.id === c.jurisdictionId)?.remedies.find((r) => r.id === c.remedyId)?.name ?? "Workflow not chosen yet"}</div>
               {exp.can.criminalHistory ? (
                 <div className="text-[12.5px] text-muted">{c.dockets.length} docket{c.dockets.length > 1 ? "s" : ""} · {chargeCount(c)} charge{chargeCount(c) > 1 ? "s" : ""} · {c.dockets.map((d) => d.court).filter(Boolean)[0] ?? "court not set"}</div>
               ) : (
@@ -170,8 +171,8 @@ function IntakeTab({ m, c }: { m: ExpMatter; c: Client }) {
           <dl className="grid gap-3 text-[13.5px] sm:grid-cols-3">
             <div><dt className="text-[12px] text-muted">Date of birth</dt><dd className="font-medium text-ink">{maskDOB(c.dob) || "Not on file"} <span className="text-[12px] text-muted">(full DOB on the client record, revealed with permission)</span></dd></div>
             <div><dt className="text-[12px] text-muted">Email · phone</dt><dd className="font-medium text-ink">{c.email} · {c.phone}</dd></div>
-            <div><dt className="text-[12px] text-muted">Social Security number</dt><dd className="text-ink-2">Not collected — only requested if an official process requires it.</dd></div>
           </dl>
+          <SsnField c={c} matterId={m.id} />
           <div className="grid gap-4 sm:grid-cols-2">
             <TextField id="in-addr" label="Current address" value={v.currentAddress} onChange={(e) => setV({ ...v, currentAddress: e.target.value })} />
             <SelectField id="in-pref" label="Preferred contact method" value={v.preferredContact} onChange={(e) => setV({ ...v, preferredContact: e.target.value })} options={["Phone", "Text", "Email", "Portal"].map((x) => [x, x])} />
@@ -216,7 +217,7 @@ function IntakeTab({ m, c }: { m: ExpMatter; c: Client }) {
         <ul className="space-y-2 px-5 pb-5 sm:px-6">
           {ACKNOWLEDGMENTS.map((a) => <li key={a.key} className="flex items-start gap-2 text-[13.5px]">{m.intake.acks[a.key] ? <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-success" /> : <CircleDot size={16} className="mt-0.5 shrink-0 text-muted" />}<span className="flex-1 text-ink-2">{a.text}</span><span className="text-[12px] text-muted">{m.intake.acks[a.key] ? fmtDateTime(m.intake.acks[a.key]!) : "Not yet"}</span></li>)}
         </ul>
-        <div className="border-t border-line px-5 py-3 text-[12.5px] text-muted sm:px-6">Intake {INTAKE_META[m.intake.status].label.toLowerCase()}{m.intake.submittedAt ? ` · submitted ${fmtDate(m.intake.submittedAt)}` : ""}{m.intake.reviewedAt ? ` · reviewed by ${staffById(m.intake.reviewedBy ?? "s-mk").name} ${fmtDate(m.intake.reviewedAt)}` : ""}</div>
+        <div className="border-t border-line px-5 py-3 text-[12.5px] text-muted sm:px-6">Status: {INTAKE_META[m.intake.status].label}{m.intake.submittedAt ? ` · submitted ${fmtDate(m.intake.submittedAt)}` : ""}{m.intake.reviewedAt ? ` · reviewed by ${staffById(m.intake.reviewedBy ?? "s-mk").name} ${fmtDate(m.intake.reviewedAt)}` : ""}</div>
       </Card>
       <NotLegalAdvice compact />
     </div>
@@ -280,6 +281,7 @@ function BillingTab({ m, c }: { m: ExpMatter; c: Client }) {
   const clientStore = useClients();
   const toast = useToast();
   const cs = matterCases(exp, m.id).filter((x) => !x.draft);
+  const remName = (x: { jurisdictionId: string; remedyId?: string }) => exp.jurisdictions.find((j) => j.id === x.jurisdictionId)?.remedies.find((r) => r.id === x.remedyId)?.short ?? "workflow not set";
   const inv = c.invoices.filter((i) => i.expMatterId === m.id).sort((a, b) => b.issuedAt.localeCompare(a.issuedAt));
   const [lines, setLines] = useState<InvoiceLine[] | null>(null);
   const [pay, setPay] = useState(false);
@@ -291,8 +293,8 @@ function BillingTab({ m, c }: { m: ExpMatter; c: Client }) {
   const suggest = (): InvoiceLine[] => [
     ...cs.map((x) => {
       const svc = exp.services.find((s) => s.id === x.serviceType);
-      const p = priceFor(exp.prices, x.serviceType, x.state, x.complexity);
-      return { kind: "service" as const, label: `${svc?.name ?? "Service"} — ${x.number} (${x.state}, ${x.complexity})`, amount: p?.fee ?? NaN };
+      const p = priceFor(exp.prices, x.serviceType, x.remedyId, x.complexity);
+      return { kind: "service" as const, label: `${svc?.name ?? "Service"} — ${x.number} (${remName(x)}, ${x.complexity})`, amount: p?.fee ?? NaN };
     }),
     ...cs.flatMap((x) => x.records.filter((r) => r.fee && !r.feePaid).map((r) => ({ kind: "records" as const, label: `${r.docType} request fee — ${x.number}`, amount: r.fee! }))),
   ];
@@ -317,10 +319,10 @@ function BillingTab({ m, c }: { m: ExpMatter; c: Client }) {
         <ul className="divide-y divide-line border-t border-line">
           {cs.length === 0 && <li className="px-6 py-6 text-center text-[13px] text-muted">No cases to price yet.</li>}
           {cs.map((x) => {
-            const p = priceFor(exp.prices, x.serviceType, x.state, x.complexity);
+            const p = priceFor(exp.prices, x.serviceType, x.remedyId, x.complexity);
             return (
               <li key={x.id} className="flex flex-wrap items-center gap-3 px-5 py-3 sm:px-6">
-                <span className="font-mono text-[12.5px] text-ink">{x.number}</span><span className="text-[12.5px] text-muted">{x.state}</span>
+                <span className="font-mono text-[12.5px] text-ink">{x.number}</span><span className="text-[12.5px] text-muted">{remName(x)}</span>
                 <select aria-label={`${x.number} service type`} disabled={!exp.can.billing} value={x.serviceType} onChange={(e) => exp.updateCase(x.id, { serviceType: e.target.value }, "service type changed")} className="h-8 rounded-lg border border-line bg-surface px-2 text-[13px] text-ink">{exp.services.filter((s) => s.active).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
                 <select aria-label={`${x.number} complexity`} disabled={!exp.can.billing} value={x.complexity} onChange={(e) => exp.updateCase(x.id, { complexity: e.target.value as Complexity }, "complexity changed")} className="h-8 rounded-lg border border-line bg-surface px-2 text-[13px] text-ink">{Object.entries(COMPLEXITY).map(([k, v]) => <option key={k} value={k}>{v.split(" (")[0]}</option>)}</select>
                 <span className="ml-auto text-[14px] font-semibold tabular-nums text-ink">{p ? usd(p.fee) : <span className="text-[12.5px] font-normal text-warning-ink">No price configured</span>}</span>

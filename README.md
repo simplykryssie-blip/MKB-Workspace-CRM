@@ -70,6 +70,10 @@ npm run build && npm start
   separately with no hard-coded statutes, waiting periods or fees; pricing is configurable by
   service, jurisdiction and complexity. Includes a guided client intake, a client portal, role
   previews with restricted criminal-history access, masked identifiers and an access log.
+  Release scope: Louisiana (expungement) and Texas (expunction and order of nondisclosure as two
+  separate workflows, never combined); no other states are active or offered. The intake collects
+  the full SSN into the identifier vault — masked everywhere, revealed only by permitted roles, and
+  every reveal logged (production: field-level encryption, server-side access control, audit logs).
 
 Changes reset on page reload. Nothing is sent to a server.
 

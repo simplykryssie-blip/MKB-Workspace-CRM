@@ -17,7 +17,9 @@ import { matterCases, useExp } from "@/lib/store/exp-store";
 import { ACKNOWLEDGMENTS, chargeCount, type ExpCase, type ExpMatter, type InfoRequest, type Phase } from "@/lib/expunge/config";
 import { casePhase } from "@/lib/expunge/derive";
 import { fmtDate, fmtDateTime, usd } from "@/lib/format";
-import { maskDOB } from "@/lib/validation";
+import { dobToIso, maskDOB, maskTaxId, validateDOB, validateTaxId, type TaxIdType } from "@/lib/validation";
+import { DOBInput, TaxIdInput } from "@/components/ui/FormattedInputs";
+import { SSN_POLICY } from "@/lib/expunge/config";
 import { CaseEditor, NotLegalAdvice, TriField, blankCase, caseErrors, draftFrom, type CaseDraft } from "./ExpParts";
 
 const toFiles = (fs: File[]) => fs.map((f) => ({ name: f.name.replace(/\.[^.]+$/, ""), sizeKb: Math.max(1, Math.round(f.size / 1024)) }));
@@ -60,7 +62,7 @@ export function ExpPortal({ clientId }: { clientId: string }) {
         {banner}
         <Card className="p-8 text-center">
           <h1 className="text-[22px] font-bold text-ink">Record expungement help</h1>
-          <p className="mx-auto mt-2 max-w-xl text-[14px] text-ink-2">MKB can help you gather your records and prepare paperwork. Start by telling us a little about your situation.</p>
+          <p className="mx-auto mt-2 max-w-xl text-[14px] text-ink-2">MKB can help you gather your records and prepare paperwork for cases in Louisiana and Texas. Start by telling us a little about your situation.</p>
           <Button className="mt-4" variant="primary" onClick={() => { exp.createInquiry(clientId, "portal"); toast("Started — complete your intake below"); }}>Get started</Button>
           <div className="mx-auto mt-5 max-w-2xl"><NotLegalAdvice compact /></div>
         </Card>
@@ -91,10 +93,19 @@ function IntakeWizard({ m }: { m: ExpMatter }) {
   const [idFiles, setIdFiles] = useState<File[]>([]);
   const [editing, setEditing] = useState<{ id?: string; v: CaseDraft } | null>(null);
   const [tried, setTried] = useState(false);
+  // The SSN is held only in this field until saved to the identifier vault — never in the intake record.
+  const [ssn, setSsn] = useState("");
+  const [ssnType, setSsnType] = useState<TaxIdType>("SSN");
+  const [ssnEdit, setSsnEdit] = useState(!c.taxIdLast4);
+  const [dob, setDob] = useState("");
   useEffect(() => setV((x) => ({ ...m.intake, ...x, acks: m.intake.acks, idDoc: m.intake.idDoc, status: m.intake.status })), [m.intake]);
   const cases = matterCases(exp, m.id);
   const save = (next: number) => { exp.saveIntake(m.id, { ...v, step: Math.max(next, m.intake.step) }, "client"); setStep(next); window.scrollTo({ top: 0 }); };
-  const errA = [!v.first.trim() && "Enter your legal first name", !v.last.trim() && "Enter your legal last name", !v.currentAddress.trim() && "Enter your current address"].filter(Boolean) as string[];
+  const errA = [!v.first.trim() && "Enter your legal first name", !v.last.trim() && "Enter your legal last name", !c.dob && validateDOB(dob, true), ssnEdit && validateTaxId(ssn, ssnType, true), !v.currentAddress.trim() && "Enter your current address"].filter(Boolean) as string[];
+  const saveIds = () => {
+    if (ssnEdit && ssn) { clientStore.updateTaxIds(c.id, { taxId: ssn, taxIdType: ssnType }); exp.logAccess(m.id, `Client entered full ${ssnType} (portal)`); setSsn(""); setSsnEdit(false); }
+    if (!c.dob && dob) clientStore.updateTaxIds(c.id, { dob: dobToIso(dob) ?? undefined });
+  };
   const allAck = ACKNOWLEDGMENTS.every((a) => m.intake.acks[a.key]);
   const ad = v.additional;
   return (
@@ -122,7 +133,7 @@ function IntakeWizard({ m }: { m: ExpMatter }) {
               <div className="flex flex-wrap items-center gap-1.5">{v.aliases.map((a, i) => <span key={i} className="inline-flex items-center gap-1 rounded-full border border-line px-2.5 py-1 text-[12.5px] text-ink-2">{a}<button type="button" aria-label={`Remove ${a}`} onClick={() => setV({ ...v, aliases: v.aliases.filter((_, j) => j !== i) })} className="text-muted">×</button></span>)}<input aria-label="Add a name" value={alias} onChange={(e) => setAlias(e.target.value)} placeholder="Add a name" className="h-9 w-40 rounded-full border border-line bg-surface px-3 text-[13px] text-ink" /><Button size="sm" variant="ghost" disabled={!alias.trim()} onClick={() => { setV({ ...v, aliases: [...v.aliases, alias.trim()] }); setAlias(""); }}>Add</Button></div>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
-              <div><span className="mb-1.5 block text-[13px] font-medium text-ink-2">Date of birth</span><p className="text-[13.5px] text-ink">{maskDOB(c.dob) ? `On file (${maskDOB(c.dob)})` : "We'll confirm this with you by phone."}</p></div>
+              {c.dob ? <div><span className="mb-1.5 block text-[13px] font-medium text-ink-2">Date of birth</span><p className="text-[13.5px] text-ink">On file ({maskDOB(c.dob)})</p></div> : <DOBInput id="pi-dob" label="Date of birth" required value={dob} onChange={setDob} showErrors={tried} />}
               <div><span className="mb-1.5 block text-[13px] font-medium text-ink-2">Contact</span><p className="text-[13.5px] text-ink">{c.email} · {c.phone}</p></div>
             </div>
             <TextField id="pi-addr" label="Current address" required value={v.currentAddress} onChange={(e) => setV({ ...v, currentAddress: e.target.value })} />
@@ -139,9 +150,16 @@ function IntakeWizard({ m }: { m: ExpMatter }) {
                 {idFiles.length > 0 && <Button className="mt-2" size="sm" onClick={() => { exp.uploadId(m.id, toFiles(idFiles)[0], "client"); setIdFiles([]); toast("ID uploaded"); }}>Upload ID</Button>}
               </div>
             ) : <p className="flex items-center gap-2 text-[13.5px] text-success-ink"><CheckCircle2 size={16} /> ID received</p>}
-            <p className="text-[12px] text-muted">We don&rsquo;t ask for your Social Security number. If an official form ever requires it, MKB will collect it through a secure process.</p>
+            <div className="rounded-xl border border-line p-3">
+              {ssnEdit ? (
+                <TaxIdInput id="pi-ssn" label="Social Security number (all nine digits)" required value={ssn} onChange={setSsn} type={ssnType} onTypeChange={setSsnType} showErrors={tried} />
+              ) : (
+                <div className="flex flex-wrap items-center gap-2 text-[13.5px]"><span className="font-medium text-ink-2">Social Security number</span><span className="font-mono text-ink">On file {maskTaxId(c.taxIdLast4)}</span><Button size="sm" variant="ghost" className="ml-auto" onClick={() => setSsnEdit(true)}>Update</Button></div>
+              )}
+              <p className="mt-1 text-[11.5px] text-muted">Needed because official expungement forms may require it. It&rsquo;s stored separately and securely, shown only as the last four digits, and only authorized MKB staff can view it — every view is logged.</p>
+            </div>
             {tried && errA.length > 0 && <p className="text-[12.5px] text-danger-ink" role="alert">{errA.join(" · ")}</p>}
-            <div className="flex justify-end"><Button variant="primary" onClick={() => { setTried(true); if (errA.length) return; setTried(false); save(1); }}>Save & continue</Button></div>
+            <div className="flex justify-end"><Button variant="primary" onClick={() => { setTried(true); if (errA.length) return; setTried(false); saveIds(); save(1); }}>Save & continue</Button></div>
           </div>
         </Card>
       )}
@@ -184,8 +202,9 @@ function IntakeWizard({ m }: { m: ExpMatter }) {
           <div className="space-y-2 px-5 pb-6 sm:px-6">
             {ACKNOWLEDGMENTS.map((a) => <Checkbox key={a.key} label={a.text} checked={!!m.intake.acks[a.key]} onChange={(e) => exp.setAck(m.id, a.key, e.target.checked)} />)}
             <NotLegalAdvice compact />
-            <div className="flex justify-between gap-2 pt-2"><Button onClick={() => setStep(2)}>Back</Button><Button variant="primary" icon={Send} disabled={!allAck || !cases.length} onClick={() => { exp.saveIntake(m.id, { ...v, step: 3 }, "client"); exp.submitIntake(m.id, "client"); toast("Intake submitted to MKB"); }}>Submit intake</Button></div>
+            <div className="flex justify-between gap-2 pt-2"><Button onClick={() => setStep(2)}>Back</Button><Button variant="primary" icon={Send} disabled={!allAck || !cases.length || !c.taxIdLast4} title={!c.taxIdLast4 ? "Add your SSN in step 1" : undefined} onClick={() => { exp.saveIntake(m.id, { ...v, step: 3 }, "client"); exp.submitIntake(m.id, "client"); toast("Intake submitted to MKB"); }}>Submit intake</Button></div>
             {!allAck && <p className="text-[12.5px] text-muted">Check every statement to submit.</p>}
+            {!c.taxIdLast4 && <p className="text-[12.5px] text-danger-ink">Your Social Security number is needed — add it in step 1.</p>}
           </div>
         </Card>
       )}

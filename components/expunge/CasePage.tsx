@@ -56,6 +56,7 @@ export function CasePage({ id }: { id: string }) {
       </div>
     );
   const closed = ["Completed", "Denied", "Withdrawn"].includes(c.status);
+  const remedy = j?.remedies.find((r) => r.id === c.remedyId);
   return (
     <>
       <Breadcrumbs crumbs={[{ label: "Record Expungement", href: "/services/record-expungement" }, { label: client.name, href: matterHref(m) }, { label: c.number }]} />
@@ -66,13 +67,14 @@ export function CasePage({ id }: { id: string }) {
             <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-muted">
               <span>Client: <Link href={matterHref(m)} className="font-medium text-accent hover:underline">{client.name}</Link></span>
               <span>{j?.stateName ?? c.state} · {c.locality}</span>
+              <span className="font-semibold text-accent-ink">{remedy?.name ?? "Workflow not chosen"}</span>
               {exp.can.criminalHistory && <span>{c.dockets.length} docket{c.dockets.length > 1 ? "s" : ""} · {chargeCount(c)} charge{chargeCount(c) > 1 ? "s" : ""}</span>}
               <span className={j?.lastVerifiedAt ? "text-success-ink" : "text-warning-ink"}>{j?.stateName} rules: {j ? verifiedLabel(j) : "not configured"}</span>
             </div>
           </div>
           <div className="flex flex-wrap items-start gap-2 lg:justify-end">
             <RoleSwitcher />
-            {c.draft && <Button size="sm" variant="primary" icon={ShieldCheck} disabled={!exp.can.edit} onClick={() => { exp.reviewIntake(m.id, "s-jp"); toast("Client entry reviewed — case opened"); }}>Review client entry & open case</Button>}
+            {c.draft && <Button size="sm" variant="primary" icon={ShieldCheck} disabled={!exp.can.edit || !c.remedyId} title={!c.remedyId ? "Choose the workflow on Case & charges first" : undefined} onClick={() => { exp.reviewIntake(m.id, "s-jp"); toast("Client entry reviewed — case opened"); }}>Review client entry & open case</Button>}
             <label className="block"><span className="sr-only">Assigned staff</span><select aria-label="Assigned staff" disabled={!exp.can.edit} value={c.assignedTo} onChange={(e) => { exp.assignCase(c.id, e.target.value); toast(`Assigned to ${staffById(e.target.value).name}`); }} className="h-8 rounded-xl border border-line bg-surface px-2 text-[13px] text-ink">{STAFF.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
             <Menu label="Case actions" trigger={({ toggle }) => <Button size="sm" icon={MoreHorizontal} onClick={toggle} aria-label="Case actions">More</Button>} items={[
               c.status === "On Hold" ? { label: "Resume", icon: Play, onSelect: () => { exp.resume(c.id); toast("Resumed"); } } : { label: "Put on hold…", icon: Pause, onSelect: () => setDlg("hold"), disabled: closed || !exp.can.edit },
@@ -291,26 +293,43 @@ function ScreeningTab({ c, j }: { c: ExpCase; j?: Jurisdiction }) {
   useEffect(() => setS(c.screening), [c.screening]);
   const dirty = JSON.stringify(s) !== JSON.stringify(c.screening);
   const preview = approvalBlockers({ ...c, screening: s }, j);
+  const remedy = j?.remedies.find((r) => r.id === c.remedyId);
+  const rules = (j?.rules ?? []).filter((r) => r.remedyId === c.remedyId);
+  const criteria = (j?.criteria ?? []).filter((q) => q.remedyId === c.remedyId);
   if (!exp.can.screening) return <Restricted what="Screening discussions" />;
+  if (!remedy) return <Card className="p-8 text-center text-[14px] text-ink-2">Choose this case&rsquo;s workflow on the Case &amp; charges tab first — each workflow has its own requirements and screening criteria.</Card>;
   return (
     <div className="space-y-5">
       <div className="flex items-start gap-2 rounded-2xl border border-warning/40 bg-warning-soft/50 px-4 py-3 text-[13px] text-warning-ink">
         <ShieldAlert size={16} className="mt-0.5 shrink-0" />
-        <span>Administrative screening is preliminary. It never labels a case legally eligible or ineligible. Outcomes are recorded by a person, based on {j?.stateName ?? "the"} rules an administrator has verified ({j ? verifiedLabel(j).toLowerCase() : "not configured"}), and anything uncertain goes to qualified legal review.</span>
+        <span>Administrative screening is preliminary and never guarantees eligibility. It never labels a case legally eligible or ineligible. Outcomes are recorded by a person, using only {remedy?.name ?? "this workflow's"} rules and criteria verified against authoritative sources ({j ? verifiedLabel(j).toLowerCase() : "not configured"}), and anything uncertain goes to qualified legal review.</span>
       </div>
       <Card>
-        <CardHeader icon={ClipboardList} title="Screening checklist" subtitle={`${j?.stateName} · ${c.locality}`} action={<Button size="sm" variant="primary" disabled={!dirty} onClick={() => { exp.updateScreening(c.id, s); toast("Checklist saved"); }}>Save checklist</Button>} />
+        <CardHeader icon={ClipboardList} title={`${remedy.name} — screening checklist`} subtitle={`${j?.stateName} · ${c.locality} · separate from every other workflow`} action={<Button size="sm" variant="primary" disabled={!dirty} onClick={() => { exp.updateScreening(c.id, s); toast("Checklist saved"); }}>Save checklist</Button>} />
         <div className="space-y-4 px-5 pb-6 sm:px-6">
           <div>
-            <span className="mb-1.5 block text-[13px] font-medium text-ink-2">Applicable statutes or rules ({j?.stateName} only)</span>
-            {(j?.rules ?? []).length === 0 && <p className="text-[13px] text-muted">No rules configured for {j?.stateName}.</p>}
+            <span className="mb-1.5 block text-[13px] font-medium text-ink-2">Applicable statutes or rules ({remedy.name} only)</span>
+            {rules.length === 0 && <p className="text-[13px] text-muted">No {remedy.name} rules configured.</p>}
             <div className="space-y-1.5">
-              {(j?.rules ?? []).map((rule) => (
+              {rules.map((rule) => (
                 <label key={rule.id} className="flex cursor-pointer items-start gap-2 rounded-xl border border-line p-2.5 text-[13px] hover:bg-surface-hover">
                   <input type="checkbox" className="mt-0.5 h-4 w-4 accent-[var(--accent)]" checked={s.ruleIds.includes(rule.id)} onChange={() => setS({ ...s, ruleIds: s.ruleIds.includes(rule.id) ? s.ruleIds.filter((x) => x !== rule.id) : [...s.ruleIds, rule.id] })} />
                   <span className="flex-1"><span className="font-medium text-ink">{rule.title}</span> <span className="text-muted">{rule.citation || "citation not entered"}{rule.waitingPeriod ? ` · waiting period: ${rule.waitingPeriod}` : ""}</span></span>
                   {rule.lastVerifiedAt ? <Badge tone="success">Verified</Badge> : <Badge tone="warning">Not verified</Badge>}
                 </label>
+              ))}
+            </div>
+          </div>
+          <div>
+            <span className="mb-1.5 block text-[13px] font-medium text-ink-2">{remedy.name} criteria</span>
+            <div className="space-y-1.5">
+              {criteria.length === 0 && <p className="text-[13px] text-muted">No criteria configured.</p>}
+              {criteria.map((q) => (
+                <div key={q.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-line p-2.5 text-[13px]">
+                  <span className="min-w-[200px] flex-1 text-ink">{q.question}</span>
+                  {q.lastVerifiedAt ? <Badge tone="success">Verified</Badge> : <Badge tone="warning">Not verified</Badge>}
+                  <select aria-label={q.question} value={s.answers[q.id] ?? "unknown"} onChange={(e) => setS({ ...s, answers: { ...s.answers, [q.id]: e.target.value as "yes" | "no" | "unknown" } })} className="h-8 rounded-lg border border-line bg-surface px-2 text-[13px] text-ink"><option value="unknown">Not confirmed</option><option value="yes">Confirmed</option><option value="no">Issue found</option></select>
+                </div>
               ))}
             </div>
           </div>

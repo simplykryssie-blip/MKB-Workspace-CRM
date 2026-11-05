@@ -19,6 +19,7 @@ import { nowIso, useClients } from "@/lib/store/clients-store";
 import {
   ASSIGNMENT_ROLES,
   EXP_ROLES,
+  RELEASE_STATES,
   type AckKey,
   type AssignmentRole,
   type CaseStatus,
@@ -58,16 +59,16 @@ const reducer = (s: State, a: Action): State => (a.type === "reset" ? init() : a
 
 export const matterCases = (s: { cases: ExpCase[] }, matterId: string) => s.cases.filter((c) => c.matterId === matterId);
 
-/** Records checklist for a new case: "Any case" plus lists whose case type matches the dispositions. */
-export function checklistFor(j: Jurisdiction | undefined, dockets: Docket[]): RecordItem["docType"][] {
-  if (!j) return ["Criminal history report", "Court minutes", "Final disposition"];
+/** Records checklist for a case: its own workflow's "Any case" list plus lists whose case type matches the dispositions. */
+export function checklistFor(j: Jurisdiction | undefined, remedyId: string | undefined, dockets: Docket[]): RecordItem["docType"][] {
+  if (!j || !remedyId) return [];
   const disp = dockets.flatMap((d) => d.charges.map((c) => c.disposition));
-  const lists = j.requiredDocs.filter((r) => r.caseType === "Any case" || (r.caseType.startsWith("Conviction") && disp.includes("Convicted")) || (r.caseType.startsWith("Dismissal") && disp.some((x) => ["Dismissed", "Acquitted / not guilty", "Refused / not prosecuted"].includes(x))) || (r.caseType.startsWith("Deferred") && disp.some((x) => ["Deferred adjudication", "Diverted / pretrial intervention"].includes(x))));
+  const lists = j.requiredDocs.filter((r) => r.remedyId === remedyId).filter((r) => r.caseType === "Any case" || (r.caseType.startsWith("Conviction") && disp.includes("Convicted")) || (r.caseType.startsWith("Dismissal") && disp.some((x) => ["Dismissed", "Acquitted / not guilty", "Refused / not prosecuted"].includes(x))) || (r.caseType.startsWith("Deferred") && disp.some((x) => ["Deferred adjudication", "Diverted / pretrial intervention"].includes(x))));
   return [...new Set(lists.flatMap((l) => l.docs))];
 }
 const kindOf = (doc: string): RecordItem["kind"] => (/criminal history/i.test(doc) ? "criminal_history" : /arrest/i.test(doc) ? "arrest" : /minutes/i.test(doc) ? "court_minutes" : /disposition|judgment|dismissal|acquittal/i.test(doc) ? "disposition" : "other");
 
-export type NewCaseInput = Pick<ExpCase, "jurisdictionId" | "state" | "locality" | "arrestingAgency" | "dockets"> & Partial<Pick<ExpCase, "localityId" | "arrestDate" | "arrestNumber" | "arrestingJurisdiction" | "supervision" | "sentenceCompleted" | "obligations" | "resolution" | "notes" | "serviceType" | "complexity">>;
+export type NewCaseInput = Pick<ExpCase, "jurisdictionId" | "state" | "locality" | "arrestingAgency" | "dockets"> & Partial<Pick<ExpCase, "remedyId" | "localityId" | "arrestDate" | "arrestNumber" | "arrestingJurisdiction" | "supervision" | "sentenceCompleted" | "obligations" | "resolution" | "notes" | "serviceType" | "complexity">>;
 
 function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients: () => ClientsApi, role: () => ExpRole) {
   const set = (fn: (s: State) => State) => dispatch({ type: "fn", fn });
@@ -139,18 +140,21 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       logClient(m.clientId, `${m.number}: expungement intake submitted`, by === "client" ? "client" : "staff");
     },
     /** Staff review the intake: client-entered cases become working cases with their jurisdiction's records checklist. */
-    reviewIntake(matterId: string, byId: string) {
+    /** Opens client-entered cases that have a workflow chosen; returns how many still need one. */
+    reviewIntake(matterId: string, byId: string): number {
       const s = get();
+      const waiting = s.cases.filter((c) => c.matterId === matterId && c.draft && !c.remedyId).length;
       upM(matterId, (x) => ({ ...x, intake: { ...x.intake, status: "reviewed", reviewedBy: byId, reviewedAt: nowIso() } }));
       set((st) => ({
         ...st,
         cases: st.cases.map((c) => {
-          if (c.matterId !== matterId || !c.draft) return c;
+          if (c.matterId !== matterId || !c.draft || !c.remedyId) return c;
           const j = s.jurisdictions.find((x) => x.id === c.jurisdictionId);
-          const records = c.records.length ? c.records : checklistFor(j, c.dockets).map((docType, i) => ({ id: `${c.id}-rec${i + 1}`, docType, kind: kindOf(docType), required: true, status: "not_requested" as const }));
+          const records = c.records.length ? c.records : checklistFor(j, c.remedyId, c.dockets).map((docType, i) => ({ id: `${c.id}-rec${i + 1}`, docType, kind: kindOf(docType), required: true, status: "not_requested" as const }));
           return { ...c, draft: false, records, history: [...c.history, { at: nowIso(), byId, status: "note", note: "intake reviewed — case opened" }] };
         }),
       }));
+      return waiting;
     },
     assign(matterId: string, roleName: AssignmentRole, staffId: string) {
       upM(matterId, (m) => ({ ...m, assignments: { ...m.assignments, [roleName]: staffId } }));
@@ -173,8 +177,8 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
         id, number: id, matterId, clientId: m.clientId, sentenceCompleted: "unknown", obligations: "unknown", serviceType: "full", complexity: input.dockets.length > 1 || input.dockets.some((d) => d.charges.length > 1) ? "moderate" : "standard",
         ...input,
         assignedTo: m.assignments["Records collection"], status: "Not Started", createdAt: nowIso(), draft,
-        records: draft ? [] : checklistFor(j, input.dockets).map((docType, i) => ({ id: `${id}-rec${i + 1}`, docType, kind: kindOf(docType), required: true, status: "not_requested" as const })),
-        screening: { ruleIds: [], offenseCategory: "", dispositionSummary: "", sentenceCompleted: input.sentenceCompleted ?? "unknown", waitingPeriod: "", waitingPeriodMet: "unknown", obligationsOutstanding: "unknown", pendingCharges: "unknown", onSupervision: "unknown", priorExpungements: "unknown", supportingDocsComplete: "unknown", missingInfo: "", disqualifyingIssues: "", legalReviewRequired: false, outcome: "Information Incomplete", reviews: [] },
+        records: draft ? [] : checklistFor(j, input.remedyId, input.dockets).map((docType, i) => ({ id: `${id}-rec${i + 1}`, docType, kind: kindOf(docType), required: true, status: "not_requested" as const })),
+        screening: { ruleIds: [], offenseCategory: "", dispositionSummary: "", sentenceCompleted: input.sentenceCompleted ?? "unknown", waitingPeriod: "", waitingPeriodMet: "unknown", obligationsOutstanding: "unknown", pendingCharges: "unknown", onSupervision: "unknown", priorExpungements: "unknown", supportingDocsComplete: "unknown", missingInfo: "", disqualifyingIssues: "", legalReviewRequired: false, answers: {}, outcome: "Information Incomplete", reviews: [] },
         prep: { preparerId: m.assignments["Document preparation"], reviewerId: m.assignments["Quality review"], status: "not_started", forms: [], missing: [], clientApproval: "not_sent", delivery: "not_delivered" },
         filing: { court: input.dockets[0]?.court ?? "", clerkContact: "", feeStatus: "not_due" },
         history: [{ at: nowIso(), byId: by === "client" ? "client" : "s-mk", status: "Not Started", note: by === "client" ? "added by the client in the portal" : "case created" }],
@@ -184,8 +188,20 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       logClient(m.clientId, `${m.number}: case ${id} added (${input.state})`, by === "client" ? "client" : "staff");
       return id;
     },
+    /** Changing a case's workflow (e.g. expunction ↔ nondisclosure) resets its screening and adds that workflow's own checklist items. */
     updateCase(caseId: string, patch: Partial<ExpCase>, note = "case details updated") {
-      upC(caseId, (c) => ({ ...c, ...patch, history: [...c.history, { at: nowIso(), byId: "s-mk", status: "note", note }] }));
+      const c = C(caseId);
+      const remedyChanged = patch.remedyId !== undefined && patch.remedyId !== c.remedyId;
+      const j = get().jurisdictions.find((x) => x.id === (patch.jurisdictionId ?? c.jurisdictionId));
+      upC(caseId, (x) => {
+        let next: ExpCase = { ...x, ...patch, history: [...x.history, { at: nowIso(), byId: "s-mk", status: "note", note }] };
+        if (remedyChanged) {
+          const name = j?.remedies.find((r) => r.id === patch.remedyId)?.name ?? "new workflow";
+          const add = x.draft ? [] : checklistFor(j, patch.remedyId, next.dockets).filter((d) => !x.records.some((r) => r.docType === d)).map((docType) => ({ id: uid("rec"), docType, kind: kindOf(docType), required: true, status: "not_requested" as const }));
+          next = { ...next, records: [...x.records, ...add], screening: { ...x.screening, ruleIds: [], answers: {}, outcome: "Information Incomplete", legalReviewRequired: x.screening.legalReviewRequired }, history: [...next.history, { at: nowIso(), byId: "s-mk", status: "note", note: `workflow set to ${name} — screening reset (requirements are separate)` }] };
+        }
+        return next;
+      });
     },
     removeDraftCase(caseId: string) {
       set((s) => ({ ...s, cases: s.cases.filter((c) => !(c.id === caseId && c.draft)) }));
@@ -240,7 +256,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       const c = C(caseId);
       if (c.screening.outcome !== "Administrative Processing Approved") return false;
       const j = get().jurisdictions.find((x) => x.id === c.jurisdictionId);
-      upC(caseId, (x) => ({ ...x, prep: { ...x.prep, status: "in_progress", forms: x.prep.forms.length ? x.prep.forms : (j?.forms ?? []).map((f) => ({ id: uid("f"), name: f.name, source: f.lastVerifiedAt ? f.source : `${f.source} (form not verified)`, status: "needed" as const })) } }));
+      upC(caseId, (x) => ({ ...x, prep: { ...x.prep, status: "in_progress", forms: x.prep.forms.length ? x.prep.forms : (j?.forms ?? []).filter((f) => f.remedyId === x.remedyId).map((f) => ({ id: uid("f"), name: f.name, source: f.lastVerifiedAt ? f.source : `${f.source} (form not verified)`, status: "needed" as const })) } }));
       moveTo(caseId, "Preparing", "document preparation started", c.prep.preparerId);
       return true;
     },
@@ -368,6 +384,8 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
 
     /* ---------------- Admin ---------------- */
     saveJurisdiction(j: Jurisdiction) {
+      // Only the release states can be active; others may be drafted for later but never activated.
+      if (!(RELEASE_STATES as readonly string[]).includes(j.state)) j = { ...j, active: false };
       set((s) => ({ ...s, jurisdictions: s.jurisdictions.some((x) => x.id === j.id) ? s.jurisdictions.map((x) => (x.id === j.id ? j : x)) : [...s.jurisdictions, j] }));
     },
     saveService(svc: ServiceType) {

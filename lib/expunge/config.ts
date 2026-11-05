@@ -106,13 +106,25 @@ export type Phase = (typeof PHASES)[number];
 /* Jurisdictions (administrator-maintained)                            */
 /* ------------------------------------------------------------------ */
 
+/** States active in this release. The architecture supports more; none are activated or advertised. */
+export const RELEASE_STATES = ["LA", "TX"] as const;
+
+/**
+ * A distinct legal process ("workflow") within a jurisdiction. Each has its own
+ * rules, screening criteria, records checklist, forms and fees, and a case
+ * belongs to exactly one. Texas expunction and Texas orders of nondisclosure
+ * are separate workflows and are never combined.
+ */
+export type Remedy = { id: string; name: string; short: string; description: string; active: boolean };
+export type Criterion = { id: string; remedyId: string; question: string; notes?: string } & Verified;
+
 export type Verified = { lastVerifiedAt?: string; verifiedBy?: string };
 export type Court = { id: string; name: string; clerk: string; clerkContact: string; daOffice?: string; daContact?: string; notes?: string };
 export type Locality = { id: string; name: string; courts: Court[] };
-export type JRule = { id: string; title: string; citation: string; description: string; appliesTo: string; waitingPeriod: string; sourceUrl?: string; notes?: string } & Verified;
-export type DocRequirement = { id: string; caseType: string; docs: string[] } & Verified;
-export type FilingForm = { id: string; name: string; source: string; url?: string } & Verified;
-export type GovFee = { id: string; label: string; kind: "court_filing" | "clerk" | "government" | "records"; amount?: number; payableTo: string; notes?: string } & Verified;
+export type JRule = { id: string; remedyId: string; title: string; citation: string; description: string; appliesTo: string; waitingPeriod: string; sourceUrl?: string; notes?: string } & Verified;
+export type DocRequirement = { id: string; remedyId: string; caseType: string; docs: string[] } & Verified;
+export type FilingForm = { id: string; remedyId: string; name: string; source: string; url?: string } & Verified;
+export type GovFee = { id: string; remedyId: string; label: string; kind: "court_filing" | "clerk" | "government" | "records"; amount?: number; payableTo: string; notes?: string } & Verified;
 export type Contact = { id: string; name: string; role: string; phone?: string; email?: string; url?: string };
 export type Custodian = { id: string; name: string; type: "Clerk of court" | "Court" | "Law enforcement" | "State repository" | "Other"; locality?: string; contact: string; methods: string[]; notes?: string };
 
@@ -123,6 +135,8 @@ export type Jurisdiction = {
   localityLabel: "Parish" | "County";
   active: boolean;
   localities: Locality[];
+  remedies: Remedy[];
+  criteria: Criterion[];
   classifications: string[];
   rules: JRule[];
   requiredDocs: DocRequirement[];
@@ -199,6 +213,8 @@ export type Screening = {
   missingInfo: string;
   disqualifyingIssues: string;
   legalReviewRequired: boolean;
+  /** Answers to the workflow's own screening criteria (by criterion id). */
+  answers: Record<string, Tri>;
   outcome: ScreeningOutcome;
   reviews: ScreeningReview[];
 };
@@ -252,6 +268,8 @@ export type ExpCase = {
   clientId: string;
   jurisdictionId: string;
   state: string;
+  /** The single workflow this case follows (e.g. Texas expunction OR Texas nondisclosure — never both). */
+  remedyId?: string;
   localityId?: string;
   locality: string;
   arrestingAgency: string;
@@ -336,7 +354,8 @@ export type ExpMatter = {
 export type Complexity = "standard" | "moderate" | "complex";
 export const COMPLEXITY: Record<Complexity, string> = { standard: "Standard", moderate: "Moderate (multiple charges or dockets)", complex: "Complex (multiple courts or unusual history)" };
 export type ServiceType = { id: string; name: string; description: string; active: boolean };
-export type PriceRule = { id: string; serviceTypeId: string; state: string; complexity: Complexity; fee: number };
+/** Price per case by service type × workflow (which implies the jurisdiction) × complexity. "Any" = fallback. */
+export type PriceRule = { id: string; serviceTypeId: string; remedyId: string; complexity: Complexity; fee: number };
 
 export type FeeKind = "service" | "additional" | "discount" | "filing" | "clerk" | "government" | "records" | "third_party";
 export const FEE_KIND: Record<FeeKind, { label: string; group: "mkb" | "passthrough" }> = {
@@ -355,10 +374,10 @@ export const FEE_KIND: Record<FeeKind, { label: string; group: "mkb" | "passthro
 /* ------------------------------------------------------------------ */
 
 export const EXP_ROLES = {
-  owner: { label: "Owner", criminalHistory: true, edit: true, screening: true, billing: true, admin: true },
-  coordinator: { label: "Case coordinator", criminalHistory: true, edit: true, screening: true, billing: false, admin: false },
-  intake: { label: "Intake staff (no criminal-history access)", criminalHistory: false, edit: true, screening: false, billing: false, admin: false },
-  billing: { label: "Billing staff", criminalHistory: false, edit: false, screening: false, billing: true, admin: false },
+  owner: { label: "Owner", criminalHistory: true, edit: true, screening: true, billing: true, admin: true, revealSsn: true },
+  coordinator: { label: "Case coordinator", criminalHistory: true, edit: true, screening: true, billing: false, admin: false, revealSsn: true },
+  intake: { label: "Intake staff (no criminal-history access)", criminalHistory: false, edit: true, screening: false, billing: false, admin: false, revealSsn: false },
+  billing: { label: "Billing staff", criminalHistory: false, edit: false, screening: false, billing: true, admin: false, revealSsn: false },
 } as const;
 export type ExpRole = keyof typeof EXP_ROLES;
 
@@ -366,6 +385,7 @@ export type ExpRole = keyof typeof EXP_ROLES;
 /* Helpers                                                             */
 /* ------------------------------------------------------------------ */
 
+export const SSN_POLICY = "Collected because official forms may require it. Production requirements: field-level encryption at rest in a separate vault, never stored in browser storage or logs, shown masked by default, revealed only by permitted roles, and every view recorded in the audit log.";
 export const mask = (v?: string) => (!v ? "—" : v.length <= 4 ? "••••" : `••••${v.slice(-4)}`);
 export const chargeCount = (c: ExpCase) => c.dockets.reduce((s, d) => s + d.charges.length, 0);
 export const verifiedLabel = (v: Verified) => (v.lastVerifiedAt ? `Verified ${new Date(v.lastVerifiedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` : "Not verified");
