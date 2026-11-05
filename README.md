@@ -60,6 +60,16 @@ npm run build && npm start
   staff) with 60/30/14/7-day reminders; state-specific document checklists; documents and billing on
   the client record with MKB fees separated from government and third-party fees, refunds and
   adjustment history; and a mobile-friendly client portal view.
+- **Expungement Center**: administrative assistance (not legal services) from inquiry through
+  records, screening, document preparation, filing coordination and completion. One matter per
+  client holds any number of separate case records (arrests, dockets, charges, courts, states), each
+  with its own records checklist and request tracker, preliminary screening recorded by a person
+  (approval blocked until records, jurisdiction rules and any required legal review are verified),
+  document preparation with internal and client approval, and filing/court tracking (Submitted,
+  Granted and Completed require verified confirmations). Louisiana and Texas are configured
+  separately with no hard-coded statutes, waiting periods or fees; pricing is configurable by
+  service, jurisdiction and complexity. Includes a guided client intake, a client portal, role
+  previews with restricted criminal-history access, masked identifiers and an access log.
 
 Changes reset on page reload. Nothing is sent to a server.
 

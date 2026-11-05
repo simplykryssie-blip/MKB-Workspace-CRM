@@ -57,6 +57,7 @@ import type { DialogKind, TabKey } from "./ClientProfile";
 import { useTax } from "@/lib/store/tax-store";
 import { useBooks } from "@/lib/store/books-store";
 import { useBiz } from "@/lib/store/biz-store";
+import { useExp } from "@/lib/store/exp-store";
 import { ReturnStatusBadge } from "@/components/tax/TaxBits";
 
 export type Act = {
@@ -310,7 +311,8 @@ function EnrollmentRow({ c, e, compact }: { c: Client; e: Enrollment; compact?: 
   const taxReturn = useTax().returns.find((r) => r.enrollmentId === e.id);
   const booksWs = useBooks().workspaces.find((w) => w.enrollmentId === e.id);
   const bizReq = useBiz().requests.find((r) => r.enrollmentId === e.id);
-  const isTax = e.service === "tax" || !!booksWs || !!bizReq;
+  const expMatter = useExp().matters.find((x) => x.enrollmentId === e.id);
+  const isTax = e.service === "tax" || !!booksWs || !!bizReq || !!expMatter;
   const setStatus = (s: Enrollment["status"]) => {
     store.setEnrollmentStatus(c.id, e.id, s);
     toast(`Status set to "${enrollmentStatus[s].label}"`);
@@ -381,8 +383,10 @@ function EnrollmentRow({ c, e, compact }: { c: Client; e: Enrollment; compact?: 
       )}
       {isTax && (
         <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
-          <span className="mr-auto text-[12px] text-muted">{bizReq ? `Managed in Business Services as ${bizReq.number}.` : booksWs ? "Monthly close is managed in the Bookkeeping workspace." : "Workflow is managed in the Tax Preparation Center."}</span>
-          {bizReq ? (
+          <span className="mr-auto text-[12px] text-muted">{expMatter ? `Managed in Record Expungement as ${expMatter.number}.` : bizReq ? `Managed in Business Services as ${bizReq.number}.` : booksWs ? "Monthly close is managed in the Bookkeeping workspace." : "Workflow is managed in the Tax Preparation Center."}</span>
+          {expMatter ? (
+            <Button size="sm" variant={compact ? "ghost" : "secondary"} href={`/services/record-expungement/matters/${expMatter.id}`}>Open expungement matter</Button>
+          ) : bizReq ? (
             <Button size="sm" variant={compact ? "ghost" : "secondary"} href={`/services/business-services/requests/${bizReq.id}`}>Open service request</Button>
           ) : booksWs ? (
             <Button size="sm" variant={compact ? "ghost" : "secondary"} href={`/services/bookkeeping/${booksWs.id}`}>Open bookkeeping workspace</Button>

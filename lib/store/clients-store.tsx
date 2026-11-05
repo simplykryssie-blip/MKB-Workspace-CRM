@@ -317,7 +317,7 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
     },
 
     // Documents ------------------------------------------------------------
-    requestDocument(id: string, d: { name: string; service: ServiceKey; category: string; sensitive: boolean; taxYear?: number; workspaceId?: string; period?: string; entityId?: string; bizRequestId?: string }): string {
+    requestDocument(id: string, d: { name: string; service: ServiceKey; category: string; sensitive: boolean; taxYear?: number; workspaceId?: string; period?: string; entityId?: string; bizRequestId?: string; expMatterId?: string; expCaseId?: string }): string {
       const docId = uid("d");
       up(id, (c) =>
         log(
@@ -328,11 +328,11 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
       );
       return docId;
     },
-    uploadDocument(id: string, d: { name: string; service: ServiceKey; category: string; sensitive: boolean; sizeKb: number; replaces?: string; taxYear?: number; workspaceId?: string; period?: string; by?: "client" | "staff"; entityId?: string; bizRequestId?: string; expiresAt?: string }): string {
+    uploadDocument(id: string, d: { name: string; service: ServiceKey; category: string; sensitive: boolean; sizeKb: number; replaces?: string; taxYear?: number; workspaceId?: string; period?: string; by?: "client" | "staff"; entityId?: string; bizRequestId?: string; expiresAt?: string; expMatterId?: string; expCaseId?: string }): string {
       const docId = d.replaces ?? uid("d");
       const by = d.by ?? "staff";
       up(id, (c) => {
-        const doc: ClientDocument = { id: docId, name: d.name, service: d.service, category: d.category, sensitive: d.sensitive, status: "received", requestedAt: nowIso(), uploadedAt: nowIso(), sizeKb: d.sizeKb, uploadedBy: by, taxYear: d.taxYear, workspaceId: d.workspaceId, period: d.period, entityId: d.entityId, bizRequestId: d.bizRequestId, expiresAt: d.expiresAt };
+        const doc: ClientDocument = { id: docId, name: d.name, service: d.service, category: d.category, sensitive: d.sensitive, status: "received", requestedAt: nowIso(), uploadedAt: nowIso(), sizeKb: d.sizeKb, uploadedBy: by, taxYear: d.taxYear, workspaceId: d.workspaceId, period: d.period, entityId: d.entityId, bizRequestId: d.bizRequestId, expiresAt: d.expiresAt, expMatterId: d.expMatterId, expCaseId: d.expCaseId };
         const documents = d.replaces
           ? c.documents.map((x) => (x.id === d.replaces ? { ...x, status: "received" as const, uploadedAt: nowIso(), sizeKb: d.sizeKb, uploadedBy: by } : x))
           : [doc, ...c.documents];
@@ -362,11 +362,11 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
     },
 
     // Messages ---------------------------------------------------------------
-    sendMessage(id: string, body: string, service?: ServiceKey, opts?: { from?: "client" | "staff"; author?: string; workspaceId?: string; bizRequestId?: string }) {
+    sendMessage(id: string, body: string, service?: ServiceKey, opts?: { from?: "client" | "staff"; author?: string; workspaceId?: string; bizRequestId?: string; expMatterId?: string }) {
       const from = opts?.from ?? "staff";
       up(id, (c) =>
         log(
-          { ...c, messages: [...c.messages, { id: uid("m"), from, author: opts?.author ?? (from === "client" ? c.contactName ?? c.name : "MKB Owner"), body, at: nowIso(), read: from === "staff", service, workspaceId: opts?.workspaceId, bizRequestId: opts?.bizRequestId }] },
+          { ...c, messages: [...c.messages, { id: uid("m"), from, author: opts?.author ?? (from === "client" ? c.contactName ?? c.name : "MKB Owner"), body, at: nowIso(), read: from === "staff", service, workspaceId: opts?.workspaceId, bizRequestId: opts?.bizRequestId, expMatterId: opts?.expMatterId }] },
           "message",
           from === "client" ? "Client sent a message" : "Sent a message",
           from === "client" ? "client" : "staff",
@@ -391,13 +391,13 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
     },
 
     // Invoices -----------------------------------------------------------------
-    createInvoice(id: string, i: { service: ServiceKey; description: string; amount: number; dueAt: string; draft: boolean; taxReturnId?: string; workspaceId?: string; bizRequestId?: string; lines?: Invoice["lines"] }) {
+    createInvoice(id: string, i: { service: ServiceKey; description: string; amount: number; dueAt: string; draft: boolean; taxReturnId?: string; workspaceId?: string; bizRequestId?: string; expMatterId?: string; lines?: Invoice["lines"] }) {
       const number = `INV-${getNextInvoice()}`;
       up(id, (c) =>
         log(
           {
             ...c,
-            invoices: [{ id: uid("i"), number, service: i.service, description: i.description, amount: i.amount, paid: 0, status: i.draft ? "draft" : "open", issuedAt: nowIso(), dueAt: i.dueAt, taxReturnId: i.taxReturnId, workspaceId: i.workspaceId, bizRequestId: i.bizRequestId, lines: i.lines }, ...c.invoices],
+            invoices: [{ id: uid("i"), number, service: i.service, description: i.description, amount: i.amount, paid: 0, status: i.draft ? "draft" : "open", issuedAt: nowIso(), dueAt: i.dueAt, taxReturnId: i.taxReturnId, workspaceId: i.workspaceId, bizRequestId: i.bizRequestId, expMatterId: i.expMatterId, lines: i.lines }, ...c.invoices],
           },
           "invoice",
           `${i.draft ? "Drafted" : "Sent"} invoice ${number}`,

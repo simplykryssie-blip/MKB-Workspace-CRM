@@ -62,6 +62,9 @@ export type ClientDocument = {
   expiresAt?: string;
   /** Deliverables: when the file was delivered to the client. */
   deliveredAt?: string;
+  /** Expungement: the client's expungement matter and the specific case the file belongs to. */
+  expMatterId?: string;
+  expCaseId?: string;
 };
 
 export type Message = {
@@ -76,6 +79,8 @@ export type Message = {
   workspaceId?: string;
   /** Business services: which service request a message belongs to. */
   bizRequestId?: string;
+  /** Expungement: which matter a client-visible message belongs to. */
+  expMatterId?: string;
 };
 
 export type Appointment = {
@@ -107,6 +112,8 @@ export type Invoice = {
   workspaceId?: string;
   /** Set for business services invoices — links billing to a service request. */
   bizRequestId?: string;
+  /** Set for expungement invoices — links billing to the client's expungement matter. */
+  expMatterId?: string;
   /** Itemized lines. Business services separate MKB fees from pass-through government and third-party fees. */
   lines?: InvoiceLine[];
   paidAt?: string;
@@ -114,7 +121,7 @@ export type Invoice = {
   adjustments?: InvoiceAdjustment[];
 };
 
-export type InvoiceLine = { label: string; amount: number; kind: "service" | "additional" | "filing" | "third_party" | "discount" };
+export type InvoiceLine = { label: string; amount: number; kind: "service" | "additional" | "filing" | "third_party" | "discount" | "clerk" | "government" | "records" };
 export type InvoiceAdjustment = { id: string; kind: "refund" | "credit" | "correction"; amount: number; note: string; at: string; byId: string };
 
 export type Signature = {

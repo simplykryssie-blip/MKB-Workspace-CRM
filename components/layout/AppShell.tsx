@@ -11,6 +11,7 @@ import { LeadsProvider } from "@/lib/store/leads-store";
 import { TaxProvider } from "@/lib/store/tax-store";
 import { BooksProvider } from "@/lib/store/books-store";
 import { BizProvider } from "@/lib/store/biz-store";
+import { ExpProvider } from "@/lib/store/exp-store";
 import { ToastProvider } from "@/components/ui/Toast";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -39,6 +40,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <TaxProvider>
     <BooksProvider>
     <BizProvider>
+    <ExpProvider>
     <ToastProvider>
     <div className="flex min-h-screen">
       <Sidebar collapsed={collapsed} onToggleCollapsed={toggle} mobileOpen={mobileOpen} onCloseMobile={() => setMobileOpen(false)} />
@@ -55,6 +57,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
     </div>
     </ToastProvider>
+    </ExpProvider>
     </BizProvider>
     </BooksProvider>
     </TaxProvider>

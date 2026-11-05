@@ -149,13 +149,16 @@ export const STATUS_META: Record<RequestStatus, { tone: "neutral" | "info" | "su
   Cancelled: { tone: "neutral", owner: "Done", client: "Cancelled" },
 };
 
-export type QuoteLineKind = "service" | "additional" | "filing" | "third_party" | "discount";
+export type QuoteLineKind = "service" | "additional" | "filing" | "third_party" | "discount" | "clerk" | "government" | "records";
 export const LINE_KIND: Record<QuoteLineKind, { label: string; group: "mkb" | "passthrough" }> = {
   service: { label: "MKB service fee", group: "mkb" },
   additional: { label: "Additional MKB service fee", group: "mkb" },
   discount: { label: "Discount", group: "mkb" },
   filing: { label: "State / government filing fee", group: "passthrough" },
   third_party: { label: "Third-party fee", group: "passthrough" },
+  clerk: { label: "Clerk fee", group: "passthrough" },
+  government: { label: "Government fee", group: "passthrough" },
+  records: { label: "Records request fee", group: "passthrough" },
 };
 export type QuoteLine = { id: string; kind: QuoteLineKind; label: string; amount: number };
 export type Quote = { status: "draft" | "sent" | "accepted" | "declined"; lines: QuoteLine[]; sentAt?: string; acceptedAt?: string; note?: string };

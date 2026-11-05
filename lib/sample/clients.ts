@@ -22,6 +22,8 @@ import type {
 import { SAMPLE_NOW } from "./time";
 import { BOOKS_SEEDS, booksClientRecords } from "./books-seed";
 import { bizClientRecords, bizEnrollmentState, bizRequestsFor } from "./biz-seed";
+import { EXP_CASES, expClientRecords, expRequestsFor } from "./exp-seed";
+import { matterEnrollment, EXP_STAGES } from "@/lib/expunge/derive";
 import { FLOW as BIZ_FLOW, quoteTotal } from "@/lib/biz/config";
 export { SAMPLE_NOW };
 
@@ -41,7 +43,8 @@ export const STAGES: Record<ServiceKey, string[]> = {
   books: ["Client Entry in Progress", "Ready for MKB Review", "MKB Reviewing", "Reconciliation in Progress", "Client Follow-up Needed", "MKB Final Review", "Reports Ready", "Month Closed"],
   // Business services engagements mirror their service request status (see lib/biz/config.ts).
   biz: [...BIZ_FLOW],
-  expunge: ["Intake", "Records requested", "Eligibility review", "Petition drafted", "Filed", "Hearing", "Order granted"],
+  // Expungement engagements mirror the client's expungement matter (see lib/expunge/derive.ts).
+  expunge: [...EXP_STAGES],
 };
 
 const d = (daysFromNow: number, hour = 10, min = 0) => {
@@ -401,7 +404,8 @@ function build(seed: Seed, ci: number): Client {
   // Business-services engagements come from the client's service requests (one per request).
   const bizReqs = bizRequestsFor(seed.id);
   const enrollments: Enrollment[] = [
-    ...seed.enrollments.map((e, i) => ({ ...e, id: `${seed.id}-e${i + 1}` })).filter((e) => e.service !== "biz"),
+    ...seed.enrollments.map((e, i) => ({ ...e, id: `${seed.id}-e${i + 1}` })).filter((e) => e.service !== "biz" && e.service !== "expunge"),
+    ...expRequestsFor(seed.id).map((m): Enrollment => ({ id: `${seed.id}-ex${m.number.slice(4)}`, service: "expunge", ...matterEnrollment(m, EXP_CASES.filter((c) => c.matterId === m.id)), staffId: m.assignments["Intake review"], startedAt: m.createdAt, fee: 0 })),
     ...bizReqs.map((r): Enrollment => ({ id: r.enrollmentId!, service: "biz", title: `${r.serviceName} — ${r.businessName}`, ...bizEnrollmentState(r.status, r.holdFrom), staffId: r.assignedTo, startedAt: r.createdAt, dueAt: r.dueAt, fee: quoteTotal(r.quote) })),
   ];
   const documents: ClientDocument[] = [];
@@ -412,6 +416,12 @@ function build(seed: Seed, ci: number): Client {
   const notes: Note[] = [];
   const activity: ActivityItem[] = [];
   let inv = 1030 + ci * 3;
+  if (expRequestsFor(seed.id).length) {
+    const rec = expClientRecords(seed.id);
+    documents.push(...rec.documents);
+    invoices.push(...rec.invoices);
+    messages.push(...rec.messages);
+  }
   if (bizReqs.length) {
     const rec = bizClientRecords(seed.id);
     documents.push(...rec.documents);
@@ -436,7 +446,7 @@ function build(seed: Seed, ci: number): Client {
       invoices.push(...rec.invoices);
       messages.push(...rec.messages);
     }
-    const bizReq = e.service === "biz";
+    const bizReq = e.service === "biz" || e.service === "expunge";
     (booksSeed || bizReq ? [] : tpl).forEach((t, ti) => {
       const done = e.status === "complete" || ti / tpl.length < e.progress / 100 + 0.15;
       // Staff-produced documents (filed articles, petition drafts) are never "requested" from the client.
