@@ -26,19 +26,27 @@ export function Modal({
   size?: "md" | "lg";
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  // Runs only when the dialog opens/closes — never re-focuses while someone is typing.
   useEffect(() => {
     if (!open) return;
     const prev = document.activeElement as HTMLElement | null;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && closeRef.current();
     document.addEventListener("keydown", onKey);
     document.body.style.overflow = "hidden";
-    setTimeout(() => ref.current?.querySelector<HTMLElement>("input, select, textarea, button:not([data-close])")?.focus(), 30);
+    const t = setTimeout(() => {
+      const box = ref.current;
+      if (!box || box.contains(document.activeElement)) return; // user already moved into a field
+      box.querySelector<HTMLElement>("input, select, textarea, button:not([data-close])")?.focus();
+    }, 30);
     return () => {
+      clearTimeout(t);
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = "";
       prev?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open || typeof document === "undefined") return null;
   return createPortal(

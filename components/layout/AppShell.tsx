@@ -8,6 +8,7 @@ import { Topbar } from "./Topbar";
 import { ThemeToggle } from "./ThemeToggle";
 import { ClientsProvider } from "@/lib/store/clients-store";
 import { LeadsProvider } from "@/lib/store/leads-store";
+import { TaxProvider } from "@/lib/store/tax-store";
 import { ToastProvider } from "@/components/ui/Toast";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -33,6 +34,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <ClientsProvider>
     <LeadsProvider>
+    <TaxProvider>
     <ToastProvider>
     <div className="flex min-h-screen">
       <Sidebar collapsed={collapsed} onToggleCollapsed={toggle} mobileOpen={mobileOpen} onCloseMobile={() => setMobileOpen(false)} />
@@ -49,6 +51,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
     </div>
     </ToastProvider>
+    </TaxProvider>
     </LeadsProvider>
     </ClientsProvider>
   );

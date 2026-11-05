@@ -31,7 +31,8 @@ export const staffById = (id: string) => STAFF.find((s) => s.id === id)!;
 
 /** Workflow stages per division (also used by the service workspaces). */
 export const STAGES: Record<ServiceKey, string[]> = {
-  tax: ["Intake", "Documents", "Preparation", "Review", "Client approval", "E-filed", "Accepted"],
+  // Tax engagements follow the return workflow ("Rejected" is a status, not a stage).
+  tax: ["Intake", "Awaiting Documents", "Ready for Review", "In Preparation", "Awaiting Client Approval", "Ready to E-file", "Submitted", "Accepted", "Completed"],
   books: ["Onboarding", "Collecting statements", "Categorizing", "Reconciliation", "Monthly close", "Reports delivered"],
   biz: ["Intake", "Name search", "Filing submitted", "State approved", "EIN obtained", "Complete"],
   expunge: ["Intake", "Records requested", "Eligibility review", "Petition drafted", "Filed", "Hearing", "Order granted"],
@@ -49,6 +50,8 @@ type Seed = Omit<
   "documents" | "messages" | "appointments" | "invoices" | "signatures" | "notes" | "activity" | "enrollments"
 > & {
   enrollments: Omit<Enrollment, "id">[];
+  /** Completed prior-year tax returns (paid in full) — creates history + paid invoices. */
+  pastTax?: { year: number; fee: number }[];
   extraNotes?: Omit<Note, "id">[];
   extraMessages?: Omit<Message, "id">[];
 };
@@ -71,8 +74,9 @@ const SEEDS: Seed[] = [
     source: "Referral",
     since: d(-720),
     lastActivityAt: d(0, 14, 48),
+    pastTax: [{ year: 2024, fee: 400 }, { year: 2023, fee: 375 }],
     enrollments: [
-      { service: "tax", title: "2025 Individual return (1040)", stage: "Preparation", progress: 45, status: "active", staffId: "s-al", startedAt: d(-40), dueAt: d(161), fee: 425 },
+      { service: "tax", title: "2025 Individual return (1040)", stage: "In Preparation", progress: 38, status: "active", staffId: "s-al", startedAt: d(-40), fee: 425 },
       { service: "expunge", title: "Record review — 1 county", stage: "Eligibility review", progress: 35, status: "in_review", staffId: "s-jp", startedAt: d(-18), fee: 750 },
     ],
     extraMessages: [
@@ -99,9 +103,10 @@ const SEEDS: Seed[] = [
     source: "Website",
     since: d(-540),
     lastActivityAt: d(0, 14, 12),
+    pastTax: [{ year: 2025, fee: 1150 }],
     enrollments: [
       { service: "books", title: "Monthly bookkeeping — October", stage: "Reconciliation", progress: 60, status: "active", staffId: "s-rt", startedAt: d(-5), dueAt: d(10), fee: 650 },
-      { service: "tax", title: "2025 Business return (1065)", stage: "Intake", progress: 10, status: "waiting_on_client", staffId: "s-al", startedAt: d(-3), dueAt: d(130), fee: 1200 },
+      { service: "tax", title: "2026 Business return (1065)", stage: "Intake", progress: 5, status: "active", staffId: "s-al", startedAt: d(-3), fee: 1200 },
     ],
   },
   {
@@ -189,7 +194,7 @@ const SEEDS: Seed[] = [
     since: d(-1100),
     lastActivityAt: d(-4),
     enrollments: [
-      { service: "tax", title: "2024 Amended return (1040-X)", stage: "E-filed", progress: 85, status: "active", staffId: "s-al", startedAt: d(-60), fee: 425 },
+      { service: "tax", title: "2024 Amended return (1040-X)", stage: "Submitted", progress: 75, status: "active", staffId: "s-al", startedAt: d(-60), fee: 425 },
     ],
   },
   {
@@ -202,7 +207,7 @@ const SEEDS: Seed[] = [
     preferredContact: "Email",
     address: { line1: "1 Demo Plaza, Floor 2", city: "Riverton", state: "GA", zip: "30001" },
     business: { legalName: "Bluebird Sample Inc.", entityType: "S-Corp", state: "GA", formedAt: "2016-07-15", einLast4: "0191", responsibleParty: { name: "Lee Bluebird", title: "President", taxIdType: "SSN", taxIdLast4: "7049" }, industry: "Retail", fiscalYearEnd: "December" },
-    staffIds: ["s-rt"],
+    staffIds: ["s-rt", "s-al"],
     status: "active",
     portal: "active",
     tags: ["Monthly retainer", "Sales tax"],
@@ -210,6 +215,7 @@ const SEEDS: Seed[] = [
     since: d(-860),
     lastActivityAt: d(-2),
     enrollments: [
+      { service: "tax", title: "2025 Business return (1120-S)", stage: "Submitted", progress: 75, status: "on_hold", staffId: "s-al", startedAt: d(-80), fee: 1000 },
       { service: "books", title: "Monthly bookkeeping — October", stage: "Collecting statements", progress: 25, status: "waiting_on_client", staffId: "s-rt", startedAt: d(-5), dueAt: d(10), fee: 1200 },
       { service: "biz", title: "Annual report filing (state)", stage: "Complete", progress: 100, status: "complete", staffId: "s-mk", startedAt: d(-90), fee: 150 },
     ],
@@ -224,7 +230,7 @@ const SEEDS: Seed[] = [
     preferredContact: "Portal",
     address: { line1: "33 Example Wharf", city: "Bayview", state: "GA", zip: "30005" },
     business: { legalName: "Harbor Demo Bakery LLC", entityType: "LLC", state: "GA", formedAt: "2022-02-01", einLast4: "0155", responsibleParty: { name: "Morgan Harbor", title: "Owner", taxIdType: "SSN", taxIdLast4: "7056" }, industry: "Food & beverage", fiscalYearEnd: "December" },
-    staffIds: ["s-rt", "s-mk"],
+    staffIds: ["s-rt", "s-mk", "s-al"],
     status: "active",
     portal: "active",
     tags: ["Licenses", "Monthly retainer"],
@@ -232,6 +238,7 @@ const SEEDS: Seed[] = [
     since: d(-400),
     lastActivityAt: d(-1),
     enrollments: [
+      { service: "tax", title: "2025 Business return (1065)", stage: "Ready to E-file", progress: 63, status: "active", staffId: "s-al", startedAt: d(-60), fee: 900 },
       { service: "books", title: "Monthly bookkeeping — October", stage: "Monthly close", progress: 80, status: "in_review", staffId: "s-rt", startedAt: d(-5), dueAt: d(10), fee: 550 },
       { service: "biz", title: "Health permit renewal", stage: "Filing submitted", progress: 60, status: "active", staffId: "s-mk", startedAt: d(-14), dueAt: d(25), fee: 175 },
     ],
@@ -252,8 +259,9 @@ const SEEDS: Seed[] = [
     source: "Referral",
     since: d(-380),
     lastActivityAt: d(-3),
+    pastTax: [{ year: 2025, fee: 550 }],
     enrollments: [
-      { service: "tax", title: "2025 Individual return (1040 + Sch C)", stage: "Documents", progress: 25, status: "waiting_on_client", staffId: "s-al", startedAt: d(-20), dueAt: d(161), fee: 650 },
+      { service: "tax", title: "2026 Individual return (1040 + Sch C)", stage: "Awaiting Documents", progress: 13, status: "waiting_on_client", staffId: "s-al", startedAt: d(-20), fee: 650 },
       { service: "books", title: "Quarterly bookkeeping — Q3", stage: "Reports delivered", progress: 100, status: "complete", staffId: "s-rt", startedAt: d(-35), fee: 300 },
     ],
   },
@@ -265,7 +273,7 @@ const SEEDS: Seed[] = [
     phone: "(555) 010-0109",
     preferredContact: "Text",
     address: { line1: "90 Sample Hollow", city: "Fairview", state: "GA", zip: "30003" },
-    staffIds: ["s-jp"],
+    staffIds: ["s-jp", "s-al"],
     status: "active",
     portal: "invited",
     tags: [],
@@ -273,6 +281,7 @@ const SEEDS: Seed[] = [
     since: d(-9),
     lastActivityAt: d(-5),
     enrollments: [
+      { service: "tax", title: "2025 Individual return (1040)", stage: "Ready for Review", progress: 25, status: "in_review", staffId: "s-al", startedAt: d(-14), fee: 325 },
       { service: "expunge", title: "Record review — 3 counties", stage: "Records requested", progress: 20, status: "waiting_on_client", staffId: "s-jp", startedAt: d(-9), fee: 950 },
     ],
   },
@@ -294,7 +303,7 @@ const SEEDS: Seed[] = [
     since: d(-1400),
     lastActivityAt: d(-120),
     enrollments: [
-      { service: "tax", title: "2024 Business return (1120-S)", stage: "Accepted", progress: 100, status: "complete", staffId: "s-al", startedAt: d(-230), fee: 1100 },
+      { service: "tax", title: "2025 Business return (1120-S)", stage: "Completed", progress: 100, status: "complete", staffId: "s-al", startedAt: d(-230), fee: 1100 },
     ],
   },
   {
@@ -313,8 +322,9 @@ const SEEDS: Seed[] = [
     source: "Referral",
     since: d(-200),
     lastActivityAt: d(-1, 11),
+    pastTax: [{ year: 2024, fee: 400 }],
     enrollments: [
-      { service: "tax", title: "2025 Individual return (1040)", stage: "Review", progress: 70, status: "in_review", staffId: "s-al", startedAt: d(-28), dueAt: d(161), fee: 425 },
+      { service: "tax", title: "2025 Individual return (1040)", stage: "Awaiting Client Approval", progress: 50, status: "waiting_on_client", staffId: "s-al", startedAt: d(-28), fee: 425 },
       { service: "expunge", title: "Record restriction — 1 case", stage: "Filed", progress: 75, status: "active", staffId: "s-jp", startedAt: d(-75), fee: 750 },
       { service: "biz", title: "Sole prop → LLC conversion", stage: "Name search", progress: 25, status: "active", staffId: "s-mk", startedAt: d(-6), fee: 599 },
     ],
@@ -329,7 +339,7 @@ const SEEDS: Seed[] = [
 const DOC_TEMPLATES: Record<ServiceKey, { name: string; category: string; sensitive: boolean }[]> = {
   tax: [
     { name: "Government photo ID", category: "Identity", sensitive: true },
-    { name: "W-2 — primary employer", category: "Income", sensitive: false },
+    { name: "W-2 forms (all employers)", category: "Income", sensitive: false },
     { name: "1099-NEC / 1099-K", category: "Income", sensitive: false },
     { name: "Prior-year tax return", category: "Tax return", sensitive: true },
     { name: "Tax organizer (completed)", category: "Organizer", sensitive: false },
@@ -353,6 +363,18 @@ const DOC_TEMPLATES: Record<ServiceKey, { name: string; category: string; sensit
     { name: "Petition draft for review", category: "Filings", sensitive: true },
   ],
 };
+
+/** Business returns need different documents than individual returns. */
+const BIZ_TAX_DOCS: { name: string; category: string; sensitive: boolean }[] = [
+  { name: "EIN confirmation letter (CP 575 / 147C)", category: "Tax ID", sensitive: true },
+  { name: "Year-end profit & loss and balance sheet", category: "Financials", sensitive: false },
+  { name: "Prior-year business return", category: "Tax return", sensitive: true },
+  { name: "Payroll reports (941 / 940 / W-3)", category: "Payroll", sensitive: false },
+  { name: "Responsible party photo ID", category: "Identity", sensitive: true },
+];
+
+/** "2025 Individual return (1040)" → 2025 */
+export const yearFromTitle = (title: string) => Number(/^(20\d\d)/.exec(title)?.[1] ?? 0) || undefined;
 
 const SIGN_TEMPLATES: Record<ServiceKey, string[]> = {
   tax: ["Engagement letter — tax preparation", "Form 8879 (e-file authorization)"],
@@ -386,7 +408,9 @@ function build(seed: Seed, ci: number): Client {
     const at = (frac: number, h = 10) => d(-Math.round(daysAgo * (1 - frac)), h);
 
     // Documents — earlier docs received, later ones still requested, based on progress.
-    const tpl = DOC_TEMPLATES[e.service];
+    const tpl = e.service === "tax" && seed.type === "business" ? BIZ_TAX_DOCS : DOC_TEMPLATES[e.service];
+    const taxYear = e.service === "tax" ? yearFromTitle(e.title) : undefined;
+    const taxReturnId = taxYear ? `TR-${seed.id}-${taxYear}` : undefined;
     tpl.forEach((t, ti) => {
       const done = e.status === "complete" || ti / tpl.length < e.progress / 100 + 0.15;
       // Staff-produced documents (filed articles, petition drafts) are never "requested" from the client.
@@ -404,12 +428,13 @@ function build(seed: Seed, ci: number): Client {
         uploadedAt: done ? at(0.1 + (ti / tpl.length) * 0.6, 9 + ti) : undefined,
         sizeKb: done ? 180 + ((ci * 37 + ti * 91) % 2400) : undefined,
         uploadedBy: done ? (staffMade ? "staff" : "client") : undefined,
+        taxYear,
       });
     });
 
     // Signatures
     SIGN_TEMPLATES[e.service].forEach((doc, si) => {
-      const needsLater = si > 0 && stageIdx < STAGES[e.service].length - 2 && e.status !== "complete";
+      const needsLater = si > 0 && e.status !== "complete" && (e.service === "tax" ? stageIdx < STAGES.tax.indexOf("Ready to E-file") : stageIdx < STAGES[e.service].length - 2);
       signatures.push({
         id: `${e.id}-s${si + 1}`,
         document: doc,
@@ -456,6 +481,7 @@ function build(seed: Seed, ci: number): Client {
       status: "paid",
       issuedAt: at(0.02),
       dueAt: at(0.1),
+      taxReturnId,
     });
     if (e.progress >= 50 || e.status === "complete") {
       const balance = e.fee - deposit;
@@ -471,6 +497,7 @@ function build(seed: Seed, ci: number): Client {
         status: st,
         issuedAt: at(0.6),
         dueAt: st === "overdue" ? d(-6) : d(14),
+        taxReturnId,
       });
     }
 
@@ -494,6 +521,22 @@ function build(seed: Seed, ci: number): Client {
       .forEach((x) => activity.push({ id: `${x.id}-x`, kind: "payment", text: `Paid ${x.number}`, at: x.dueAt < SAMPLE_NOW.toISOString() ? x.dueAt : x.issuedAt, actor: "client" }));
   });
 
+  (seed.pastTax ?? []).forEach((pt) => {
+    const issued = new Date(`${pt.year + 1}-02-10T10:00:00`).toISOString();
+    invoices.push({
+      id: `${seed.id}-pt${pt.year}`,
+      number: `INV-${pt.year}${seed.id.slice(-2)}`,
+      service: "tax",
+      description: `${pt.year} ${seed.type === "business" ? "Business" : "Individual"} return — paid in full`,
+      amount: pt.fee,
+      paid: pt.fee,
+      status: "paid",
+      issuedAt: issued,
+      dueAt: issued,
+      taxReturnId: `TR-${seed.id}-${pt.year}`,
+    });
+  });
+
   (seed.extraMessages ?? []).forEach((m, i) => {
     messages.push({ ...m, id: `${seed.id}-xm${i}` });
     activity.push({ id: `${seed.id}-xma${i}`, kind: "message", text: "Sent a message", at: m.at, actor: "client" });
@@ -507,7 +550,7 @@ function build(seed: Seed, ci: number): Client {
   });
 
   const byDateDesc = <T extends { at: string }>(a: T, b: T) => b.at.localeCompare(a.at);
-  const { extraMessages: _m, extraNotes: _n, ...rest } = seed;
+  const { extraMessages: _m, extraNotes: _n, pastTax: _p, ...rest } = seed;
   return {
     ...rest,
     enrollments,

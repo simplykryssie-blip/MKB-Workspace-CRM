@@ -33,6 +33,13 @@ npm run build && npm start
   follow-up reminders, notes, activity log, status and priority, and lead → client conversion
   that carries over contact, business info, notes, staff, source and full history.
 
+- **Tax Preparation Center**: dashboard metrics, individual and business returns per tax year,
+  organizers that drive the document checklist, missing-document tracking, preparer/reviewer
+  assignment with sign-off, the full return status workflow, e-file submissions with
+  acknowledgements and rejection codes, fee schedule, pricing, invoices and balances, and a
+  permission preview. Returns link to the central client profile (documents, invoices,
+  engagement and activity live there).
+
 Changes reset on page reload. Nothing is sent to a server.
 
 ## Roadmap

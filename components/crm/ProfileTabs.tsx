@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
@@ -53,6 +54,8 @@ import { formatPhone, formatZip, isoToDob, maskDOB, maskEIN, maskTaxId } from "@
 import type { ActivityKind, Client, ClientDocument, Enrollment, ServiceKey } from "@/lib/types";
 import { downloadPlaceholder } from "./dialogs";
 import type { DialogKind, TabKey } from "./ClientProfile";
+import { useTax } from "@/lib/store/tax-store";
+import { ReturnStatusBadge } from "@/components/tax/TaxBits";
 
 export type Act = {
   go: (k: TabKey) => void;
@@ -193,6 +196,8 @@ export function OverviewTab({ c, act }: { c: Client; act: Act }) {
           </Card>
         )}
 
+        <TaxReturnsCard c={c} />
+
         <Card>
           <CardHeader title="Recent activity" action={<Button size="sm" variant="ghost" onClick={() => act.go("activity")}>View all</Button>} />
           <Timeline items={c.activity.slice(0, 5)} />
@@ -233,7 +238,7 @@ export function missingTaxInfo(c: Client): string[] {
 }
 
 /** Masked identifier with an audited, auto-hiding reveal. */
-function Sensitive({ c, field, masked }: { c: Client; field: "taxId" | "ein" | "dob" | "rpTaxId"; masked: string }) {
+export function Sensitive({ c, field, masked }: { c: Client; field: "taxId" | "ein" | "dob" | "rpTaxId"; masked: string }) {
   const store = useClients();
   const toast = useToast();
   const [shown, setShown] = useState<string | null>(null);
@@ -263,6 +268,28 @@ function Sensitive({ c, field, masked }: { c: Client; field: "taxId" | "ein" | "
   );
 }
 
+/** Every tax year for this client, newest first — each links to its return. */
+function TaxReturnsCard({ c }: { c: Client }) {
+  const returns = useTax().returns.filter((r) => r.clientId === c.id).sort((a, b) => b.taxYear - a.taxYear);
+  if (!returns.length) return null;
+  return (
+    <Card>
+      <CardHeader title="Tax returns" subtitle="One return per tax year" action={<Button size="sm" variant="ghost" href="/services/tax-preparation">Tax Center</Button>} />
+      <ul className="px-3 pb-3 sm:px-4">
+        {returns.map((r) => (
+          <li key={r.id}>
+            <Link href={`/services/tax-preparation/returns/${r.id}`} className="flex items-center gap-3 rounded-xl px-2 py-2.5 hover:bg-surface-hover">
+              <span className="w-12 text-[14px] font-bold text-ink tabular-nums">{r.taxYear}</span>
+              <span className="min-w-0 flex-1 truncate text-[13px] text-ink-2">{r.form}</span>
+              <ReturnStatusBadge status={r.status} />
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* Services                                                            */
 /* ------------------------------------------------------------------ */
@@ -278,6 +305,8 @@ function EnrollmentRow({ c, e, compact }: { c: Client; e: Enrollment; compact?: 
     store.advanceStage(c.id, e.id);
     toast(last ? "Already at the final stage" : `Moved to "${stages[idx + 1]}"`, last ? "info" : "success");
   };
+  const taxReturn = useTax().returns.find((r) => r.enrollmentId === e.id);
+  const isTax = e.service === "tax";
   const setStatus = (s: Enrollment["status"]) => {
     store.setEnrollmentStatus(c.id, e.id, s);
     toast(`Status set to "${enrollmentStatus[s].label}"`);
@@ -302,7 +331,7 @@ function EnrollmentRow({ c, e, compact }: { c: Client; e: Enrollment; compact?: 
               <div className="font-semibold text-ink tabular-nums">{usd(e.fee)}</div>
               <div className="text-[12px] text-muted">Fee</div>
             </div>
-            {e.status !== "complete" && (
+            {e.status !== "complete" && !isTax && (
               <Menu
                 label={`Actions for ${e.title}`}
                 trigger={({ toggle }) => (
@@ -346,7 +375,15 @@ function EnrollmentRow({ c, e, compact }: { c: Client; e: Enrollment; compact?: 
           })}
         </ol>
       )}
-      {!compact && e.status !== "complete" && (
+      {isTax && (
+        <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+          <span className="mr-auto text-[12px] text-muted">Workflow is managed in the Tax Preparation Center.</span>
+          <Button size="sm" variant={compact ? "ghost" : "secondary"} href={taxReturn ? `/services/tax-preparation/returns/${taxReturn.id}` : "/services/tax-preparation"}>
+            {taxReturn ? "Open return in Tax Center" : "Set up return in Tax Center"}
+          </Button>
+        </div>
+      )}
+      {!compact && e.status !== "complete" && !isTax && (
         <div className="mt-4 flex justify-end">
           <Button size="sm" icon={SkipForward} onClick={advance}>
             {idx + 1 === stages.length - 1 ? `Complete: "${stages[idx + 1]}"` : `Next stage: "${stages[idx + 1]}"`}
@@ -454,7 +491,7 @@ export function DocumentsTab({ c, act }: { c: Client; act: Act }) {
                     {d.sensitive && <Badge tone="danger" icon={ShieldAlert}>Restricted</Badge>}
                   </div>
                   <div className="mt-0.5 text-[12px] text-muted">
-                    {d.category} · {d.uploadedAt && !outstanding ? `Uploaded ${relTime(d.uploadedAt)} by ${d.uploadedBy}${d.sizeKb ? ` · ${fileSize(d.sizeKb)}` : ""}` : `Requested ${relTime(d.requestedAt)}`}
+                    {d.taxYear ? `TY ${d.taxYear} · ` : ""}{d.category} · {d.uploadedAt && !outstanding ? `Uploaded ${relTime(d.uploadedAt)} by ${d.uploadedBy}${d.sizeKb ? ` · ${fileSize(d.sizeKb)}` : ""}` : `Requested ${relTime(d.requestedAt)}`}
                   </div>
                 </div>
                 <ServiceTag service={d.service} short />

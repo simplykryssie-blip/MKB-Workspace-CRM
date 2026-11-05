@@ -229,12 +229,18 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
       return getVault()[id]?.[field];
     },
 
+    /** Record an event on the client's activity history (used by service workspaces). */
+    logActivity(id: string, kind: ActivityKind, text: string, actor: ActivityItem["actor"] = "staff") {
+      up(id, (c) => log(c, kind, text, actor));
+    },
+
     sendInvite(id: string) {
       up(id, (c) => log({ ...c, portal: c.portal === "active" ? "active" : "invited" }, "message", "Portal invitation sent", "system"));
     },
 
     // Services ------------------------------------------------------------
-    enroll(id: string, e: { service: ServiceKey; title: string; staffId: string; fee: number; dueAt?: string }) {
+    enroll(id: string, e: { service: ServiceKey; title: string; staffId: string; fee: number; dueAt?: string }): string {
+      const eid = uid("e");
       up(id, (c) =>
         log(
           {
@@ -242,13 +248,38 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
             staffIds: c.staffIds.includes(e.staffId) ? c.staffIds : [...c.staffIds, e.staffId],
             enrollments: [
               ...c.enrollments,
-              { id: uid("e"), ...e, stage: STAGES[e.service][0], progress: 5, status: "active", startedAt: nowIso() },
+              { id: eid, ...e, stage: STAGES[e.service][0], progress: 5, status: "active", startedAt: nowIso() },
             ],
           },
           "intake",
           `Enrolled in ${e.title}`,
         ),
       );
+      return eid;
+    },
+
+    /** Keep a client's Tax Preparation engagement in step with its return's status. */
+    syncTaxEnrollment(id: string, enrollmentId: string, returnStatus: string) {
+      const stages = STAGES.tax;
+      up(id, (c) => ({
+        ...c,
+        enrollments: c.enrollments.map((e): Enrollment => {
+          if (e.id !== enrollmentId) return e;
+          const rejected = returnStatus === "Rejected";
+          const stage = rejected ? "Submitted" : stages.includes(returnStatus) ? returnStatus : e.stage;
+          const i = stages.indexOf(stage);
+          const status: Enrollment["status"] = rejected
+            ? "on_hold"
+            : returnStatus === "Completed"
+              ? "complete"
+              : returnStatus === "Awaiting Documents" || returnStatus === "Awaiting Client Approval"
+                ? "waiting_on_client"
+                : returnStatus === "Ready for Review"
+                  ? "in_review"
+                  : "active";
+          return { ...e, stage, status, progress: Math.max(5, Math.round((i / (stages.length - 1)) * 100)) };
+        }),
+      }));
     },
 
     advanceStage(id: string, enrollmentId: string) {
@@ -281,23 +312,27 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
     },
 
     // Documents ------------------------------------------------------------
-    requestDocument(id: string, d: { name: string; service: ServiceKey; category: string; sensitive: boolean }) {
+    requestDocument(id: string, d: { name: string; service: ServiceKey; category: string; sensitive: boolean; taxYear?: number }): string {
+      const docId = uid("d");
       up(id, (c) =>
         log(
-          { ...c, documents: [{ id: uid("d"), ...d, status: "requested", requestedAt: nowIso() }, ...c.documents] },
+          { ...c, documents: [{ id: docId, ...d, status: "requested", requestedAt: nowIso() }, ...c.documents] },
           "upload",
-          `Requested "${d.name}" from client`,
+          `Requested "${d.name}"${d.taxYear ? ` (TY ${d.taxYear})` : ""} from client`,
         ),
       );
+      return docId;
     },
-    uploadDocument(id: string, d: { name: string; service: ServiceKey; category: string; sensitive: boolean; sizeKb: number; replaces?: string }) {
+    uploadDocument(id: string, d: { name: string; service: ServiceKey; category: string; sensitive: boolean; sizeKb: number; replaces?: string; taxYear?: number }): string {
+      const docId = d.replaces ?? uid("d");
       up(id, (c) => {
-        const doc: ClientDocument = { id: uid("d"), name: d.name, service: d.service, category: d.category, sensitive: d.sensitive, status: "received", requestedAt: nowIso(), uploadedAt: nowIso(), sizeKb: d.sizeKb, uploadedBy: "staff" };
+        const doc: ClientDocument = { id: docId, name: d.name, service: d.service, category: d.category, sensitive: d.sensitive, status: "received", requestedAt: nowIso(), uploadedAt: nowIso(), sizeKb: d.sizeKb, uploadedBy: "staff", taxYear: d.taxYear };
         const documents = d.replaces
           ? c.documents.map((x) => (x.id === d.replaces ? { ...x, status: "received" as const, uploadedAt: nowIso(), sizeKb: d.sizeKb, uploadedBy: "staff" as const } : x))
           : [doc, ...c.documents];
         return log({ ...c, documents }, "upload", `Uploaded "${d.name}"`);
       });
+      return docId;
     },
     setDocStatus(id: string, docId: string, status: ClientDocument["status"]) {
       up(id, (c) => {
@@ -337,13 +372,13 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
     },
 
     // Invoices -----------------------------------------------------------------
-    createInvoice(id: string, i: { service: ServiceKey; description: string; amount: number; dueAt: string; draft: boolean }) {
+    createInvoice(id: string, i: { service: ServiceKey; description: string; amount: number; dueAt: string; draft: boolean; taxReturnId?: string }) {
       const number = `INV-${getNextInvoice()}`;
       up(id, (c) =>
         log(
           {
             ...c,
-            invoices: [{ id: uid("i"), number, service: i.service, description: i.description, amount: i.amount, paid: 0, status: i.draft ? "draft" : "open", issuedAt: nowIso(), dueAt: i.dueAt }, ...c.invoices],
+            invoices: [{ id: uid("i"), number, service: i.service, description: i.description, amount: i.amount, paid: 0, status: i.draft ? "draft" : "open", issuedAt: nowIso(), dueAt: i.dueAt, taxReturnId: i.taxReturnId }, ...c.invoices],
           },
           "invoice",
           `${i.draft ? "Drafted" : "Sent"} invoice ${number}`,
@@ -367,8 +402,14 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
     },
 
     // Signatures ---------------------------------------------------------------
-    requestSignature(id: string, s: { document: string; service: ServiceKey }) {
-      up(id, (c) => log({ ...c, signatures: [{ id: uid("s"), ...s, status: "pending", sentAt: nowIso() } satisfies Signature, ...c.signatures] }, "signature", `Sent "${s.document}" for signature`));
+    requestSignature(id: string, s: { document: string; service: ServiceKey }): string {
+      const sigId = uid("s");
+      up(id, (c) => log({ ...c, signatures: [{ id: sigId, ...s, status: "pending", sentAt: nowIso() } satisfies Signature, ...c.signatures] }, "signature", `Sent "${s.document}" for signature`));
+      return sigId;
+    },
+    /** Record a signature as completed (in Phase 3 this comes from the client signing in the portal). */
+    markSigned(id: string, sigId: string) {
+      up(id, (c) => log({ ...c, signatures: c.signatures.map((x) => (x.id === sigId ? { ...x, status: "signed" as const, signedAt: nowIso() } : x)) }, "signature", `Signed "${c.signatures.find((x) => x.id === sigId)?.document}"`, "client"));
     },
     resendSignature(id: string, sigId: string) {
       up(id, (c) => log({ ...c, signatures: c.signatures.map((x) => (x.id === sigId ? { ...x, sentAt: nowIso() } : x)) }, "signature", `Resent "${c.signatures.find((x) => x.id === sigId)?.document}"`, "system"));

@@ -50,6 +50,8 @@ export type ClientDocument = {
   requestedAt: string;
   sizeKb?: number;
   uploadedBy?: "client" | "staff";
+  /** Tax documents are tagged by tax year so years never mix. */
+  taxYear?: number;
 };
 
 export type Message = {
@@ -85,6 +87,8 @@ export type Invoice = {
   status: InvoiceStatus;
   issuedAt: string;
   dueAt: string;
+  /** Set for tax preparation invoices — links billing to a specific return. */
+  taxReturnId?: string;
 };
 
 export type Signature = {
