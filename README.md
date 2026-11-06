@@ -74,6 +74,21 @@ npm run build && npm start
   separate workflows, never combined); no other states are active or offered. The intake collects
   the full SSN into the identifier vault — masked everywhere, revealed only by permitted roles, and
   every reveal logged (production: field-level encryption, server-side access control, audit logs).
+- **Team & Permissions** (`/team`): overview KPIs, a searchable and paginated team directory, seven
+  default roles (Owner, Administrator, Manager, Senior Staff, Staff, Limited Access Staff, Client)
+  plus custom and duplicated roles, a module × action permission matrix, record-type and
+  sensitivity limits, record scopes (all records in the member's departments, assigned only, managed
+  team, individually selected), separate sensitive-information permissions (masked view, reveal and
+  edit SSN, ITIN, EIN, financial and expungement records, sensitive downloads and exports), six
+  departments that never grant each other's access, invitations (resend, cancel, expiry), access
+  requests (sensitive access is approved only by the Owner), onboarding and offboarding checklists
+  with work reassignment (staff are deactivated, never deleted), a read-only audit log and a security
+  policy page. The "Previewing as" selector in the banner switches the whole suite to any team
+  member or a client's portal: navigation, records, actions and SSN reveals change with the role, and
+  opening a URL directly never grants access.
+  **These are interface checks for review, not security.** The production backend must enforce
+  every permission on every request and write the audit log server-side; MFA, password, session and
+  lockout settings are stored for the Phase 3 authentication service, which enforces them.
 
 Changes reset on page reload. Nothing is sent to a server.
 

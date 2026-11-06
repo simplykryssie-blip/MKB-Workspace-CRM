@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useClientGate } from "@/components/team/AccessGuard";
 import { useEffect, useState } from "react";
 import { Activity, AlertTriangle, ArrowRight, BadgeCheck, Check, ClipboardList, Download, FilePlus2, FileSearch, FileText, Gavel, LayoutGrid, Lock, MoreHorizontal, Pause, PenLine, Play, Plus, RotateCcw, Scale, Send, ShieldAlert, ShieldCheck, Trash2, UploadCloud, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
@@ -48,6 +49,8 @@ export function CasePage({ id }: { id: string }) {
   useEffect(() => {
     if (c && m && exp.can.criminalHistory) exp.logAccess(m.id, "Viewed case record", c.id);
   }, [c?.id, exp.role]); // eslint-disable-line react-hooks/exhaustive-deps
+  const gate = useClientGate(c?.clientId, "this expungement case");
+  if (gate) return gate;
   if (!c || !m || !client)
     return (
       <div className="py-20 text-center">

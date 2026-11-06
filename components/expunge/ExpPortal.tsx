@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useClientGate } from "@/components/team/AccessGuard";
 import { useEffect, useState } from "react";
 import { ArrowLeft, Check, CheckCircle2, Circle, CreditCard, Download, FileText, Plus, Send, Trash2, UploadCloud } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
@@ -49,6 +50,8 @@ export function ExpPortal({ clientId }: { clientId: string }) {
   const c = clientStore.clients.find((x) => x.id === clientId);
   // Only this client's matter, cases and documents are ever read here.
   const m = exp.matters.find((x) => x.clientId === clientId);
+  const gate = useClientGate(clientId, "this client portal");
+  if (gate) return gate;
   if (!c) return <p className="py-20 text-center text-muted">Client not found.</p>;
   const banner = (
     <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-accent/30 bg-accent-soft/60 px-4 py-2.5 text-[13px] text-accent-ink">

@@ -12,6 +12,8 @@ import { TaxProvider } from "@/lib/store/tax-store";
 import { BooksProvider } from "@/lib/store/books-store";
 import { BizProvider } from "@/lib/store/biz-store";
 import { ExpProvider } from "@/lib/store/exp-store";
+import { TeamProvider } from "@/lib/store/team-store";
+import { AccessGuard, PreviewSwitcher } from "@/components/team/AccessGuard";
 import { ToastProvider } from "@/components/ui/Toast";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -41,6 +43,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <BooksProvider>
     <BizProvider>
     <ExpProvider>
+    <TeamProvider>
     <ToastProvider>
     <div className="flex min-h-screen">
       <Sidebar collapsed={collapsed} onToggleCollapsed={toggle} mobileOpen={mobileOpen} onCloseMobile={() => setMobileOpen(false)} />
@@ -48,15 +51,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <Topbar onOpenMenu={() => setMobileOpen(true)} />
         <div className="flex items-center gap-2 border-b border-warning/25 bg-warning-soft px-4 py-1.5 text-[12px] font-medium text-warning-ink sm:px-6 lg:px-8">
           <FlaskConical size={14} className="shrink-0" />
-          <span className="truncate">Design preview — all names, amounts and dates are fictional sample data.</span>
-          <span className="ml-auto sm:hidden">
+          <span className="hidden truncate md:inline">Design preview — all names, amounts and dates are fictional sample data.</span>
+          <span className="sr-only sm:not-sr-only sm:truncate md:hidden">Fictional sample data</span>
+          <span className="ml-auto min-w-0"><PreviewSwitcher /></span>
+          <span className="sm:hidden">
             <ThemeToggle />
           </span>
         </div>
-        <main className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main>
+        <main className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8"><AccessGuard>{children}</AccessGuard></main>
       </div>
     </div>
     </ToastProvider>
+    </TeamProvider>
     </ExpProvider>
     </BizProvider>
     </BooksProvider>

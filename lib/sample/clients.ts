@@ -20,6 +20,7 @@ import type {
 
 /** Fixed "now" for sample data so relative dates stay stable in the preview. */
 import { SAMPLE_NOW } from "./time";
+import { TEAM_STAFF } from "./team-seed";
 import { BOOKS_SEEDS, booksClientRecords } from "./books-seed";
 import { bizClientRecords, bizEnrollmentState, bizRequestsFor } from "./biz-seed";
 import { EXP_CASES, expClientRecords, expRequestsFor } from "./exp-seed";
@@ -33,7 +34,8 @@ export const STAFF: Staff[] = [
   { id: "s-rt", name: "Robin Tate", initials: "RT", title: "Bookkeeper" },
   { id: "s-jp", name: "Jesse Park", initials: "JP", title: "Case coordinator" },
 ];
-export const staffById = (id: string) => STAFF.find((s) => s.id === id)!;
+/** Resolves any staff identity — current or former — so historical attribution never breaks. */
+export const staffById = (id: string): Staff => STAFF.find((s) => s.id === id) ?? TEAM_STAFF.find((s) => s.id === id) ?? { id, name: "Former team member", initials: "—", title: "" };
 
 /** Workflow stages per division (also used by the service workspaces). */
 export const STAGES: Record<ServiceKey, string[]> = {
@@ -105,7 +107,7 @@ const SEEDS: Seed[] = [
     preferredContact: "Email",
     address: { line1: "220 Sample Blvd, Suite 300", city: "Riverton", state: "GA", zip: "30001" },
     business: { legalName: "Maple Example LLC", entityType: "LLC", state: "GA", formedAt: "2019-03-01", einLast4: "0177", responsibleParty: { name: "Pat Example", title: "Managing member", taxIdType: "SSN", taxIdLast4: "7014" }, industry: "Landscaping", fiscalYearEnd: "December" },
-    staffIds: ["s-rt", "s-al"],
+    staffIds: ["s-rt", "s-kn", "s-al"],
     status: "active",
     portal: "active",
     tags: ["Monthly retainer", "Payroll"],
@@ -240,7 +242,7 @@ const SEEDS: Seed[] = [
     preferredContact: "Portal",
     address: { line1: "33 Example Wharf", city: "Bayview", state: "GA", zip: "30005" },
     business: { legalName: "Harbor Demo Bakery LLC", entityType: "LLC", state: "GA", formedAt: "2022-02-01", einLast4: "0155", responsibleParty: { name: "Morgan Harbor", title: "Owner", taxIdType: "SSN", taxIdLast4: "7056" }, industry: "Food & beverage", fiscalYearEnd: "December" },
-    staffIds: ["s-rt", "s-mk", "s-al"],
+    staffIds: ["s-rt", "s-kn", "s-mk", "s-al"],
     status: "active",
     portal: "active",
     tags: ["Licenses", "Monthly retainer"],

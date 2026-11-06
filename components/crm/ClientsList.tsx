@@ -10,6 +10,7 @@ import { ServiceTag } from "@/components/ui/ServiceTag";
 import { SERVICES, SERVICE_ORDER } from "@/lib/sample-data";
 import { STAFF, balanceDue, openRequirements, staffById } from "@/lib/sample/clients";
 import { useClients } from "@/lib/store/clients-store";
+import { useTeam } from "@/lib/store/team-store";
 import { useToast } from "@/components/ui/Toast";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -22,7 +23,10 @@ type SortKey = "recent" | "name" | "balance";
 
 export function ClientsList() {
   const router = useRouter();
-  const { clients: CLIENTS, reset: resetStore } = useClients();
+  const { clients: ALL_CLIENTS, reset: resetStore } = useClients();
+  const team = useTeam();
+  // Only clients this team member may access (scope: departments, assignments, selected records).
+  const CLIENTS = useMemo(() => ALL_CLIENTS.filter((c) => team.clientAccess(c)), [ALL_CLIENTS, team]);
   const toast = useToast();
   const [q, setQ] = useState("");
   const [services, setServices] = useState<ServiceKey[]>([]);
@@ -57,6 +61,7 @@ export function ClientsList() {
     a.download = "mkb-clients-sample.csv";
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+    team.log({ action: "Record export", resource: "Clients list (CSV)", meta: `${rows.length} rows` });
     toast(`Exported ${rows.length} client${rows.length === 1 ? "" : "s"} to CSV (sample data) — logged`);
   };
 
@@ -88,12 +93,12 @@ export function ClientsList() {
           <Button icon={RotateCcw} variant="ghost" aria-label="Reset sample data" title="Reset sample data" className="px-2.5 sm:px-4" onClick={() => { if (confirm("Reset all sample data to its original state? Changes made in this session will be lost.")) { resetStore(); toast("Sample data reset"); } }}>
             <span className="hidden sm:inline">Reset sample data</span>
           </Button>
-          <Button icon={Download} onClick={exportCsv} disabled={rows.length === 0}>
+          <Button icon={Download} onClick={exportCsv} disabled={rows.length === 0 || !team.can("crm", "export")} title={team.can("crm", "export") ? undefined : "Your role can't export"}>
             Export<span className="hidden sm:inline">{filtersOn ? " filtered" : ""}</span>
           </Button>
-          <Button variant="primary" icon={UserPlus} href="/clients/new">
+          {team.can("crm", "create") && <Button variant="primary" icon={UserPlus} href="/clients/new">
             New client
-          </Button>
+          </Button>}
         </>
       }
     />

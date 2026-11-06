@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useClientGate } from "@/components/team/AccessGuard";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { BadgeCheck, Briefcase, CalendarClock, ClipboardList, Download, FileText, FolderOpen, Landmark, Pencil, Plus, Send, ShieldAlert, ShieldCheck, UploadCloud } from "lucide-react";
@@ -32,6 +33,8 @@ export function EntityPage({ id }: { id: string }) {
   const [verify, setVerify] = useState<ComplianceItem | null>(null);
   const [newReq, setNewReq] = useState(false);
   const [upload, setUpload] = useState(false);
+  const gate = useClientGate(e?.clientId, "this business");
+  if (gate) return gate;
   if (!e || !c)
     return (
       <div className="py-20 text-center">

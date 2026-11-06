@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useClientGate } from "@/components/team/AccessGuard";
 import { useEffect, useState } from "react";
 import {
   Activity as ActivityIcon,
@@ -83,6 +84,8 @@ export function RequestWorkspace({ id }: { id: string }) {
     setTab(t);
     history.replaceState(null, "", `#${t}`);
   };
+  const gate = useClientGate(r?.clientId, "this service request");
+  if (gate) return gate;
   if (!r)
     return (
       <div className="py-20 text-center">

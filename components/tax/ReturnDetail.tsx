@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useClientGate } from "@/components/team/AccessGuard";
 import { useEffect, useMemo, useState } from "react";
 import {
   Activity as ActivityIcon,
@@ -82,6 +83,8 @@ export function ReturnDetail({ id }: { id: string }) {
     history.replaceState(null, "", `#${t}`);
   };
 
+  const gate = useClientGate(r?.clientId, "this tax return");
+  if (gate) return gate;
   if (!r || !client)
     return (
       <div className="grid min-h-[50vh] place-items-center text-center">

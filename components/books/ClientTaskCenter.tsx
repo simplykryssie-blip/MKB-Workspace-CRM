@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useClientGate } from "@/components/team/AccessGuard";
 import { useState } from "react";
 import { ArrowLeft, CheckCircle2, Circle, Download, ExternalLink, FileText, MessageSquare, Send, UploadCloud } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
@@ -39,6 +40,8 @@ export function ClientTaskCenter({ id }: { id: string }) {
   const c = clientStore.clients.find((x) => x.id === w?.clientId);
   const [taskId, setTaskId] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
+  const gate = useClientGate(w?.clientId, "this client portal");
+  if (gate) return gate;
   if (!w || !c) return <p className="py-20 text-center text-muted">Workspace not found.</p>;
 
   // Only this client's businesses — never another client's data.

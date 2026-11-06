@@ -8,7 +8,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Menu } from "@/components/ui/Menu";
 import { ServiceTag } from "@/components/ui/ServiceTag";
 import { useToast } from "@/components/ui/Toast";
-import { currentUser } from "@/lib/sample-data";
+import { useTeam } from "@/lib/store/team-store";
 import { useClients } from "@/lib/store/clients-store";
 import { relTime } from "@/lib/format";
 import { ThemeToggle } from "./ThemeToggle";
@@ -16,6 +16,12 @@ import { ThemeToggle } from "./ThemeToggle";
 export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
   const router = useRouter();
   const toast = useToast();
+  const team = useTeam();
+  const { clients } = useClients();
+  const client = team.acting.kind === "client" ? clients.find((c) => c.id === (team.acting as { clientId: string }).clientId) : undefined;
+  const currentUser = client
+    ? { initials: client.name.split(" ").map((w) => w[0]).join("").slice(0, 2), fullName: client.name, role: "Client (portal)" }
+    : { initials: team.me?.initials ?? "—", fullName: team.me?.name ?? "Unknown", role: team.myRole?.name ?? "" };
   return (
     <header className="sticky top-0 z-30 border-b border-line bg-surface/85 backdrop-blur-md">
       <div className="flex h-16 items-center gap-2 px-4 sm:gap-3 sm:px-6 lg:h-[72px] lg:px-8">
@@ -26,9 +32,9 @@ export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
         <GlobalSearch />
 
         <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
-          <Link href="/clients/new" className="hidden h-10 items-center gap-2 rounded-xl bg-accent px-4 text-[14px] font-semibold text-white shadow-[0_4px_14px_rgba(11,127,224,0.3)] hover:bg-accent-hover xl:flex">
+          {team.can("crm", "create") && <Link href="/clients/new" className="hidden h-10 items-center gap-2 rounded-xl bg-accent px-4 text-[14px] font-semibold text-white shadow-[0_4px_14px_rgba(11,127,224,0.3)] hover:bg-accent-hover xl:flex">
             <Plus size={17} /> New client
-          </Link>
+          </Link>}
           <div className="hidden sm:block">
             <ThemeToggle />
           </div>
@@ -82,7 +88,10 @@ function IconBtn({ label, children, onClick }: { label: string; children: React.
 /* ------------------------------------------------------------------ */
 
 function GlobalSearch() {
-  const { clients } = useClients();
+  const { clients: all } = useClients();
+  const team = useTeam();
+  // Search only covers records this person may open — results never reveal other clients.
+  const clients = useMemo(() => all.filter((c) => team.clientAccess(c)), [all, team]);
   const router = useRouter();
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);

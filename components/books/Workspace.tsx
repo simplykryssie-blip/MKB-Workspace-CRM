@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useClientGate } from "@/components/team/AccessGuard";
 import { useEffect, useMemo, useState } from "react";
 import {
   Activity as ActivityIcon,
@@ -93,6 +94,8 @@ export function Workspace({ id }: { id: string }) {
     history.replaceState(null, "", `${window.location.pathname}${window.location.search}#${t}`);
   };
 
+  const gate = useClientGate(w?.clientId, "this bookkeeping workspace");
+  if (gate) return gate;
   if (!w || !client)
     return (
       <div className="grid min-h-[50vh] place-items-center text-center">

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { SelectField, TextArea, TextField } from "@/components/ui/Field";
 import { useExp } from "@/lib/store/exp-store";
 import { useClients } from "@/lib/store/clients-store";
+import { useTeam } from "@/lib/store/team-store";
 import { TaxIdInput } from "@/components/ui/FormattedInputs";
 import { maskTaxId, validateTaxId, type TaxIdType } from "@/lib/validation";
 import { SSN_POLICY } from "@/lib/expunge/config";
@@ -87,6 +88,9 @@ export function Masked({ value, label, matterId, caseId }: { value?: string; lab
 export function SsnField({ c, matterId }: { c: Client; matterId: string }) {
   const exp = useExp();
   const store = useClients();
+  const team = useTeam();
+  const canReveal = exp.can.revealSsn && team.sensitive("exp.revealSsn");
+  const canEdit = exp.can.revealSsn && team.sensitive("exp.editSsn");
   const [full, setFull] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState("");
@@ -102,16 +106,16 @@ export function SsnField({ c, matterId }: { c: Client; matterId: string }) {
           <span className="font-mono text-[13.5px] text-ink">{full ?? maskTaxId(c.taxIdLast4)}{c.taxIdType === "ITIN" ? " (ITIN)" : ""}</span>
         ) : <span className="text-[13px] text-muted">Not provided yet</span>}
         <span className="ml-auto flex gap-1.5">
-          {c.taxIdLast4 && (exp.can.revealSsn ? (
-            <Button size="sm" variant="ghost" icon={full ? EyeOff : Eye} onClick={() => { if (full) { setFull(null); return; } const v = store.reveal(c.id, "taxId"); exp.logAccess(matterId, "Revealed full SSN"); setFull(v ?? null); }}>{full ? "Hide" : "Reveal (logged)"}</Button>
+          {c.taxIdLast4 && (canReveal ? (
+            <Button size="sm" variant="ghost" icon={full ? EyeOff : Eye} onClick={() => { if (full) { setFull(null); return; } const v = store.reveal(c.id, "taxId"); exp.logAccess(matterId, "Revealed full SSN"); team.log({ action: "Sensitive reveal", resource: `Client ${c.id} — full SSN`, department: "exp", meta: matterId }); setFull(v ?? null); }}>{full ? "Hide" : "Reveal (logged)"}</Button>
           ) : <span className="inline-flex items-center gap-1 text-[12px] text-muted"><Lock size={12} /> This role can&rsquo;t reveal SSNs</span>)}
-          {exp.can.revealSsn && !editing && <Button size="sm" variant="ghost" onClick={() => { setEditing(true); setVal(""); setTried(false); }}>{c.taxIdLast4 ? "Update" : "Enter (given by phone)"}</Button>}
+          {canEdit && !editing && <Button size="sm" variant="ghost" onClick={() => { setEditing(true); setVal(""); setTried(false); }}>{c.taxIdLast4 ? "Update" : "Enter (given by phone)"}</Button>}
         </span>
       </div>
       {editing && (
         <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto] sm:items-start">
           <TaxIdInput id={`ssn-${c.id}`} label="Full nine-digit SSN" required value={val} onChange={setVal} type={type} onTypeChange={setType} showErrors={tried} />
-          <div className="flex gap-2 sm:pt-6"><Button size="sm" onClick={() => setEditing(false)}>Cancel</Button><Button size="sm" variant="primary" onClick={() => { setTried(true); if (err) return; store.updateTaxIds(c.id, { taxId: val, taxIdType: type }); exp.logAccess(matterId, `Entered/updated full ${type}`); setVal(""); setEditing(false); }}>Save to vault</Button></div>
+          <div className="flex gap-2 sm:pt-6"><Button size="sm" onClick={() => setEditing(false)}>Cancel</Button><Button size="sm" variant="primary" onClick={() => { setTried(true); if (err) return; store.updateTaxIds(c.id, { taxId: val, taxIdType: type }); exp.logAccess(matterId, `Entered/updated full ${type}`); team.log({ action: "Permission change", resource: `Client ${c.id} — ${type} updated`, department: "exp", meta: "SSN edit (value not logged)" }); setVal(""); setEditing(false); }}>Save to vault</Button></div>
         </div>
       )}
       <p className="mt-2 text-[11.5px] text-muted">{SSN_POLICY}</p>

@@ -8,6 +8,10 @@ import { Logo } from "@/components/brand/Logo";
 import { NAV, type NavItem } from "./nav";
 import { useLeads } from "@/lib/store/leads-store";
 import { followUpBucket } from "@/lib/sample/leads";
+import { useTeam } from "@/lib/store/team-store";
+import { useBooks } from "@/lib/store/books-store";
+import { clientPortalLinks, moduleForPath } from "@/components/team/AccessGuard";
+import { UserRound } from "lucide-react";
 
 type Props = {
   collapsed: boolean;
@@ -17,6 +21,13 @@ type Props = {
 };
 
 export function Sidebar({ collapsed, onToggleCollapsed, mobileOpen, onCloseMobile }: Props) {
+  const team = useTeam();
+  const books = useBooks();
+  // Navigation follows permissions: hidden modules aren't offered (the route guard still blocks direct links).
+  const allowed = (href: string) => { const mod = moduleForPath(href); return !mod || team.can(mod); };
+  const nav = team.acting.kind === "client"
+    ? [{ section: "My portal", items: clientPortalLinks(team.acting.clientId, books.workspaces).map((l) => ({ label: l.label, href: l.href, icon: UserRound })) }]
+    : NAV.map((g) => ({ ...g, items: g.items.map((i) => (i.children ? { ...i, children: i.children.filter((c) => allowed(c.href)) } : i)).filter((i) => (i.children ? i.children.length > 0 : allowed(i.href))) })).filter((g) => g.items.length > 0);
   return (
     <>
       {/* Mobile scrim */}
@@ -51,7 +62,7 @@ export function Sidebar({ collapsed, onToggleCollapsed, mobileOpen, onCloseMobil
         </div>
 
         <nav className="rail-scroll flex-1 overflow-y-auto px-3 pb-1.5 pt-3">
-          {NAV.map((group, gi) => (
+          {nav.map((group, gi) => (
             <div key={gi} className={gi > 0 ? "mt-3" : ""}>
               {group.section && (
                 <div className={`mb-2 px-3 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-rail-section ${collapsed ? "md:hidden" : "md:hidden lg:block"}`}>

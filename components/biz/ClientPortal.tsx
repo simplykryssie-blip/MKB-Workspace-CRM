@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useClientGate } from "@/components/team/AccessGuard";
 import { useState } from "react";
 import { ArrowLeft, CheckCircle2, Circle, CreditCard, Download, FileText, Plus, Receipt, Send, UploadCloud } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
@@ -28,6 +29,8 @@ export function ClientPortal({ clientId }: { clientId: string }) {
   const [responding, setResponding] = useState<{ r: ServiceRequest; i: InfoRequest } | null>(null);
   const [quote, setQuote] = useState<ServiceRequest | null>(null);
   const [newOpen, setNewOpen] = useState(false);
+  const gate = useClientGate(clientId, "this client portal");
+  if (gate) return gate;
   if (!c) return <p className="py-20 text-center text-muted">Client not found.</p>;
   // Only this client's own businesses and requests are ever shown.
   const reqs = biz.requests.filter((r) => r.clientId === c.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt));

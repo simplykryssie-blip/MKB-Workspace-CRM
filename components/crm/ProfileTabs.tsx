@@ -58,6 +58,7 @@ import { useTax } from "@/lib/store/tax-store";
 import { useBooks } from "@/lib/store/books-store";
 import { useBiz } from "@/lib/store/biz-store";
 import { useExp } from "@/lib/store/exp-store";
+import { useTeam } from "@/lib/store/team-store";
 import { ReturnStatusBadge } from "@/components/tax/TaxBits";
 
 export type Act = {
@@ -244,6 +245,9 @@ export function missingTaxInfo(c: Client): string[] {
 export function Sensitive({ c, field, masked }: { c: Client; field: "taxId" | "ein" | "dob" | "rpTaxId"; masked: string }) {
   const store = useClients();
   const toast = useToast();
+  const team = useTeam();
+  // A client-record view permission never implies these: each reveal needs its own sensitive permission.
+  const allowed = field === "ein" ? team.sensitive("tax.ein") : field === "dob" ? team.sensitive("tax.viewMasked") || team.sensitive("exp.viewMasked") : team.sensitive("tax.revealSsn") || team.sensitive("exp.revealSsn");
   const [shown, setShown] = useState<string | null>(null);
   // If the stored value changes (edited), drop any revealed copy immediately.
   useEffect(() => setShown(null), [masked]);
@@ -253,8 +257,14 @@ export function Sensitive({ c, field, masked }: { c: Client; field: "taxId" | "e
     return () => clearTimeout(t);
   }, [shown]);
   if (!masked) return <span className="text-faint">Not on file</span>;
+  const label = field === "taxId" ? `full ${c.taxIdType ?? "tax ID"}` : field === "ein" ? "full EIN" : field === "rpTaxId" ? "responsible party tax ID" : "date of birth";
   const reveal = () => {
     if (shown) return setShown(null);
+    if (!allowed) {
+      team.log({ action: "Sensitive reveal", resource: `Client ${c.id} — ${label}`, meta: "Denied: role lacks the reveal permission", success: false });
+      return toast("Your role can't reveal this — it needs the separate sensitive-information permission.", "info");
+    }
+    team.log({ action: "Sensitive reveal", resource: `Client ${c.id} — ${label}` });
     const full = field === "dob" ? isoToDob(c.dob) : store.reveal(c.id, field);
     if (field === "dob") store.reveal(c.id, "dob");
     if (!full) return toast("Full value isn't available for this record", "info");
@@ -264,7 +274,8 @@ export function Sensitive({ c, field, masked }: { c: Client; field: "taxId" | "e
   return (
     <span className="inline-flex items-center gap-1.5">
       <span className="font-mono text-[13px] tabular-nums">{shown ?? masked}</span>
-      <button onClick={reveal} title={shown ? "Hide" : "Reveal (requires 'View sensitive data' permission; logged)"} aria-label={shown ? "Hide" : `Reveal ${field === "taxId" ? c.taxIdType ?? "tax ID" : field === "ein" ? "EIN" : field === "rpTaxId" ? "responsible party tax ID" : "date of birth"}`} className="grid h-6 w-6 place-items-center rounded-md text-muted hover:bg-surface-hover hover:text-ink">
+      {!allowed && !shown && <span className="sr-only">Reveal not permitted for this role</span>}
+      <button onClick={reveal} title={shown ? "Hide" : allowed ? "Reveal (logged)" : "Your role can't reveal this"} aria-label={shown ? "Hide" : `Reveal ${field === "taxId" ? c.taxIdType ?? "tax ID" : field === "ein" ? "EIN" : field === "rpTaxId" ? "responsible party tax ID" : "date of birth"}`} className="grid h-6 w-6 place-items-center rounded-md text-muted hover:bg-surface-hover hover:text-ink">
         {shown ? <EyeOff size={13} /> : <Eye size={13} />}
       </button>
     </span>

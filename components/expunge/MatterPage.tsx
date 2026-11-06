@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useClientGate } from "@/components/team/AccessGuard";
 import { useEffect, useState } from "react";
 import { CheckCircle2, CircleDot, ClipboardList, CreditCard, Eye, FilePlus2, FileText, Lock, MessageSquare, Plus, Receipt, RotateCcw, Send, ShieldCheck, UploadCloud, UserRound, Users } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
@@ -44,6 +45,8 @@ export function MatterPage({ id }: { id: string }) {
   useEffect(() => {
     if (m && exp.can.criminalHistory) exp.logAccess(m.id, "Opened client matter");
   }, [m?.id, exp.role]); // eslint-disable-line react-hooks/exhaustive-deps
+  const gate = useClientGate(m?.clientId, "this expungement matter");
+  if (gate) return gate;
   if (!m || !c)
     return (
       <div className="py-20 text-center">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useClientGate } from "@/components/team/AccessGuard";
 import Link from "next/link";
 import {
   Activity as ActivityIcon,
@@ -104,6 +105,8 @@ export function ClientProfile({ id }: { id: string }) {
   const open = useCallback((kind: DialogKind, arg?: unknown) => setDialog({ kind, arg }), []);
   const close = useCallback(() => setDialog(null), []);
 
+  const gate = useClientGate(c?.id, "this client's profile");
+  if (gate) return gate;
   if (!c)
     return (
       <div className="grid min-h-[50vh] place-items-center text-center">
