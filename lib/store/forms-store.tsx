@@ -5,7 +5,8 @@
  * submissions live in the database; public submissions are received by the
  * backend, which checks spam/rate limits and creates the lead server-side.
  */
-import { createContext, useContext, useMemo, useReducer, useRef } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from "react";
+import { BACKEND, RemoteError, call, debouncer, notify } from "@/lib/sync/remote";
 import { SAMPLE_FORMS, SAMPLE_SUBMISSIONS } from "@/lib/sample/forms-seed";
 import { baseFields, consentField, fid, sensitiveReason, slugify, type FormField, type LeadForm, type Submission } from "@/lib/forms/config";
 import { nowIso, useClients } from "@/lib/store/clients-store";
@@ -15,27 +16,12 @@ import type { Client, ServiceKey } from "@/lib/types";
 
 type State = { forms: LeadForm[]; submissions: Submission[] };
 type Action = { type: "set"; fn: (s: State) => State };
-const init = (): State => ({ forms: structuredClone(SAMPLE_FORMS), submissions: structuredClone(SAMPLE_SUBMISSIONS) });
+// With the backend on, forms load from the server after sign-in.
+const init = (): State => (BACKEND ? { forms: [], submissions: [] } : { forms: structuredClone(SAMPLE_FORMS), submissions: structuredClone(SAMPLE_SUBMISSIONS) });
 const reducer = (s: State, a: Action) => a.fn(s);
 const uid = (p: string) => `${p}-${Math.random().toString(36).slice(2, 8)}`;
-const digits = (v?: string) => (v ?? "").replace(/\D/g, "");
-const SERVICE_BY_LABEL: Record<string, ServiceKey> = { tax: "tax", books: "books", biz: "biz", expunge: "expunge" };
-const US_STATE_NAMES: Record<string, string> = { Louisiana: "LA", Texas: "TX" };
-
-/** Visible fields given the answers so far (show-if rules). */
-export const visibleFields = (f: LeadForm, data: Record<string, string>) => f.fields.filter((x) => !x.showIf || (data[x.showIf.fieldId] ?? "").split("|").includes(x.showIf.equals));
-
-export function validateSubmission(f: LeadForm, data: Record<string, string>): Record<string, string> {
-  const errs: Record<string, string> = {};
-  visibleFields(f, data).forEach((x) => {
-    const v = (data[x.id] ?? "").trim();
-    if (x.type === "heading" || x.type === "paragraph") return;
-    if (x.required && !v) errs[x.id] = x.type === "consent" ? "Please agree to be contacted so we can respond." : "This is required.";
-    else if (v && x.type === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v)) errs[x.id] = "Enter a valid email address.";
-    else if (v && x.type === "phone" && digits(v).length !== 10) errs[x.id] = "Enter a 10-digit phone number.";
-  });
-  return errs;
-}
+export { validateSubmission, visibleFields } from "@/lib/forms/logic";
+import { digits, extractLead, publishIssues } from "@/lib/forms/logic";
 
 function makeActions(dispatch: React.Dispatch<Action>, get: () => State, leads: ReturnType<typeof useLeads>, clients: ReturnType<typeof useClients>) {
   const set = (fn: (s: State) => State) => dispatch({ type: "set", fn });
@@ -72,15 +58,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, leads: 
     },
     /** Problems that block publishing. */
     publishIssues(id: string): string[] {
-      const f = F(id);
-      const out: string[] = [];
-      const maps = f.fields.map((x) => x.map);
-      if (!maps.includes("email") && !maps.includes("phone")) out.push("Add an email or phone field mapped to the lead so you can reply.");
-      if (!maps.includes("fullName") && !maps.includes("firstName")) out.push("Add a name field mapped to the lead.");
-      if (!f.fields.some((x) => x.type === "consent")) out.push("Add a consent checkbox (permission to contact).");
-      f.fields.forEach((x) => { const r = sensitiveReason(x); if (r) out.push(`“${x.label}”: ${r}`); });
-      f.fields.forEach((x) => { if ((x.type === "radio" || x.type === "checkboxes" || x.type === "select") && !(x.options ?? []).filter((o) => o.trim()).length) out.push(`“${x.label}” needs at least one option.`); });
-      return out;
+      return publishIssues(F(id));
     },
     publish(id: string) {
       if (a.publishIssues(id).length) return false;
@@ -106,17 +84,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, leads: 
       const base: Submission = { id: uid("sub"), formId, at, data, channel, outcome: "spam" };
       if (honeypot.trim()) { set((s) => ({ ...s, submissions: [base, ...s.submissions] })); return base; }
 
-      const vis = visibleFields(f, data);
-      const byMap = (m: FormField["map"]) => vis.filter((x) => x.map === m).map((x) => (data[x.id] ?? "").trim()).filter(Boolean);
-      const name = byMap("fullName")[0] ?? [byMap("firstName")[0], byMap("lastName")[0]].filter(Boolean).join(" ");
-      const email = (byMap("email")[0] ?? "").toLowerCase();
-      const phone = byMap("phone")[0] ?? "";
-      const bizName = byMap("businessName")[0];
-      const stateRaw = byMap("state")[0];
-      const state = stateRaw ? US_STATE_NAMES[stateRaw] ?? (stateRaw.length === 2 ? stateRaw : undefined) : undefined;
-      const services = [...new Set([...f.services, ...byMap("services").flatMap((v) => v.split("|")).map((v) => SERVICE_BY_LABEL[v]).filter(Boolean)])] as ServiceKey[];
-      const summary = vis.filter((x) => x.type !== "heading" && x.type !== "paragraph" && x.type !== "consent" && (data[x.id] ?? "").trim()).map((x) => `${x.label}: ${(data[x.id] ?? "").split("|").join(", ")}`).join("\n");
-
+      const { name, email, phone, bizName, entityType, city, zip, state, services, summary } = extractLead(f, data);
       const sameContact = (e?: string, p?: string) => (!!email && e?.toLowerCase() === email) || (digits(phone).length === 10 && digits(p) === digits(phone));
       const client: Client | undefined = clients.clients.find((c) => sameContact(c.email, c.phone));
       if (client) {
@@ -141,8 +109,8 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, leads: 
         contactName: bizName ? name : undefined,
         email,
         phone,
-        address: state ? { line1: "", city: byMap("city")[0] ?? "", state, zip: byMap("zip")[0] ?? "" } : undefined,
-        business: bizName ? { entityType: (byMap("entityType")[0] as "LLC") || "LLC", industry: "" } : undefined,
+        address: state ? { line1: "", city, state, zip } : undefined,
+        business: bizName ? { entityType: (entityType as "LLC") || "LLC", industry: "" } : undefined,
         source: f.routing.source,
         sourceDetail: f.routing.sourceDetail ?? f.name,
         interests: services,
@@ -165,7 +133,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, leads: 
   return a;
 }
 
-type Ctx = State & ReturnType<typeof makeActions>;
+type Ctx = State & ReturnType<typeof makeActions> & { ready: boolean; submitRemote: (formId: string, data: Record<string, string>, honeypot: string) => Promise<Submission> };
 const Ctx = createContext<Ctx | null>(null);
 
 export function FormsProvider({ children }: { children: React.ReactNode }) {
@@ -180,7 +148,8 @@ export function FormsProvider({ children }: { children: React.ReactNode }) {
   cref.current = clients;
   // Actions read live leads/clients through refs so a submission always sees the latest records.
   const actions = useMemo(() => makeActions(dispatch, () => ref.current, new Proxy({} as ReturnType<typeof useLeads>, { get: (_, k) => (lref.current as never)[k] }), new Proxy({} as ReturnType<typeof useClients>, { get: (_, k) => (cref.current as never)[k] })), []);
-  const value = useMemo(() => ({ ...state, ...actions }), [state, actions]);
+  const sync = useFormSync(state, dispatch, leads);
+  const value = useMemo(() => ({ ...state, ...actions, ready: sync.ready, submitRemote: sync.submitRemote }), [state, actions, sync.ready, sync.submitRemote]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
@@ -188,4 +157,76 @@ export function useForms() {
   const v = useContext(Ctx);
   if (!v) throw new Error("useForms must be used inside <FormsProvider>");
   return v;
+}
+
+/* ------------------------------------------------------------------ */
+/* Backend sync (only when NEXT_PUBLIC_BACKEND=1)                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Loads forms and submissions from the server and saves each change (building,
+ * publishing — which the server re-checks — archiving, deleting, spam marks).
+ */
+function useFormSync(state: State, dispatch: React.Dispatch<Action>, leads: ReturnType<typeof useLeads>) {
+  const [ready, setReady] = useReducer(() => true, !BACKEND);
+  const synced = useRef(new Map<string, LeadForm>());
+  const subsSynced = useRef(new Map<string, Submission>());
+  const later = useRef(debouncer(600)).current;
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const leadsRef = useRef(leads);
+  leadsRef.current = leads;
+
+  const reload = useCallback(async () => {
+    try {
+      const r = await call<State>("GET", "/api/forms");
+      synced.current = new Map(r.forms.map((f) => [f.id, f]));
+      subsSynced.current = new Map(r.submissions.map((x) => [x.id, x]));
+      dispatch({ type: "set", fn: () => r });
+    } catch (e) {
+      if (!(e instanceof RemoteError && (e.status === 401 || e.status === 403))) notify("Couldn't load forms.");
+    }
+  }, []);
+  useEffect(() => { if (BACKEND) reload().finally(() => setReady()); }, []);
+
+  const saveForm = useCallback(async (id: string) => {
+    const f = stateRef.current.forms.find((x) => x.id === id);
+    const known = synced.current.has(id);
+    try {
+      if (!f && known) { await call("POST", `/api/forms/${id}`, { action: "delete" }); synced.current.delete(id); return; }
+      if (!f || synced.current.get(id) === f) return;
+      if (!known) await call("POST", "/api/forms", { form: f });
+      // A new form is created as a draft, then saved as-is (including a publish).
+      if (!known && f.status === "draft") { synced.current.set(id, f); return; }
+      await call("PUT", `/api/forms/${id}`, { form: f });
+      synced.current.set(id, f);
+    } catch (e) {
+      if (e instanceof RemoteError && e.status === 401) return;
+      notify(e instanceof RemoteError ? e.message : "Couldn't save the form.");
+      await reload();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!BACKEND || !ready) return;
+    state.forms.forEach((f) => { if (synced.current.get(f.id) !== f) later(f.id, () => saveForm(f.id)); });
+    [...synced.current.keys()].forEach((id) => { if (!state.forms.some((f) => f.id === id)) later(id, () => saveForm(id)); });
+    state.submissions.forEach((x) => {
+      const prev = subsSynced.current.get(x.id);
+      if (prev && prev.outcome !== x.outcome) {
+        subsSynced.current.set(x.id, x);
+        call("PUT", `/api/forms/submissions/${x.id}`, { spam: x.outcome === "spam" }).catch((e) => { notify(e instanceof Error ? e.message : "Couldn't update."); reload(); });
+      }
+    });
+  }, [state.forms, state.submissions, ready]);
+
+  /** Staff test: processed by the server exactly like a real submission. */
+  const submitRemote = useCallback(async (formId: string, data: Record<string, string>, honeypot: string): Promise<Submission> => {
+    await saveForm(formId); // make sure the server has the latest questions
+    const r = await call<{ id: string; outcome: Submission["outcome"]; leadId?: string; clientId?: string }>("POST", `/api/forms/${formId}/test`, { data, honeypot });
+    await Promise.all([reload(), leadsRef.current.reload()]);
+    return { id: r.id, formId, at: new Date().toISOString(), data, channel: "Staff test", outcome: r.outcome, leadId: r.leadId, clientId: r.clientId };
+  }, []);
+
+  return { ready, submitRemote };
 }

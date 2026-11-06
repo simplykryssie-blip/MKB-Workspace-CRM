@@ -118,7 +118,9 @@ export type Submission = {
 /** Words that suggest a field would collect sensitive information — not allowed on public forms. */
 const SENSITIVE = /\b(ssn|social security|tax ?id|itin|\bein\b|bank|routing|account number|credit card|card number|password|date of birth|birth ?date|dob|arrest|conviction|convicted|criminal|charges?|offense|felony|misdemeanor|diagnos|medical record)/i;
 export const sensitiveReason = (f: Pick<FormField, "label" | "help" | "options">) => {
-  const text = [f.label, f.help ?? "", ...(f.options ?? [])].join(" ");
+  // Help text that warns visitors NOT to share something ("Please don't include SSNs") is fine.
+  const helpAsks = f.help && !/\b(don['’]?t|do not|never|not include|without)\b/i.test(f.help) ? f.help : "";
+  const text = [f.label, helpAsks, ...(f.options ?? [])].join(" ");
   const m = text.match(SENSITIVE);
   return m ? `Mentions “${m[0]}”. Public forms can't collect sensitive information — collect it later in the secure client portal.` : null;
 };

@@ -11,11 +11,14 @@ import { validateSubmission, visibleFields } from "@/lib/store/forms-store";
  * The public-facing form (website embed, direct link, and the in-app preview/test).
  * Plain, accessible, mobile-first; uses MKB's application palette.
  */
-export function FormRenderer({ form, mode, onSubmit, note }: { form: LeadForm; mode: "preview" | "live"; onSubmit?: (data: Record<string, string>, honeypot: string) => void; note?: React.ReactNode }) {
+/** `onSubmit` may be async; returning an error message keeps the form open and shows it. */
+export function FormRenderer({ form, mode, onSubmit, note }: { form: LeadForm; mode: "preview" | "live"; onSubmit?: (data: Record<string, string>, honeypot: string) => void | string | Promise<void | string | unknown>; note?: React.ReactNode }) {
   const [data, setData] = useState<Record<string, string>>({});
   const [errs, setErrs] = useState<Record<string, string>>({});
   const [hp, setHp] = useState("");
   const [done, setDone] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [formErr, setFormErr] = useState<string | null>(null);
   const fields = visibleFields(form, data);
   const set = (id: string, v: string) => { setData((d) => ({ ...d, [id]: v })); if (errs[id]) setErrs((e) => { const n = { ...e }; delete n[id]; return n; }); };
 
@@ -33,15 +36,20 @@ export function FormRenderer({ form, mode, onSubmit, note }: { form: LeadForm; m
   return (
     <form
       noValidate
-      onSubmit={(e) => {
+      onSubmit={async (e) => {
         e.preventDefault();
+        if (sending) return;
         if (mode === "preview") return;
         const v = validateSubmission(form, data);
         setErrs(v);
         if (Object.keys(v).length) { document.getElementById(`ff-${Object.keys(v)[0]}`)?.focus(); return; }
         // Only answers to visible fields are sent.
         const sent = Object.fromEntries(fields.map((f) => [f.id, data[f.id] ?? ""]));
-        onSubmit?.(sent, hp);
+        setSending(true);
+        setFormErr(null);
+        const res = await onSubmit?.(sent, hp);
+        setSending(false);
+        if (typeof res === "string") return setFormErr(res);
         setDone(true);
       }}
       className="rounded-3xl border border-line bg-surface p-6 shadow-soft sm:p-8"
@@ -61,7 +69,8 @@ export function FormRenderer({ form, mode, onSubmit, note }: { form: LeadForm; m
         {/* Spam trap: hidden from people, filled in by bots. */}
         <div aria-hidden="true" className="absolute left-[-9999px] h-0 w-0 overflow-hidden"><label>Website<input tabIndex={-1} autoComplete="off" value={hp} onChange={(e) => setHp(e.target.value)} name="website" /></label></div>
       </div>
-      <button type="submit" disabled={mode === "preview"} className="mt-7 h-12 w-full rounded-xl bg-accent text-[15px] font-semibold text-white hover:bg-accent-hover disabled:opacity-60 sm:w-auto sm:px-8">Submit</button>
+      {formErr && <p role="alert" className="mt-5 rounded-xl bg-danger-soft/60 px-3 py-2 text-[13.5px] text-danger-ink">{formErr}</p>}
+      <button type="submit" disabled={mode === "preview" || sending} className="mt-7 h-12 w-full rounded-xl bg-accent text-[15px] font-semibold text-white hover:bg-accent-hover disabled:opacity-60 sm:w-auto sm:px-8">Submit</button>
       <p className="mt-4 flex items-start gap-1.5 text-[12px] text-muted"><Lock size={12} className="mt-0.5 shrink-0" /> Please don&rsquo;t include Social Security, bank or case numbers. We collect sensitive information only through our secure client portal.</p>
     </form>
   );

@@ -1,0 +1,8 @@
+import { body, handle, jsonResponse, str } from "@/lib/server/core";
+import { authenticate } from "@/lib/server/auth";
+import { offboarding } from "@/lib/server/team-admin";
+
+export const POST = handle<{ id: string }>(async (req, env, { id }) => {
+  await offboarding(env, await authenticate(env, req), id, await body(req));
+  return jsonResponse({ ok: true });
+});

@@ -6,6 +6,7 @@
 import { DEFAULT_ROLES, DEPARTMENT_CONFIG, MEMBERS, SECURITY_DEFAULTS } from "@/lib/sample/team-seed";
 import { CLIENTS } from "@/lib/sample/clients";
 import { DEFAULT_SOURCES, DEFAULT_STAGES, LEADS } from "@/lib/sample/leads";
+import { SAMPLE_FORMS, SAMPLE_SUBMISSIONS } from "@/lib/sample/forms-seed";
 import { TAX_RETURNS } from "@/lib/sample/tax";
 import { BOOKS_WORKSPACES } from "@/lib/sample/books";
 import { BIZ_REQUESTS } from "@/lib/sample/biz-seed";
@@ -83,6 +84,12 @@ export async function seedDev(env: AppEnv) {
     for (const r of l.reminders) add("INSERT INTO lead_reminders (id, lead_id, at, note, done, owner_id) VALUES (?, ?, ?, ?, ?, ?)", r.id, l.id, r.at, r.note, r.done ? 1 : 0, r.ownerId);
     for (const x of l.activity) add("INSERT OR IGNORE INTO lead_activity (id, lead_id, kind, text, actor, member_id, at) VALUES (?, ?, ?, ?, ?, NULL, ?)", x.id, l.id, x.kind, x.text, x.actor, x.at);
   }
+
+  // Forms and their sample submissions.
+  for (const f of SAMPLE_FORMS)
+    add("INSERT INTO forms (id, name, slug, title, intro, status, fields, services, routing, thank_you, created_at, updated_at, published_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", f.id, f.name, f.slug, f.title, f.intro ?? null, f.status, JSON.stringify(f.fields), JSON.stringify(f.services), JSON.stringify(f.routing), f.thankYou, f.createdAt, f.updatedAt, f.publishedAt ?? null);
+  for (const x of SAMPLE_SUBMISSIONS)
+    add("INSERT INTO form_submissions (id, form_id, at, data, channel, outcome, lead_id, client_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", x.id, x.formId, x.at, JSON.stringify(x.data), x.channel, x.outcome, x.leadId ?? null, x.clientId ?? null);
 
   // D1 batches run as one transaction.
   for (let i = 0; i < S.length; i += 90) await db.batch(S.slice(i, i + 90));

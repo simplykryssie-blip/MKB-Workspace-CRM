@@ -1,6 +1,6 @@
 # MKB Business Suite — Backend (Phase 3)
 
-Status: **foundation + Clients & Leads connected; tested locally. Not deployed. No cloud resources created.**
+Status: **foundation + Clients, Leads, Team & Permissions and Forms connected; tested locally. Not deployed. No cloud resources created.**
 
 The backend runs on Cloudflare: the Next.js app is compiled into a Cloudflare
 Worker (OpenNext), data lives in **D1** (SQLite), files will live in **R2**, and
@@ -28,7 +28,9 @@ own local runtime and database — nothing touches a real account yet.
 | --- | --- |
 | **Clients** | Connected. The list and profiles load from the database (only records the person may open); creating a client, editing details, services, team assignment, notes and the timeline are saved to the database. Full SSN/EIN/date of birth are sent once when entered, encrypted on arrival, and never sent back except through the audited reveal. Documents, messages, appointments, invoices and signatures are saved with the client for now and move to their own tables when the Documents, Messages and Billing modules are connected. |
 | **Leads** | Connected. Pipeline, stages and sources, notes, reminders, owner changes, marking lost/reopening and conversion to a client are saved to the database. |
-| Tax, Bookkeeping, Business Services, Expungement, Forms, Team screens | Still use in-browser sample data (next). |
+| **Team & Permissions** | Connected. The team, roles, departments, invitations (sent by email, resend replaces the old link, cancel), access requests (sensitive access approved only by the Owner), profiles, selected records, access reviews, onboarding, offboarding (deactivates, never deletes), sessions (sign out one device or all) and the security policy all load from and save to the database. The audit log shown is the server's. People without Team access only receive their own record. |
+| **Forms** | Connected. Forms are built and published in the database (publishing is refused on the server if a question would collect sensitive information). The public page `/f/<link-name>` loads the published form from the server and submissions become leads: matched to an existing client or open lead by email/phone (no duplicates), otherwise a new lead for the form's owner and stage with a follow-up reminder. Public submissions need no sign-in but are rate-limited (10 per 10 minutes per address), have a spam trap, never return any record, and never reveal whether the person was already known. |
+| Tax, Bookkeeping, Business Services, Expungement screens | Still use in-browser sample data (next). |
 
 How saving works: the screens keep working instantly and save each change in the
 background. Every save names the version it started from; if someone else saved
@@ -58,6 +60,15 @@ Run inside Cloudflare's actual runtime: `npx opennextjs-cloudflare build && npx 
 
 ## Tests
 
+- Team & Forms with the backend on (8 browser checks): directory and audit log from the server; a role
+  change, an invitation and the security policy survive a reload; a new form is built, published and
+  tested; a signed-out visitor's public submission becomes a real lead for the right owner.
+- Team & Forms API (14 checks): limited team view for people without Team access, roles can't be
+  escalated (Owner-only and unheld permissions stripped; Owner and same-level roles locked), department
+  settings permission, Owner-only approval of sensitive access (then the reveal is allowed), own-profile
+  limits, invitation resend/cancel, offboarding order and deactivation, form permissions, public view
+  hides internal settings, public submissions create/match leads, spam trap, consent required,
+  publishing blocked for sensitive questions, rate limiting, signing out one device.
 - Clients & Leads with the backend on (8 browser checks): server-scoped client list; a new client,
   a note, a lead stage change and a lead conversion all survive a full reload; full identifiers
   never appear in the page; reveal refused by the server for a role without the Tax department;

@@ -8,7 +8,8 @@
  * production backend must evaluate the same rules on every request, independently
  * of the interface, and record every audit event server-side.
  */
-import { createContext, useCallback, useContext, useMemo, useReducer, useRef } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { BACKEND, RemoteError, call, notify } from "@/lib/sync/remote";
 import { ACCESS_REQUESTS, AUDIT_SEED, DEFAULT_ROLES, DEPARTMENT_CONFIG, INVITATIONS, MEMBERS, SECURITY_DEFAULTS } from "@/lib/sample/team-seed";
 import { SAMPLE_NOW } from "@/lib/sample/clients";
 import { nowIso, useClients } from "@/lib/store/clients-store";
@@ -313,6 +314,9 @@ type Ctx = ReturnType<typeof makeActions> &
     /** Client IDs a member is assigned to anywhere in the suite. */
     assignedClients: (memberId: string) => Set<string>;
     clientAccess: (client: Pick<Client, "id" | "enrollments">) => boolean;
+    /** Backend: the signed-in person and team data have loaded. */
+    ready: boolean;
+    refreshAudit: () => void;
   };
 const Ctx = createContext<Ctx | null>(null);
 
@@ -328,7 +332,9 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
   const books = useBooks();
   const biz = useBiz();
   const exp = useExp();
-  const actions = useMemo(() => makeActions(dispatch, () => ref.current, () => (aref.current.kind === "member" ? aref.current.id : "s-mk")), []);
+  const local = useMemo(() => makeActions(dispatch, () => ref.current, () => (aref.current.kind === "member" ? aref.current.id : "s-mk")), []);
+  const [ready, setReady] = useState(!BACKEND);
+  const { actions, refresh, refreshAudit } = useTeamSync(local, dispatch, ref, setActingState, setReady);
 
   const assignedClients = useCallback(
     (memberId: string) => {
@@ -349,6 +355,8 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
     const myRole = acting.kind === "client" ? state.roles.find((r) => r.isClient) : roleOf(state.roles, me);
     const clientAccess = (client: Pick<Client, "id" | "enrollments">) => {
       if (acting.kind === "client") return client.id === acting.clientId;
+      // Backend: the server already sent only the clients this person may open.
+      if (BACKEND) return !!me && me.status === "active";
       if (!me || !myRole || me.status !== "active" || !canDo(state, me, "crm", "view")) return false;
       if (myRole.allDepartments) return true;
       const mine = me.selectedClientIds.includes(client.id) || assignedClients(me.id).has(client.id);
@@ -370,7 +378,7 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
       acting,
       setActing: (a: Acting) => {
         setActingState(a);
-        actions.log({ action: "Login", resource: "MKB Business Suite", meta: a.kind === "member" ? "Preview sign-in (no real authentication)" : `Client portal preview — client ${a.clientId}`, actorId: a.kind === "member" ? a.id : "s-mk" });
+        if (!BACKEND) actions.log({ action: "Login", resource: "MKB Business Suite", meta: a.kind === "member" ? "Preview sign-in (no real authentication)" : `Client portal preview — client ${a.clientId}`, actorId: a.kind === "member" ? a.id : "s-mk" });
       },
       me,
       myRole,
@@ -379,8 +387,10 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
       cap: (c) => acting.kind === "member" && hasCap(state, me, c),
       assignedClients,
       clientAccess,
+      ready,
+      refreshAudit,
     };
-  }, [actions, state, acting, assignedClients]);
+  }, [actions, state, acting, assignedClients, ready, refreshAudit]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
@@ -388,4 +398,95 @@ export function useTeam() {
   const v = useContext(Ctx);
   if (!v) throw new Error("useTeam must be used inside <TeamProvider>");
   return v;
+}
+
+/* ------------------------------------------------------------------ */
+/* Backend sync (only when NEXT_PUBLIC_BACKEND=1)                      */
+/* ------------------------------------------------------------------ */
+
+type Actions = ReturnType<typeof makeActions>;
+type ServerState = { roles: Role[]; departments: Department[]; members: Member[]; invitations: Invitation[]; requests: AccessRequest[]; security?: SecuritySettings };
+type AuditRow = { id: string; at: string; actor_member_id: string | null; action: AuditEvent["action"]; resource: string; department: DeptKey | null; meta: string | null; success: number };
+
+/**
+ * With the backend on: loads the signed-in person and the team from the server,
+ * sends every administrative action to the server (which re-checks it), then
+ * reloads the server's version. A refused action is undone and explained.
+ */
+function useTeamSync(local: Actions, dispatch: React.Dispatch<Action>, ref: React.RefObject<State>, setActing: (a: Acting) => void, setReady: (v: boolean) => void) {
+  const queue = useRef(Promise.resolve());
+  const refresh = useCallback(async () => {
+    try {
+      const s = await call<ServerState>("GET", "/api/team/state");
+      dispatch({ type: "fn", fn: (cur) => ({ ...cur, roles: s.roles, departments: s.departments, members: s.members, invitations: s.invitations, requests: s.requests, security: s.security ?? cur.security }) });
+    } catch (e) {
+      if (!(e instanceof RemoteError && e.status === 401)) notify("Couldn't load team information.");
+    }
+  }, []);
+  const refreshAudit = useCallback(async () => {
+    if (!BACKEND) return;
+    try {
+      const r = await call<{ events: AuditRow[] }>("GET", "/api/team/audit?limit=100");
+      dispatch({ type: "fn", fn: (cur) => ({ ...cur, audit: r.events.map((e) => ({ id: e.id, at: e.at, actorId: e.actor_member_id ?? "system", action: e.action, resource: e.resource, department: e.department ?? undefined, meta: e.meta ?? undefined, success: !!e.success })) }) });
+    } catch { /* no audit access */ }
+  }, []);
+
+  useEffect(() => {
+    if (!BACKEND) return;
+    (async () => {
+      try {
+        const me = await call<{ kind: string; member?: { id: string }; caps?: string[] }>("GET", "/api/auth/session");
+        if (me.member) setActing({ kind: "member", id: me.member.id });
+        await refresh();
+        if (me.caps?.includes("audit.view")) await refreshAudit();
+      } finally {
+        setReady(true);
+      }
+    })();
+  }, []);
+
+  const actions = useMemo(() => {
+    if (!BACKEND) return local;
+    // Server commands run one at a time, in order (e.g. offboarding steps).
+    const send = (method: "POST" | "PUT", path: string, body?: unknown) => {
+      queue.current = queue.current.then(async () => {
+        try { await call(method, path, body); }
+        catch (e) { if (!(e instanceof RemoteError && e.status === 401)) notify(e instanceof Error ? e.message : "That change wasn't saved."); }
+        await refresh();
+      });
+    };
+    const m = (id: string) => `/api/team/members/${id}`;
+    const ok = (r: unknown) => r !== false && r !== null;
+    const a: Actions = {
+      ...local,
+      log: () => {}, // the server writes the audit log
+      invite(o) { const id = local.invite(o); if (id) send("POST", "/api/team/invitations", { ...o, memberId: id }); return id; },
+      resendInvite(id) { local.resendInvite(id); send("POST", `/api/team/invitations/${id}`, { action: "resend" }); },
+      cancelInvite(id) { local.cancelInvite(id); send("POST", `/api/team/invitations/${id}`, { action: "cancel" }); },
+      simulateAccept() { notify("With real sign-in, invitations are accepted from the emailed link."); },
+      updateProfile(id, patch) { const r = local.updateProfile(id, patch); if (ok(r)) send("PUT", m(id), patch); return r; },
+      changeRole(id, roleId) { const r = local.changeRole(id, roleId); if (ok(r)) send("PUT", `${m(id)}/role`, { roleId }); return r; },
+      setDepartments(id, departments) { const r = local.setDepartments(id, departments); if (ok(r)) send("PUT", `${m(id)}/departments`, { departments }); return r; },
+      setGrant(id, key, on) { const r = local.setGrant(id, key, on); if (ok(r)) send("PUT", `${m(id)}/grants`, { key, on }); return r; },
+      setSelectedClients(id, clientIds) { const r = local.setSelectedClients(id, clientIds); if (ok(r)) send("PUT", `${m(id)}/records`, { clientIds }); return r; },
+      markReviewed(id) { const r = local.markReviewed(id); if (ok(r)) send("POST", `${m(id)}/review`); return r; },
+      suspend(id, reason) { const r = local.suspend(id, reason); if (ok(r)) send("POST", `${m(id)}/status`, { action: "suspend", reason }); return r; },
+      reactivate(id) { const r = local.reactivate(id); if (ok(r)) send("POST", `${m(id)}/status`, { action: "reactivate" }); return r; },
+      revokeSession(id, sessionId) { const r = local.revokeSession(id, sessionId); if (ok(r)) send("POST", `${m(id)}/status`, sessionId ? { action: "revoke_session", sessionId } : { action: "revoke_sessions" }); return r; },
+      toggleOnboarding(id, step) { const r = local.toggleOnboarding(id, step); if (ok(r)) send("POST", `${m(id)}/onboarding`, { step }); return r; },
+      startOffboarding(id) { const r = local.startOffboarding(id); if (ok(r)) send("POST", `${m(id)}/offboarding`, { action: "start" }); return r; },
+      offboardStep(id, step, note) { const r = local.offboardStep(id, step, note); if (ok(r)) send("POST", `${m(id)}/offboarding`, { action: "step", step, note }); return r; },
+      completeOffboarding(id) { const r = local.completeOffboarding(id); if (ok(r)) send("POST", `${m(id)}/offboarding`, { action: "complete" }); return r; },
+      requestAccess(r) { const id = local.requestAccess(r); send("POST", "/api/team/requests", r); return id; },
+      decide(id, approve, note) { const r = local.decide(id, approve, note); if (ok(r)) send("POST", `/api/team/requests/${id}`, { approve, note }); return r; },
+      saveRole(role, summary) { const r = local.saveRole(role, summary); if (ok(r)) send("PUT", `/api/team/roles/${role.id}`, { role, summary }); return r; },
+      duplicateRole(fromId, name) { const id = local.duplicateRole(fromId, name); if (id) send("POST", "/api/team/roles", { fromId, id, name }); return id; },
+      deleteRole(id) { const r = local.deleteRole(id); if (ok(r)) send("POST", `/api/team/roles/${id}`, { action: "delete" }); return r; },
+      saveDepartment(d) { const r = local.saveDepartment(d); if (ok(r)) send("PUT", `/api/team/departments/${d.key}`, { department: d }); return r; },
+      saveSecurity(sec) { const r = local.saveSecurity(sec); if (ok(r)) send("PUT", "/api/team/security", sec); return r; },
+    };
+    return a;
+  }, [local]);
+  void ref;
+  return { actions, refresh, refreshAudit };
 }

@@ -17,6 +17,7 @@ import { SERVICES } from "@/lib/sample-data";
 import { relTime } from "@/lib/format";
 import type { ServiceKey } from "@/lib/types";
 import { FormRenderer } from "./FormRenderer";
+import { BACKEND } from "@/lib/sync/remote";
 import { SubmissionsTable } from "./FormsCenter";
 
 const TABS = [
@@ -37,6 +38,7 @@ export function FormBuilder({ id }: { id: string }) {
   const [tab, setTab] = useState<Tab>("build");
   const [tried, setTried] = useState(false);
   useEffect(() => { const h = window.location.hash.slice(1) as Tab; if (TABS.some((t) => t.key === h)) setTab(h); }, []);
+  if (!f && !forms.ready) return <div className="grid min-h-[40vh] place-items-center text-[14px] text-muted" role="status">Loading…</div>;
   if (!f) return <Card className="p-10 text-center text-muted">Form not found. <Link href="/forms" className="text-accent">Back to Forms</Link></Card>;
   const can = team.can("leads", "edit");
   const go = (t: Tab) => { setTab(t); history.replaceState(null, "", `#${t}`); };
@@ -220,6 +222,7 @@ function Share({ f }: { f: LeadForm }) {
 function Test({ f }: { f: LeadForm }) {
   const forms = useForms();
   const leads = useLeads();
+  const toast = useToast();
   const [res, setRes] = useState<Submission | null>(null);
   const lead = res?.leadId ? leads.leads.find((l) => l.id === res.leadId) : undefined;
   const note = res && (
@@ -232,7 +235,7 @@ function Test({ f }: { f: LeadForm }) {
   return (
     <div className="mx-auto max-w-2xl">
       <p className="mb-3 rounded-xl bg-accent-soft/60 px-4 py-2.5 text-[13px] text-accent-ink">Fill it in exactly as a visitor would. Test submissions create real (sample) leads so you can see the whole flow — they&rsquo;re labelled “Staff test”.</p>
-      <FormRenderer form={f} mode="live" note={note} onSubmit={(data, hp) => setRes(forms.submit(f.id, data, "Staff test", hp))} />
+      <FormRenderer form={f} mode="live" note={note} onSubmit={(data, hp) => (BACKEND ? forms.submitRemote(f.id, data, hp).then((r) => { setRes(r); }).catch((e) => (e instanceof Error ? e.message : "Couldn't submit")) : setRes(forms.submit(f.id, data, "Staff test", hp)))} />
     </div>
   );
 }

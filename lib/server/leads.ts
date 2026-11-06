@@ -185,7 +185,13 @@ export async function saveSettings(env: AppEnv, a: Actor, b: { stages?: LeadStag
   const keep = new Set(stages.map((x) => x.id));
   const db = env.DB;
   const stmts: D1PreparedStatement[] = [];
-  if (b.remap && keep.has(b.remap.to)) stmts.push(db.prepare("UPDATE leads SET stage_id = ?, rev = rev + 1 WHERE stage_id = ?").bind(b.remap.to, b.remap.from));
+  if (b.remap && keep.has(b.remap.to)) {
+    stmts.push(db.prepare("UPDATE leads SET stage_id = ?, rev = rev + 1 WHERE stage_id = ?").bind(b.remap.to, b.remap.from));
+    // Forms that send new leads to the removed stage follow it too.
+    stmts.push(db.prepare("UPDATE forms SET routing = json_set(routing, '$.stageId', ?) WHERE json_extract(routing, '$.stageId') = ?").bind(b.remap.to, b.remap.from));
+  }
+  const formOrphan = await one<{ n: number }>(db, `SELECT count(*) n FROM forms WHERE json_extract(routing, '$.stageId') NOT IN (${stages.map(() => "?").join(",")})${b.remap ? " AND json_extract(routing, '$.stageId') != ?" : ""}`, ...stages.map((x) => x.id), ...(b.remap ? [b.remap.from] : []));
+  if (formOrphan && formOrphan.n > 0) throw badRequest("A form sends new leads to that stage — choose where they should go instead.");
   const orphan = await one<{ n: number }>(db, `SELECT count(*) n FROM leads WHERE stage_id NOT IN (${stages.map(() => "?").join(",")})${b.remap ? " AND stage_id != ?" : ""}`, ...stages.map((x) => x.id), ...(b.remap ? [b.remap.from] : []));
   if (orphan && orphan.n > 0) throw badRequest("Move leads out of a stage before removing it.");
   stmts.push(db.prepare("DELETE FROM lead_stages"), ...stages.map((x, i) => db.prepare("INSERT INTO lead_stages (id, name, position) VALUES (?, ?, ?)").bind(x.id, x.name, i)));

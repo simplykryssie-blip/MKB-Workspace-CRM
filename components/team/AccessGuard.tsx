@@ -123,6 +123,7 @@ export function AccessGuard({ children }: { children: React.ReactNode }) {
     );
   }
   const me = team.me;
+  if (!team.ready) return <div className="grid min-h-[50vh] place-items-center text-[14px] text-muted" role="status">Loading…</div>;
   if (!me || me.status !== "active")
     return <NoAccess title={`Account ${me ? STATUS_META[me.status].label.toLowerCase() : "not found"}`} detail="This account can't sign in. In production the authentication service blocks it before any page loads." />;
   const mod = moduleForPath(path);

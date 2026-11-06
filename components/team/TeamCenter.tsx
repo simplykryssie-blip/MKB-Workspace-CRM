@@ -20,6 +20,7 @@ import { fmtDate, fmtDateTime, relTime } from "@/lib/format";
 import { validateEmail } from "@/lib/validation";
 import { SAMPLE_NOW } from "@/lib/sample/clients";
 import { PreviewNote } from "./AccessGuard";
+import { BACKEND } from "@/lib/sync/remote";
 import { ConfirmDialog, Initials, LockedNote, PermissionMatrix, RecordTypeEditor, RolePreview, StatusBadge, memberHref, roleDiff } from "./TeamParts";
 
 const TABS = [
@@ -402,7 +403,7 @@ function Invitations({ onInvite }: { onInvite: () => void }) {
                 <div className="flex flex-wrap gap-1.5">
                   <Button size="sm" icon={Send} onClick={() => { team.resendInvite(i.id); toast("Invitation resent"); }}>Resend</Button>
                   <Button size="sm" variant="ghost" onClick={() => { team.cancelInvite(i.id); toast("Invitation cancelled"); }}>Cancel</Button>
-                  {st === "pending" && <Button size="sm" variant="ghost" title="Sample only — real acceptance happens through sign-up in Phase 3" onClick={() => { team.simulateAccept(i.id); toast("Accepted (simulated)"); }}>Simulate acceptance</Button>}
+                  {st === "pending" && !BACKEND && <Button size="sm" variant="ghost" title="Sample only — real acceptance happens through sign-up in Phase 3" onClick={() => { team.simulateAccept(i.id); toast("Accepted (simulated)"); }}>Simulate acceptance</Button>}
                 </div>
               )}
             </li>
@@ -510,6 +511,7 @@ function Audit() {
   const [result, setResult] = useState("all");
   const [q, setQ] = useState("");
   const [page, setPage] = useState(0);
+  useEffect(() => { team.refreshAudit(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const rows = useMemo(() => team.audit.filter((e) => (action === "all" || e.action === action) && (who === "all" || e.actorId === who) && (dept === "all" || e.department === dept) && (result === "all" || (result === "ok" ? e.success : !e.success)) && (!q.trim() || `${e.resource} ${e.meta ?? ""}`.toLowerCase().includes(q.trim().toLowerCase()))), [team.audit, action, who, dept, result, q]);
   useEffect(() => setPage(0), [action, who, dept, result, q]);
   if (!team.cap("audit.view")) return <LockedNote text="Audit logs are restricted to authorized administrators and the Owner." />;

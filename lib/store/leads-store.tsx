@@ -216,7 +216,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
 }
 
 
-export type LeadsStore = ReturnType<typeof makeActions> & State & { ready: boolean };
+export type LeadsStore = ReturnType<typeof makeActions> & State & { ready: boolean; reload: () => Promise<unknown> };
 const Ctx = createContext<LeadsStore | null>(null);
 
 export function LeadsProvider({ children }: { children: React.ReactNode }) {
@@ -232,8 +232,8 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
       makeActions(dispatch, () => ref.current, new Proxy({} as ReturnType<typeof useClients>, { get: (_t, k) => clientsRef.current[k as keyof ReturnType<typeof useClients>] })),
     [],
   );
-  const ready = useLeadSync(state, dispatch, clientsRef);
-  const value = useMemo(() => ({ ...actions, ...state, ready }), [actions, state, ready]);
+  const { ready, reload } = useLeadSync(state, dispatch, clientsRef);
+  const value = useMemo(() => ({ ...actions, ...state, ready, reload }), [actions, state, ready, reload]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
@@ -332,5 +332,5 @@ function useLeadSync(state: State, dispatch: React.Dispatch<Action>, clientsRef:
     });
   }, [state.stages, state.sources, ready]);
 
-  return ready;
+  return { ready, reload: reloadAll };
 }

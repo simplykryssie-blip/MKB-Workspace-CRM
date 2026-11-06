@@ -21,7 +21,6 @@ export function SessionGate() {
         const d = (await r.json().catch(() => ({}))) as { mfaPending?: boolean; kind?: string; member?: { id: string } };
         if (!r.ok || d.mfaPending) window.location.assign("/login");
         else if (d.kind === "client") window.location.assign("/login/done");
-        else if (d.member) team.setActing({ kind: "member", id: d.member.id });
       })
       .catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps

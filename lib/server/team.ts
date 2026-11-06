@@ -50,7 +50,9 @@ export async function invite(env: AppEnv, req: Request, a: Actor, b: Record<stri
   // Only sensitive permissions the inviter holds can be granted.
   const grants = (Array.isArray(b.grants) ? b.grants : []).filter((g): g is string => typeof g === "string" && SENSITIVE_KEYS.includes(g) && hasSensitive(a.policy, a.member, g));
 
-  const memberId = randomId("m");
+  // The screen may suggest the new member's ID (so it can open their page right away).
+  const wanted = str(b.memberId, 60);
+  const memberId = /^s-[A-Za-z0-9_-]{4,40}$/.test(wanted) && !(await one(env.DB, "SELECT 1 FROM members WHERE id = ?", wanted)) ? wanted : randomId("m");
   const userId = randomId("u");
   const invId = randomId("inv");
   const t = now();
@@ -97,11 +99,13 @@ export async function setGrant(env: AppEnv, a: Actor, id: string, keyName: strin
   await audit(env.DB, a, { action: "Permission change", resource: `${t.name}: ${keyName}`, meta: `${on ? "Granted" : "Removed"}${HIGH_IMPACT.has(keyName) ? " — high-impact" : ""}` });
 }
 
-export async function setStatus(env: AppEnv, a: Actor, id: string, action: string, reason: string) {
+export async function setStatus(env: AppEnv, a: Actor, id: string, action: string, reason: string, sessionId = "") {
   requireStaff(a);
   const t = await target(env, id);
   const self = a.member.id === id;
   if (action === "revoke_sessions") {
+    if (!self && !canManage(a.policy, a.member, t, "archive")) throw forbidden();
+  } else if (action === "revoke_session") {
     if (!self && !canManage(a.policy, a.member, t, "archive")) throw forbidden();
   } else if (!canManage(a.policy, a.member, t, "archive")) throw forbidden();
   const user = await one<{ id: string }>(env.DB, "SELECT id FROM users WHERE member_id = ?", id);
@@ -120,6 +124,11 @@ export async function setStatus(env: AppEnv, a: Actor, id: string, action: strin
     case "unlock":
       if (user) await run(env.DB, "UPDATE users SET locked_until = NULL, failed_attempts = 0 WHERE id = ?", user.id);
       await audit(env.DB, a, { action: "Security settings", resource: t.name, meta: "Sign-in lockout cleared" });
+      return;
+    case "revoke_session":
+      if (!user || !/^[0-9a-f]{16}$/.test(sessionId)) throw badRequest("Unknown session.");
+      await run(env.DB, "UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND substr(id_hash, 1, 16) = ? AND revoked_at IS NULL", now(), user.id, sessionId);
+      await audit(env.DB, a, { action: "Session revoked", resource: `${t.name} — 1 session` });
       return;
     case "revoke_sessions":
       if (user) await revokeAllSessions(env, user.id);
