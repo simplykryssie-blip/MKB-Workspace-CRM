@@ -113,6 +113,12 @@ npm run build && npm start
 
 Changes reset on page reload. Nothing is sent to a server.
 
+## Backend (Phase 3 — in progress)
+The foundation — database, sign-in with MFA, server-enforced permissions, encrypted identifiers
+and an append-only audit log — is built and tested locally on Cloudflare's runtime. Nothing is
+deployed and no cloud resources exist yet. See [docs/BACKEND.md](docs/BACKEND.md) for how to run
+it, what's tested, and what must happen before it goes live.
+
 ## Roadmap
 1. **Design**: dashboard, navigation, themes (approved)
 2. **Frontend**: service workspaces, CRM screens, client portal, roles and permissions UI ← *current*

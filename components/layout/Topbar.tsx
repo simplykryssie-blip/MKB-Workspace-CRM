@@ -68,7 +68,7 @@ export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
               { label: "Team & permissions", icon: ShieldCheck, onSelect: () => router.push("/team") },
               { label: "Settings", icon: Settings, onSelect: () => router.push("/settings") },
               "divider",
-              { label: "Sign out", icon: LogOut, onSelect: () => toast("Sign-out is connected in Phase 3 (authentication).", "info") },
+              { label: "Sign out", icon: LogOut, onSelect: async () => { if (process.env.NEXT_PUBLIC_BACKEND !== "1") return toast("Sign-out works once the backend is switched on.", "info"); await fetch("/api/auth/logout", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }); window.location.assign("/login"); } },
             ]}
           />
         </div>

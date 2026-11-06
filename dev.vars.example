@@ -1,0 +1,10 @@
+# Copy to .dev.vars for local development (never commit .dev.vars).
+APP_ORIGIN=http://localhost:3100
+# 32 random bytes, base64:  node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+ENCRYPTION_KEY=
+ENCRYPTION_KEY_VERSION=1
+# Password the dev seed gives every sample team member and client-portal account.
+DEV_SEED_PASSWORD=
+# Optional: without it, emails are only written to the email_outbox table.
+RESEND_API_KEY=
+EMAIL_FROM=MKB Financial Group <no-reply@your-domain.example>

@@ -16,6 +16,7 @@ import { ExpProvider } from "@/lib/store/exp-store";
 import { TeamProvider } from "@/lib/store/team-store";
 import { AccessGuard, PreviewSwitcher } from "@/components/team/AccessGuard";
 import { ToastProvider } from "@/components/ui/Toast";
+import { SessionGate } from "@/components/auth/SessionGate";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -47,6 +48,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <ExpProvider>
     <TeamProvider>
     <ToastProvider>
+    <SessionGate />
     <div className="flex min-h-screen">
       <Sidebar collapsed={collapsed} onToggleCollapsed={toggle} mobileOpen={mobileOpen} onCloseMobile={() => setMobileOpen(false)} />
       <div className="min-w-0 flex-1">

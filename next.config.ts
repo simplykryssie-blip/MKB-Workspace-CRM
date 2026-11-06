@@ -1,10 +1,26 @@
 import type { NextConfig } from "next";
+import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 
-// Phase 1 (design): frontend only, no backend, no deployment target wired up.
-// Cloudflare (via @opennextjs/cloudflare) is added in Phase 3 after approval.
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  async headers() {
+    const common = [
+      { key: "X-Content-Type-Options", value: "nosniff" },
+      { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+      { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=()" },
+      { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
+    ];
+    return [
+      // The app can't be framed by other sites (clickjacking)…
+      { source: "/((?!f/).*)", headers: [...common, { key: "X-Frame-Options", value: "DENY" }, { key: "Content-Security-Policy", value: "frame-ancestors 'none'" }] },
+      // …except public forms, which are meant to be embedded on MKB's website.
+      { source: "/f/:path*", headers: common },
+    ];
+  },
 };
 
 export default nextConfig;
+
+// `next dev` gets the Cloudflare bindings (local D1 database, R2, secrets from .dev.vars).
+initOpenNextCloudflareForDev();

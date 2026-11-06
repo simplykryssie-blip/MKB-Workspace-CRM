@@ -49,41 +49,10 @@ const reducer = (s: State, a: Action): State => (a.type === "reset" ? init() : a
 /* ------------------------------------------------------------------ */
 
 export type Acting = { kind: "member"; id: string } | { kind: "client"; clientId: string };
-const SERVICE_DEPT: Record<ServiceKey, DeptKey> = { tax: "tax", books: "books", biz: "biz", expunge: "exp" };
 
-export function roleOf(roles: Role[], m?: Member) {
-  return roles.find((r) => r.id === m?.roleId);
-}
-/** Departments whose access list includes a module (service modules require membership in one of them). */
-function deptAllows(departments: Department[], m: Member, module: ModuleKey) {
-  const dept = MODULE_DEPT[module];
-  if (!dept) return true;
-  return departments.some((d) => m.departments.includes(d.key) && d.modules.includes(module));
-}
-export function canDo(s: Pick<State, "roles" | "departments">, m: Member | undefined, module: ModuleKey, action: ActionKey = "view") {
-  if (!m || m.status !== "active") return false;
-  const r = roleOf(s.roles, m);
-  if (!r || r.isClient) return false;
-  if (!(r.perms[module] ?? []).includes(action)) return false;
-  return r.allDepartments || deptAllows(s.departments, m, module);
-}
-export function hasSensitive(s: Pick<State, "roles" | "departments">, m: Member | undefined, key: string) {
-  if (!m || m.status !== "active") return false;
-  const r = roleOf(s.roles, m);
-  if (!r || r.isClient) return false;
-  if (!r.sensitive.includes(key) && !m.grants.includes(key)) return false;
-  const group = SENSITIVE_GROUPS.find((g) => key.startsWith(`${g.key}.`));
-  // Sensitive tax / expungement information also requires that department.
-  return r.allDepartments || !group || m.departments.includes(group.dept);
-}
-export function hasCap(s: Pick<State, "roles">, m: Member | undefined, cap: Capability) {
-  if (!m || m.status !== "active") return false;
-  return !!roleOf(s.roles, m)?.caps.includes(cap);
-}
-/** Effective sensitive permissions (role + individual grants), after department checks. */
-export function effectiveSensitive(s: Pick<State, "roles" | "departments">, m: Member) {
-  return SENSITIVE_GROUPS.flatMap((g) => g.perms.map((p) => p.key)).filter((k) => hasSensitive(s, m, k));
-}
+// Rules live in lib/team/policy.ts — the same code the server enforces.
+export { canDo, effectiveSensitive, hasCap, hasSensitive, roleOf } from "@/lib/team/policy";
+import { SERVICE_DEPT, canDo, hasCap, hasSensitive, roleOf } from "@/lib/team/policy";
 
 /* ------------------------------------------------------------------ */
 /* Actions                                                             */

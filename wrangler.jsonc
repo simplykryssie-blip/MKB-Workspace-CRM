@@ -12,5 +12,27 @@
   },
   "build": {
     "command": "npx opennextjs-cloudflare build"
+  },
+  // Phase 3 backend. These IDs are placeholders that only work locally
+  // (`wrangler d1 ... --local`). Real resources are created later, with
+  // approval, for a protected preview — this branch must not reach `main`
+  // until they exist.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "mkb-crm-dev",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "FILES",
+      "bucket_name": "mkb-crm-files-dev"
+    }
+  ],
+  "vars": {
+    "APP_ENV": "development",
+    "BACKEND_ENABLED": "false"
   }
 }
