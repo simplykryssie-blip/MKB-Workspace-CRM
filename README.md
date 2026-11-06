@@ -100,6 +100,16 @@ npm run build && npm start
   with one-click pricing, and a follow-up request that collects every question and sends them to the
   client together. SSN/EIN/bank numbers keep only the last four digits (production: encrypted vault).
   The question sets are a draft (TY 2026 v1) that MKB's preparer must review and approve each year.
+- **Forms** (`/forms`): lead-capture forms built in the platform for the website and social links.
+  A builder with live preview (question types, required answers, "show only if" logic, and where each
+  answer saves on the lead), lead routing (assignee, pipeline stage, source/campaign, tags, services,
+  follow-up reminder), a direct link and website embed code, a Test tab, and a submissions inbox with
+  spam handling. Each submission creates a lead automatically — or, when the email/phone matches,
+  adds to the existing lead or client's activity instead of creating a duplicate. Forms can't be
+  published with fields that would collect sensitive information (SSN, bank/card numbers, date of
+  birth, criminal-history details); those are collected later through the secure portal interviews.
+  The public page (`/f/<link-name>`) is separate from the staff app; in this preview it shows the
+  sample forms and doesn't save responses (use the Test tab to see a submission become a lead).
 
 Changes reset on page reload. Nothing is sent to a server.
 

@@ -8,6 +8,7 @@ import { Topbar } from "./Topbar";
 import { ThemeToggle } from "./ThemeToggle";
 import { ClientsProvider } from "@/lib/store/clients-store";
 import { LeadsProvider } from "@/lib/store/leads-store";
+import { FormsProvider } from "@/lib/store/forms-store";
 import { TaxProvider } from "@/lib/store/tax-store";
 import { BooksProvider } from "@/lib/store/books-store";
 import { BizProvider } from "@/lib/store/biz-store";
@@ -39,6 +40,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <ClientsProvider>
     <LeadsProvider>
+    <FormsProvider>
     <TaxProvider>
     <BooksProvider>
     <BizProvider>
@@ -67,6 +69,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     </BizProvider>
     </BooksProvider>
     </TaxProvider>
+    </FormsProvider>
     </LeadsProvider>
     </ClientsProvider>
   );

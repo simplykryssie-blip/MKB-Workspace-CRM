@@ -20,6 +20,7 @@ export function moduleForPath(path: string): ModuleKey | null {
     ["/dashboard", "dashboard"],
     ["/clients", "crm"],
     ["/leads", "leads"],
+    ["/forms", "leads"],
     ["/services/tax-preparation", "tax"],
     ["/services/bookkeeping", "books"],
     ["/services/business-services", "biz"],

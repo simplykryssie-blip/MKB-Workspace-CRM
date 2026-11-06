@@ -3,6 +3,7 @@ import {
   Briefcase,
   CalendarDays,
   CheckSquare,
+  ClipboardList,
   FileText,
   FolderOpen,
   LayoutDashboard,
@@ -35,6 +36,7 @@ export const NAV: { section?: string; items: NavItem[] }[] = [
       { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
       { label: "Clients", href: "/clients", icon: Users },
       { label: "Leads", href: "/leads", icon: UserPlus, badgeKey: "leadsDue" },
+      { label: "Forms", href: "/forms", icon: ClipboardList },
     ],
   },
   {
