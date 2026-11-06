@@ -17,6 +17,7 @@ import { INTERVIEW_VERSION, sectionsFor } from "@/lib/tax/interview/questions";
 import { applyPrefill, prefillFrom } from "@/lib/tax/interview/prefill";
 import { US_STATES, formatPhone } from "@/lib/validation";
 import { fmtDate } from "@/lib/format";
+import { BACKEND, call } from "@/lib/sync/remote";
 
 export const interviewHref = (id: string) => `/services/tax-preparation/returns/${id}/interview`;
 
@@ -117,7 +118,7 @@ function Runner({ r, clientName, by, prefillSource }: { r: TaxReturn; clientName
           </div>
 
           {cur.key === "followups" && <FollowUpStep r={r} by={by} onDone={() => go(step + 1)} />}
-          {sec && <SectionView s={sec} a={a} prefilled={initial.ids} showErrors={!!tried[sec.id]} setVal={setVal} setRows={setRows} />}
+          {sec && <SectionView s={sec} a={a} prefilled={initial.ids} showErrors={!!tried[sec.id]} setVal={setVal} setRows={setRows} secure={BACKEND ? (key, kind, value) => call("PUT", `/api/tax/returns/${r.id}/secure`, { key, kind, value }) : undefined} />}
           {cur.key === "review" && (submitted ? <Submitted r={r} by={by} /> : <Review r={r} sections={visible} a={a} by={by} answers={answers} goTo={(sid) => go(steps.findIndex((x) => x.key === sid))} />)}
 
           {cur.key !== "review" && cur.key !== "followups" && (
@@ -138,7 +139,8 @@ const StepIcon = ({ done }: { done: boolean }) => (done ? <CheckCircle2 size={15
 
 /* ------------------------------------------------------------------ */
 
-function SectionView({ s, a, prefilled, showErrors, setVal, setRows }: { s: Section; a: Answers; prefilled: Set<string>; showErrors: boolean; setVal: (id: string, v: string) => void; setRows: (sid: string, rows: Row[]) => void }) {
+type SecureSave = (key: string, kind: "ssn" | "ein" | "bank", value: string) => Promise<unknown>;
+function SectionView({ s, a, prefilled, showErrors, setVal, setRows, secure }: { s: Section; a: Answers; prefilled: Set<string>; showErrors: boolean; setVal: (id: string, v: string) => void; setRows: (sid: string, rows: Row[]) => void; secure?: SecureSave }) {
   const rows = rowsOf(a, s.id);
   return (
     <Card className="p-5 sm:p-6">
@@ -153,7 +155,7 @@ function SectionView({ s, a, prefilled, showErrors, setVal, setRows }: { s: Sect
                 <Button size="sm" variant="ghost" icon={Trash2} aria-label={`Remove ${s.repeat!.noun} ${i + 1}`} onClick={() => setRows(s.id, rows.filter((_, j) => j !== i))}>Remove</Button>
               </div>
               <div className="space-y-5">
-                {s.questions.filter((q) => qVisible(q, a, row)).map((q) => <Field key={q.id} q={q} idp={`${s.id}-${i}`} value={row[q.id] ?? ""} row={row} err={showErrors && !q.optional && !(row[q.id] ?? "").trim()} onChange={(v) => setRows(s.id, rows.map((x, j) => (j === i ? { ...x, [q.id]: v } : x)))} />)}
+                {s.questions.filter((q) => qVisible(q, a, row)).map((q) => <Field key={q.id} q={q} idp={`${s.id}-${i}`} secureKey={`${s.id}.${i}.${q.id}`} secure={secure} value={row[q.id] ?? ""} row={row} err={showErrors && !q.optional && !(row[q.id] ?? "").trim()} onChange={(v) => setRows(s.id, rows.map((x, j) => (j === i ? { ...x, [q.id]: v } : x)))} />)}
               </div>
             </div>
           ))}
@@ -162,7 +164,7 @@ function SectionView({ s, a, prefilled, showErrors, setVal, setRows }: { s: Sect
         </div>
       ) : (
         <div className="mt-5 space-y-5">
-          {s.questions.filter((q) => qVisible(q, a)).map((q) => <Field key={q.id} q={q} idp={s.id} value={(a[q.id] as string) ?? ""} prefilled={prefilled.has(q.id) && a[q.id] !== ""} err={showErrors && !q.optional && !((a[q.id] as string) ?? "").trim()} onChange={(v) => setVal(q.id, v)} />)}
+          {s.questions.filter((q) => qVisible(q, a)).map((q) => <Field key={q.id} q={q} idp={s.id} secureKey={`${s.id}.${q.id}`} secure={secure} value={(a[q.id] as string) ?? ""} prefilled={prefilled.has(q.id) && a[q.id] !== ""} err={showErrors && !q.optional && !((a[q.id] as string) ?? "").trim()} onChange={(v) => setVal(q.id, v)} />)}
         </div>
       )}
     </Card>
@@ -171,7 +173,7 @@ function SectionView({ s, a, prefilled, showErrors, setVal, setRows }: { s: Sect
 
 const inputCls = (err?: boolean) => `h-11 w-full rounded-xl border bg-surface px-3 text-[15px] text-ink placeholder:text-faint focus:outline-none focus:ring-4 ${err ? "border-danger focus:ring-danger/15" : "border-line focus:border-accent focus:ring-accent/15"}`;
 
-function Field({ q, idp, value, onChange, err, prefilled, row }: { q: Q; idp: string; value: string; onChange: (v: string) => void; err?: boolean; prefilled?: boolean; row?: Row }) {
+function Field({ q, idp, value, onChange, err, prefilled, row, secure, secureKey }: { q: Q; idp: string; value: string; onChange: (v: string) => void; err?: boolean; prefilled?: boolean; row?: Row; secure?: SecureSave; secureKey?: string }) {
   const id = `iv-${idp}-${q.id}`;
   const pill = (on: boolean) => `rounded-xl border px-4 py-2.5 text-left text-[14px] font-medium transition-colors ${on ? "border-accent bg-accent-soft text-accent-ink" : "border-line bg-surface text-ink-2 hover:border-line-strong"}`;
   const label = (
@@ -230,7 +232,7 @@ function Field({ q, idp, value, onChange, err, prefilled, row }: { q: Q; idp: st
     case "ein":
     case "tin":
     case "bank":
-      input = <SecureNumber id={id} q={q} value={value} onChange={onChange} err={err} kind={q.type === "tin" ? (row?.okind && row.okind !== "Individual" ? "ein" : row?.okind === "Individual" ? "ssn" : "ein") : q.type} />;
+      input = <SecureNumber id={id} q={q} value={value} onChange={onChange} err={err} save={secure && secureKey ? (kind, v) => secure(secureKey, kind, v) : undefined} kind={q.type === "tin" ? (row?.okind && row.okind !== "Individual" ? "ein" : row?.okind === "Individual" ? "ssn" : "ein") : q.type} />;
       break;
     default:
       input = <input id={id} type={q.type === "email" ? "email" : "text"} value={value} placeholder={q.placeholder} onChange={(e) => onChange(e.target.value)} className={inputCls(err)} />;
@@ -245,7 +247,10 @@ function Field({ q, idp, value, onChange, err, prefilled, row }: { q: Q; idp: st
 }
 
 /** Sensitive numbers: entered once, kept as the last four digits only (production: full value goes straight to the encrypted vault). */
-function SecureNumber({ id, value, onChange, err, kind }: { id: string; q: Q; value: string; onChange: (v: string) => void; err?: boolean; kind: "ssn" | "ein" | "bank" }) {
+/** With the backend on, the full number is sent once to the server's encrypted vault; only the last four stay here. */
+function SecureNumber({ id, value, onChange, err, kind, save }: { id: string; q: Q; value: string; onChange: (v: string) => void; err?: boolean; kind: "ssn" | "ein" | "bank"; save?: (kind: "ssn" | "ein" | "bank", value: string) => Promise<unknown> }) {
+  const [busy, setBusy] = useState(false);
+  const [saveErr, setSaveErr] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [editing, setEditing] = useState(!value);
   useEffect(() => { if (!value) setEditing(true); }, [value]);
@@ -262,8 +267,16 @@ function SecureNumber({ id, value, onChange, err, kind }: { id: string; q: Q; va
   return (
     <div className="flex flex-wrap items-center gap-2">
       <input id={id} type="password" autoComplete="off" inputMode="numeric" value={draft} onChange={(e) => setDraft(e.target.value.replace(/[^\d-]/g, "").slice(0, kind === "bank" ? 17 : 11))} placeholder={kind === "ssn" ? "•••-••-••••" : kind === "ein" ? "••-•••••••" : "Digits only"} className={`${inputCls(err)} max-w-[240px] tabular-nums`} />
-      <Button size="sm" disabled={kind === "bank" ? digits.length < need : digits.length !== need} onClick={() => { onChange(maskLast4(digits, kind)); setDraft(""); setEditing(false); }}>Save number</Button>
+      <Button size="sm" disabled={busy || (kind === "bank" ? digits.length < need : digits.length !== need)} onClick={async () => {
+        if (save) {
+          setBusy(true); setSaveErr(null);
+          try { await save(kind, digits); } catch (e) { setBusy(false); return setSaveErr(e instanceof Error ? e.message : "Couldn't save the number."); }
+          setBusy(false);
+        }
+        onChange(maskLast4(digits, kind)); setDraft(""); setEditing(false);
+      }}>{busy ? "Saving…" : "Save number"}</Button>
       {value && <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>}
+      {saveErr && <p role="alert" className="w-full text-[12px] text-danger-ink">{saveErr}</p>}
       <p className="w-full text-[12px] text-muted"><Lock size={11} className="mr-1 inline" />Encrypted and visible only to authorized MKB staff. {kind !== "bank" && `Enter all ${need} digits.`}</p>
     </div>
   );

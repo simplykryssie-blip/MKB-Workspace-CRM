@@ -1,6 +1,6 @@
 # MKB Business Suite — Backend (Phase 3)
 
-Status: **foundation + Clients, Leads, Team & Permissions and Forms connected; tested locally. Not deployed. No cloud resources created.**
+Status: **foundation + Clients, Leads, Team & Permissions, Forms and Tax Preparation connected; tested locally. Not deployed. No cloud resources created.**
 
 The backend runs on Cloudflare: the Next.js app is compiled into a Cloudflare
 Worker (OpenNext), data lives in **D1** (SQLite), files will live in **R2**, and
@@ -30,7 +30,8 @@ own local runtime and database — nothing touches a real account yet.
 | **Leads** | Connected. Pipeline, stages and sources, notes, reminders, owner changes, marking lost/reopening and conversion to a client are saved to the database. |
 | **Team & Permissions** | Connected. The team, roles, departments, invitations (sent by email, resend replaces the old link, cancel), access requests (sensitive access approved only by the Owner), profiles, selected records, access reviews, onboarding, offboarding (deactivates, never deletes), sessions (sign out one device or all) and the security policy all load from and save to the database. The audit log shown is the server's. People without Team access only receive their own record. |
 | **Forms** | Connected. Forms are built and published in the database (publishing is refused on the server if a question would collect sensitive information). The public page `/f/<link-name>` loads the published form from the server and submissions become leads: matched to an existing client or open lead by email/phone (no duplicates), otherwise a new lead for the form's owner and stage with a follow-up reminder. Public submissions need no sign-in but are rate-limited (10 per 10 minutes per address), have a spam trap, never return any record, and never reveal whether the person was already known. |
-| Tax, Bookkeeping, Business Services, Expungement screens | Still use in-browser sample data (next). |
+| **Tax Preparation** | Connected. Returns (only those of clients the person may open), the fee schedule, documents checklist, notes, pricing, review sign-off, e-file records and the guided interview save to the database. Each change is checked: creating needs Tax "create", changing the preparer/reviewer "assign", review sign-off and e-file "approve", everything else "edit"; history can't be removed. SSN/EIN/bank numbers typed in the interview go straight to the encrypted vault — only the last four digits are kept with the answers — and preparers reveal them from the Interview tab (needs the matching sensitive permission; every reveal and refusal is audited). The "preview access" switch is hidden; the screens follow the person's real permissions. |
+| Bookkeeping, Business Services, Expungement screens; client portal for clients | Still use in-browser sample data (next). |
 
 How saving works: the screens keep working instantly and save each change in the
 background. Every save names the version it started from; if someone else saved
@@ -60,6 +61,13 @@ Run inside Cloudflare's actual runtime: `npx opennextjs-cloudflare build && npx 
 
 ## Tests
 
+- Tax with the backend on (5 browser checks): returns load from the server; a return note and interview
+  answers survive a reload; an interview SSN goes to the vault (never in the page) and the preparer
+  reveals it from the Interview tab.
+- Tax API (6 checks): scoped return lists, duplicate year/form refused, preparer assignment feeds record
+  access, revision conflicts, history can't be removed, sign-off needs "approve" and reassignment needs
+  "assign", interview SSN/bank numbers encrypted with per-kind reveal permissions and audited refusals,
+  fee schedule needs Tax settings.
 - Team & Forms with the backend on (8 browser checks): directory and audit log from the server; a role
   change, an invitation and the security policy survive a reload; a new form is built, published and
   tested; a signed-out visitor's public submission becomes a real lead for the right owner.

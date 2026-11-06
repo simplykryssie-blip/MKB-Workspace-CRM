@@ -8,7 +8,8 @@
  *  - Invoices live on the client profile (tagged with taxReturnId).
  *  - The client's Tax Preparation engagement stage mirrors the return status.
  */
-import { createContext, useContext, useMemo, useReducer, useRef } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { BACKEND, RemoteError, call, debouncer, notify, pendingClientCreates } from "@/lib/sync/remote";
 import { DEFAULT_FEE_SCHEDULE, ORGANIZERS, RETURN_STATUSES, baseChecklist, defaultPricing, dueDates, priceTotal, type ChecklistItem, type FeeItem, type FilingStatus, type PriceLine, type ReturnStatus, type TaxForm, type TaxReturn } from "@/lib/tax/config";
 import { TAX_RETURNS } from "@/lib/sample/tax";
 import { docsFor, type Answers } from "@/lib/tax/interview/engine";
@@ -43,9 +44,13 @@ type Action =
   | { type: "add"; r: TaxReturn }
   | { type: "update"; id: string; fn: (r: TaxReturn) => TaxReturn }
   | { type: "fees"; fees: FeeItem[] }
-  | { type: "preset"; preset: AccessPreset };
+  | { type: "preset"; preset: AccessPreset }
+  | { type: "hydrate"; returns: TaxReturn[]; fees: FeeItem[] }
+  | { type: "replace"; r: TaxReturn }
+  | { type: "remove"; id: string };
 
-const init = (): State => ({ returns: structuredClone(TAX_RETURNS), fees: structuredClone(DEFAULT_FEE_SCHEDULE), preset: "full" });
+// With the backend on, returns load from the server after sign-in.
+const init = (): State => ({ returns: BACKEND ? [] : structuredClone(TAX_RETURNS), fees: structuredClone(DEFAULT_FEE_SCHEDULE), preset: "full" });
 
 function reducer(s: State, a: Action): State {
   switch (a.type) {
@@ -57,6 +62,14 @@ function reducer(s: State, a: Action): State {
       return { ...s, returns: s.returns.map((r) => (r.id === a.id ? a.fn(r) : r)) };
     case "fees":
       return { ...s, fees: a.fees };
+    case "hydrate": {
+      const local = s.returns.filter((r) => !a.returns.some((x) => x.id === r.id));
+      return { ...s, returns: [...local, ...a.returns], fees: a.fees.length ? a.fees : s.fees };
+    }
+    case "remove":
+      return { ...s, returns: s.returns.filter((r) => r.id !== a.id) };
+    case "replace":
+      return { ...s, returns: s.returns.some((r) => r.id === a.r.id) ? s.returns.map((r) => (r.id === a.r.id ? a.r : r)) : [a.r, ...s.returns] };
     case "preset":
       return { ...s, preset: a.preset };
   }
@@ -442,7 +455,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
   return a;
 }
 
-export type TaxStore = ReturnType<typeof makeActions> & State & { access: TaxAccess };
+export type TaxStore = ReturnType<typeof makeActions> & State & { access: TaxAccess; ready: boolean };
 const Ctx = createContext<TaxStore | null>(null);
 
 export function TaxProvider({ children }: { children: React.ReactNode }) {
@@ -453,7 +466,8 @@ export function TaxProvider({ children }: { children: React.ReactNode }) {
   const cref = useRef(clients);
   cref.current = clients;
   const actions = useMemo(() => makeActions(dispatch, () => ref.current, () => cref.current), []);
-  const value = useMemo(() => ({ ...actions, ...state, access: ACCESS_PRESETS[state.preset].access }), [actions, state]);
+  const sync = useTaxSync(state, dispatch);
+  const value = useMemo(() => ({ ...actions, ...state, access: sync.access ?? ACCESS_PRESETS[state.preset].access, ready: sync.ready }), [actions, state, sync.access, sync.ready]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
@@ -465,3 +479,86 @@ export function useTax() {
 
 export { RETURN_STATUSES };
 export type { ClientDocument };
+
+/* ------------------------------------------------------------------ */
+/* Backend sync (only when NEXT_PUBLIC_BACKEND=1)                      */
+/* ------------------------------------------------------------------ */
+
+type RevReturn = TaxReturn & { rev?: number };
+/**
+ * Loads returns the person may open, then saves each change with the revision it
+ * started from (the server checks edit / assign / approve per change). What the
+ * screens allow follows the signed-in person's real permissions.
+ */
+function useTaxSync(state: State, dispatch: React.Dispatch<Action>) {
+  const [ready, setReady] = useState(!BACKEND);
+  const [access, setAccess] = useState<TaxAccess | null>(null);
+  const synced = useRef(new Map<string, TaxReturn>());
+  const revs = useRef(new Map<string, number>());
+  const inflight = useRef(new Set<string>());
+  const feesSynced = useRef<FeeItem[] | null>(null);
+  const later = useRef(debouncer(500)).current;
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  const reload = useCallback(async () => {
+    try {
+      const r = await call<{ returns: RevReturn[]; fees: FeeItem[] }>("GET", "/api/tax");
+      r.returns.forEach((x) => { revs.current.set(x.id, x.rev ?? 1); synced.current.set(x.id, x); });
+      dispatch({ type: "hydrate", returns: r.returns, fees: r.fees });
+      feesSynced.current = r.fees.length ? r.fees : stateRef.current.fees;
+    } catch (e) {
+      if (!(e instanceof RemoteError && (e.status === 401 || e.status === 403))) notify("Couldn't load tax returns.");
+    }
+  }, []);
+  useEffect(() => {
+    if (!BACKEND) return;
+    (async () => {
+      try {
+        const me = await call<{ perms?: Record<string, string[]>; sensitive?: string[] }>("GET", "/api/auth/session");
+        const t = me.perms?.tax ?? [];
+        setAccess({ edit: t.includes("edit"), review: t.includes("approve"), efile: t.includes("approve"), billing: t.includes("edit"), sensitiveDocs: !!me.sensitive?.includes("tax.taxDocs"), revealIds: !!me.sensitive?.includes("tax.revealSsn") });
+        if (t.includes("view")) await reload();
+      } catch { /* signed out */ }
+      setReady(true);
+    })();
+  }, []);
+
+  const save = useCallback(async (id: string) => {
+    if (inflight.current.has(id)) return later(id, () => save(id));
+    const r = stateRef.current.returns.find((x) => x.id === id);
+    if (!r || synced.current.get(id) === r) return;
+    inflight.current.add(id);
+    try {
+      if (!revs.current.has(id)) {
+        await pendingClientCreates.get(r.clientId); // a brand-new client must exist first
+        const res = await call<{ return: RevReturn }>("POST", "/api/tax", { return: r });
+        revs.current.set(id, res.return.rev ?? 1);
+      } else {
+        const res = await call<{ return: RevReturn }>("PUT", `/api/tax/returns/${id}`, { return: { ...r, rev: revs.current.get(id) } });
+        revs.current.set(id, res.return.rev ?? 1);
+      }
+      synced.current.set(id, r);
+    } catch (e) {
+      if (e instanceof RemoteError && e.status === 401) return;
+      notify(e instanceof RemoteError ? e.message : "Couldn't save the return — check your connection.");
+      // A refused create is undone here (otherwise it would be retried forever).
+      if (!revs.current.has(id) && e instanceof RemoteError && e.status < 500) dispatch({ type: "remove", id });
+      await reload();
+    } finally {
+      inflight.current.delete(id);
+    }
+    if (stateRef.current.returns.find((x) => x.id === id) !== synced.current.get(id)) later(id, () => save(id));
+  }, []);
+
+  useEffect(() => {
+    if (!BACKEND || !ready) return;
+    state.returns.forEach((r) => { if (synced.current.get(r.id) !== r) later(r.id, () => save(r.id)); });
+    if (feesSynced.current && feesSynced.current !== state.fees) {
+      const fees = state.fees;
+      later("__fees", () => call("PUT", "/api/tax/fees", { fees }).then(() => { feesSynced.current = fees; }).catch((e) => { notify(e instanceof Error ? e.message : "Couldn't save the fee schedule."); reload(); }));
+    }
+  }, [state.returns, state.fees, ready]);
+
+  return { ready, access };
+}

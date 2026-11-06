@@ -42,7 +42,8 @@ type Action =
   | { type: "update"; id: string; fn: (c: Client) => Client; vault?: VaultEntry }
   | { type: "hydrate"; clients: Client[]; known: Set<string> }
   | { type: "replace"; client: Client }
-  | { type: "dropVault"; id: string };
+  | { type: "dropVault"; id: string }
+  | { type: "remove"; id: string };
 
 function reducer(state: State, a: Action): State {
   switch (a.type) {
@@ -57,6 +58,8 @@ function reducer(state: State, a: Action): State {
     }
     case "replace":
       return { ...state, clients: state.clients.some((c) => c.id === a.client.id) ? state.clients.map((c) => (c.id === a.client.id ? a.client : c)) : [a.client, ...state.clients] };
+    case "remove":
+      return { ...state, clients: state.clients.filter((c) => c.id !== a.id) };
     case "dropVault": {
       const v = { ...state.vault };
       delete v[a.id];
@@ -600,6 +603,8 @@ function useClientSync(state: State, dispatch: React.Dispatch<Action>) {
     } catch (e) {
       if (e instanceof RemoteError && e.status === 401) return;
       notify(e instanceof RemoteError ? e.message : "Couldn't save — check your connection.");
+      // A refused create is undone (otherwise it would be retried forever).
+      if (!revs.current.has(id) && e instanceof RemoteError && e.status < 500) { dispatch({ type: "remove", id }); dispatch({ type: "dropVault", id }); return; }
       await reload(id);
     } finally {
       inflight.current.delete(id);

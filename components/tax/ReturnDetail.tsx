@@ -86,12 +86,13 @@ export function ReturnDetail({ id }: { id: string }) {
 
   const gate = useClientGate(r?.clientId, "this tax return");
   if (gate) return gate;
+  if ((!r || !client) && !tax.ready) return <div className="grid min-h-[50vh] place-items-center text-[14px] text-muted" role="status">Loading…</div>;
   if (!r || !client)
     return (
       <div className="grid min-h-[50vh] place-items-center text-center">
         <div>
           <h1 className="text-[20px] font-bold text-ink">Return not found</h1>
-          <p className="mt-1 text-[14px] text-muted">Returns created in an earlier preview session reset on reload.</p>
+          <p className="mt-1 text-[14px] text-muted">It doesn&rsquo;t exist, or isn&rsquo;t available to you.</p>
           <Link href="/services/tax-preparation" className="mt-4 inline-block text-[14px] font-semibold text-accent">Back to Tax Center</Link>
         </div>
       </div>

@@ -1,5 +1,7 @@
 "use client";
 
+import { BACKEND } from "@/lib/sync/remote";
+
 import { AlertCircle, CalendarClock, CheckCircle2, CircleDashed, Clock, Eye, FileCheck2, FileSearch, Hourglass, Inbox, PenLine, Send, ShieldCheck, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { STATUS_META, type ReturnStatus, type TaxReturn } from "@/lib/tax/config";
@@ -65,6 +67,8 @@ export function TaxYearSelect({ value, onChange, years, allowAll }: { value: num
 /** Preview the Tax Center as staff with fewer permissions (enforced server-side in Phase 3). */
 export function AccessPreviewBar() {
   const { preset, setPreset } = useTax();
+  // With real sign-in, permissions come from the person's role — no preview switch.
+  if (BACKEND) return null;
   const limited = preset !== "full";
   return (
     <div className={`mb-4 flex flex-wrap items-center gap-2 rounded-xl border px-3.5 py-2 text-[12.5px] ${limited ? "border-warning/40 bg-warning-soft text-warning-ink" : "border-dashed border-line-strong text-muted"}`}>

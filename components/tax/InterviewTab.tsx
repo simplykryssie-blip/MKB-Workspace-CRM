@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { BACKEND, call } from "@/lib/sync/remote";
 import { AlertTriangle, CheckCircle2, CircleDashed, ClipboardCheck, ExternalLink, FilePlus2, ListChecks, MessageSquarePlus, MinusCircle, NotebookPen, Send, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -82,9 +83,9 @@ export function InterviewTab({ r }: { r: TaxReturn }) {
                   <p className="mb-1.5 text-[12.5px] font-semibold uppercase tracking-wide text-muted">{s.title}</p>
                   {s.repeat ? (
                     rowsOf(a, s.id).length === 0 ? <p className="text-[13px] text-muted">None entered.</p> : rowsOf(a, s.id).map((row, i) => (
-                      <div key={i} className="mb-2 rounded-xl border border-line p-2.5"><p className="mb-1 text-[13px] font-semibold text-ink">{s.repeat!.rowTitle?.(row, i)}</p><AnswerRows qs={s.questions.filter((x) => qVisible(x, a, row))} get={(x) => row[x.id]} onAsk={can ? (x) => ask(`About ${x.label.replace(/\?$/, "")} (${s.repeat!.rowTitle?.(row, i)}): `, s.title) : undefined} /></div>
+                      <div key={i} className="mb-2 rounded-xl border border-line p-2.5"><p className="mb-1 text-[13px] font-semibold text-ink">{s.repeat!.rowTitle?.(row, i)}</p><AnswerRows qs={s.questions.filter((x) => qVisible(x, a, row))} get={(x) => row[x.id]} revealKey={(x) => `${s.id}.${i}.${x.id}`} returnId={r.id} onAsk={can ? (x) => ask(`About ${x.label.replace(/\?$/, "")} (${s.repeat!.rowTitle?.(row, i)}): `, s.title) : undefined} /></div>
                     ))
-                  ) : <AnswerRows qs={s.questions.filter((x) => qVisible(x, a))} get={(x) => a[x.id] as string} onAsk={can ? (x) => ask(`About “${x.label}”: `, s.title) : undefined} />}
+                  ) : <AnswerRows qs={s.questions.filter((x) => qVisible(x, a))} get={(x) => a[x.id] as string} revealKey={(x) => `${s.id}.${x.id}`} returnId={r.id} onAsk={can ? (x) => ask(`About “${x.label}”: `, s.title) : undefined} />}
                 </div>
               ))}
             </div>
@@ -149,16 +150,29 @@ export function InterviewTab({ r }: { r: TaxReturn }) {
   );
 }
 
-function AnswerRows({ qs, get, onAsk }: { qs: Q[]; get: (q: Q) => string | undefined; onAsk?: (q: Q) => void }) {
+function AnswerRows({ qs, get, onAsk, revealKey, returnId }: { qs: Q[]; get: (q: Q) => string | undefined; onAsk?: (q: Q) => void; revealKey?: (q: Q) => string; returnId?: string }) {
   return (
     <dl className="divide-y divide-line rounded-xl border border-line">
       {qs.map((q) => (
         <div key={q.id} className="group flex flex-wrap items-baseline gap-x-3 px-3 py-1.5">
           <dt className="min-w-[200px] flex-1 text-[12.5px] text-muted">{q.label}</dt>
-          <dd className="text-[13px] font-medium text-ink">{display(q, get(q))}</dd>
+          <dd className="text-[13px] font-medium text-ink">{BACKEND && returnId && revealKey && ["ssn", "ein", "tin", "bank"].includes(q.type) && get(q) ? <RevealAnswer returnId={returnId} k={revealKey(q)} masked={display(q, get(q))} /> : display(q, get(q))}</dd>
           {onAsk && <button onClick={() => onAsk(q)} className="text-[11.5px] font-semibold text-accent opacity-70 hover:underline group-hover:opacity-100">Ask</button>}
         </div>
       ))}
     </dl>
+  );
+}
+
+/** Full value from the encrypted vault — the server checks the permission and logs every reveal. */
+function RevealAnswer({ returnId, k, masked }: { returnId: string; k: string; masked: string }) {
+  const toast = useToast();
+  const [v, setV] = useState<string | null>(null);
+  useEffect(() => { if (!v) return; const t = setTimeout(() => setV(null), 30000); return () => clearTimeout(t); }, [v]);
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className="font-mono tabular-nums">{v ?? masked}</span>
+      <button className="text-[11.5px] font-semibold text-accent hover:underline" onClick={() => (v ? setV(null) : call<{ value: string }>("POST", `/api/tax/returns/${returnId}/secure`, { key: k }).then((r) => { setV(r.value); toast("Revealed for 30 seconds — recorded in the audit log", "info"); }).catch((e) => toast(e instanceof Error ? e.message : "Couldn't reveal", "info")))}>{v ? "Hide" : "Reveal"}</button>
+    </span>
   );
 }

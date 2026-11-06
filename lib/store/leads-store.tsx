@@ -24,7 +24,8 @@ type Action =
   | { type: "stages"; stages: LeadStage[]; remap?: { from: string; to: string } }
   | { type: "sources"; sources: string[] }
   | { type: "hydrate"; leads: Lead[]; stages: LeadStage[]; sources: string[]; known: Set<string> }
-  | { type: "replace"; lead: Lead };
+  | { type: "replace"; lead: Lead }
+  | { type: "remove"; id: string };
 
 // With the backend on, leads load from the server after sign-in (never sample data).
 const init = (): State => (BACKEND ? { leads: [], stages: structuredClone(DEFAULT_STAGES), sources: [...DEFAULT_SOURCES] } : { leads: structuredClone(LEADS), stages: structuredClone(DEFAULT_STAGES), sources: [...DEFAULT_SOURCES] });
@@ -44,6 +45,8 @@ function reducer(s: State, a: Action): State {
       const local = s.leads.filter((l) => !a.leads.some((x) => x.id === l.id) && !a.known.has(l.id));
       return { leads: [...local, ...a.leads], stages: a.stages, sources: a.sources };
     }
+    case "remove":
+      return { ...s, leads: s.leads.filter((l) => l.id !== a.id) };
     case "replace":
       return { ...s, leads: s.leads.some((l) => l.id === a.lead.id) ? s.leads.map((l) => (l.id === a.lead.id ? a.lead : l)) : [a.lead, ...s.leads] };
     case "stages":
@@ -301,6 +304,7 @@ function useLeadSync(state: State, dispatch: React.Dispatch<Action>, clientsRef:
     } catch (e) {
       if (e instanceof RemoteError && e.status === 401) return;
       notify(e instanceof RemoteError ? e.message : "Couldn't save the lead — check your connection.");
+      if (!revs.current.has(id) && e instanceof RemoteError && e.status < 500) dispatch({ type: "remove", id });
       await reloadAll();
     } finally {
       inflight.current.delete(id);

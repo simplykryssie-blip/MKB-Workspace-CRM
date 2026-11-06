@@ -8,6 +8,7 @@ import { CLIENTS } from "@/lib/sample/clients";
 import { DEFAULT_SOURCES, DEFAULT_STAGES, LEADS } from "@/lib/sample/leads";
 import { SAMPLE_FORMS, SAMPLE_SUBMISSIONS } from "@/lib/sample/forms-seed";
 import { TAX_RETURNS } from "@/lib/sample/tax";
+import { DEFAULT_FEE_SCHEDULE } from "@/lib/tax/config";
 import { BOOKS_WORKSPACES } from "@/lib/sample/books";
 import { BIZ_REQUESTS } from "@/lib/sample/biz-seed";
 import { EXP_CASES, EXP_MATTERS } from "@/lib/sample/exp-seed";
@@ -90,6 +91,12 @@ export async function seedDev(env: AppEnv) {
     add("INSERT INTO forms (id, name, slug, title, intro, status, fields, services, routing, thank_you, created_at, updated_at, published_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", f.id, f.name, f.slug, f.title, f.intro ?? null, f.status, JSON.stringify(f.fields), JSON.stringify(f.services), JSON.stringify(f.routing), f.thankYou, f.createdAt, f.updatedAt, f.publishedAt ?? null);
   for (const x of SAMPLE_SUBMISSIONS)
     add("INSERT INTO form_submissions (id, form_id, at, data, channel, outcome, lead_id, client_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", x.id, x.formId, x.at, JSON.stringify(x.data), x.channel, x.outcome, x.leadId ?? null, x.clientId ?? null);
+
+  // Tax returns and the fee schedule.
+  DEFAULT_FEE_SCHEDULE.forEach((f, i) => add("INSERT INTO tax_fee_schedule (code, label, kind, price, unit, position) VALUES (?, ?, ?, ?, ?, ?)", f.code, f.label, f.kind, f.price, f.unit ?? null, i));
+  for (const r of TAX_RETURNS)
+    add("INSERT INTO tax_returns (id, client_id, enrollment_id, tax_year, kind, form, filing_status, states, status, preparer_id, reviewer_id, due_at, extension, review_signoff, approval_signature_id, client_approved_at, organizer, checklist, efile, pricing, status_history, notes, activity, completed_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      r.id, r.clientId, r.enrollmentId ?? null, r.taxYear, r.kind, r.form, r.filingStatus ?? null, JSON.stringify(r.states), r.status, r.preparerId, r.reviewerId, r.dueAt ?? null, r.extension ? JSON.stringify(r.extension) : null, r.reviewSignoff ? JSON.stringify(r.reviewSignoff) : null, r.approvalSignatureId ?? null, r.clientApprovedAt ?? null, JSON.stringify(r.organizer), JSON.stringify(r.checklist), JSON.stringify(r.efile), JSON.stringify(r.pricing), JSON.stringify(r.statusHistory), JSON.stringify(r.notes), JSON.stringify(r.activity), r.completedAt ?? null, r.createdAt, t);
 
   // D1 batches run as one transaction.
   for (let i = 0; i < S.length; i += 90) await db.batch(S.slice(i, i + 90));
