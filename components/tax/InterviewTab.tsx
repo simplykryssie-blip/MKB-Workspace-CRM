@@ -9,7 +9,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useTax } from "@/lib/store/tax-store";
 import { ORGANIZERS, type TaxReturn } from "@/lib/tax/config";
 import { coverage, display, docsFor, progress, qVisible, rowsOf, sectionVisible, type Answers, type Q } from "@/lib/tax/interview/engine";
-import { INTERVIEW_VERSION, flagsFor, impliedFilingStatus, returnNeeds, sectionsFor } from "@/lib/tax/interview/questions";
+import { INTERVIEW_VERSION, flagsFor, impliedFilingStatus, returnNeeds, sectionsFor, senior } from "@/lib/tax/interview/questions";
 import { fmtDate, relTime } from "@/lib/format";
 import { interviewHref } from "./TaxInterview";
 
@@ -27,7 +27,7 @@ export function InterviewTab({ r }: { r: TaxReturn }) {
   const toast = useToast();
   const can = tax.access.edit;
   const sections = useMemo(() => sectionsFor(r.form), [r.form]);
-  const a: Answers = useMemo(() => ({ ...(r.organizer.interview?.answers ?? {}), __form: r.form }), [r.organizer.interview?.answers, r.form]);
+  const a: Answers = useMemo(() => ({ ...(r.organizer.interview?.answers ?? {}), __form: r.form, __year: String(r.taxYear) }), [r.organizer.interview?.answers, r.form, r.taxYear]);
   const started = !!r.organizer.interview;
   const pg = progress(sections, a);
   const cov = coverage(sections, a);
@@ -49,7 +49,7 @@ export function InterviewTab({ r }: { r: TaxReturn }) {
     <div className="grid grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
       <div className="space-y-5">
         <Card>
-          <CardHeader icon={NotebookPen} title="Guided tax interview" subtitle={`TY ${INTERVIEW_VERSION.taxYear} question set ${INTERVIEW_VERSION.version} · ${INTERVIEW_VERSION.status}`} action={<Badge tone={tone}>{label}</Badge>} />
+          <CardHeader icon={NotebookPen} title="Guided tax interview" subtitle={`TY ${INTERVIEW_VERSION.taxYear} question set ${INTERVIEW_VERSION.version} · ${INTERVIEW_VERSION.status}`} action={<span className="flex flex-wrap gap-1.5">{started && senior(a) && <Badge tone="info">65+ · senior questions on</Badge>}<Badge tone={tone}>{label}</Badge></span>} />
           <div className="space-y-3 px-5 pb-5 sm:px-6">
             <div className="flex items-center gap-3"><div className="h-2 flex-1 rounded-full bg-surface-2"><div className="h-2 rounded-full bg-success" style={{ width: `${pg.pct}%` }} /></div><span className="text-[12.5px] font-semibold tabular-nums">{pg.pct}%</span></div>
             <p className="text-[12.5px] text-muted">

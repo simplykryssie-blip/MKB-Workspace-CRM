@@ -8,7 +8,7 @@
  * re-approve every tax year.
  */
 import type { DocSpec, TaxForm } from "@/lib/tax/config";
-import { all, any, form, gt, has, is, not, yes, type Answers, type Q, type Row, type Section } from "./engine";
+import { all, any, form, gt, has, is, not, yes, type Answers, type Cond, type Q, type Row, type Section } from "./engine";
 
 export const INTERVIEW_VERSION = { taxYear: 2026, version: "v1", status: "Draft — pending preparer approval" };
 
@@ -19,6 +19,18 @@ const joint = all(married, is("mfj", "File jointly with my spouse"));
 const enterTotals = is("records", "I'll enter my totals here");
 const BIZ: TaxForm[] = ["1065", "1120-S", "1120"];
 const owners = (f: TaxForm) => (f === "1065" ? "partner" : "shareholder");
+
+/* ---------------- age (from date of birth; tax year from the return) ---------------- */
+const yearOf = (a: Answers) => Number(a.__year) || INTERVIEW_VERSION.taxYear;
+/** Age on December 31 of the tax year. */
+export const ageAt = (dob: unknown, year: number) => (typeof dob === "string" && /^\d{4}-/.test(dob) ? year - Number(dob.slice(0, 4)) : undefined);
+/** IRS rule: you're 65 for the year if born before January 2 of (tax year − 64). */
+const is65 = (dob: unknown, year: number) => typeof dob === "string" && /^\d{4}-\d{2}-\d{2}$/.test(dob) && dob < `${year - 64}-01-02`;
+/** Oldest age in the household filing (taxpayer, and spouse when married). */
+export const oldest = (a: Answers) => Math.max(ageAt(a.dob, yearOf(a)) ?? 0, a.marital === "Married" ? (ageAt(a.sdob, yearOf(a)) ?? 0) : 0);
+/** Taxpayer or spouse is 65 or older. */
+export const senior = (a: Answers) => is65(a.dob, yearOf(a)) || (a.marital === "Married" && is65(a.sdob, yearOf(a)));
+const ageAtLeast = (n: number): Cond => (a) => oldest(a) >= n;
 
 /* ================================================================== */
 /* Individual — Form 1040                                              */
@@ -104,6 +116,30 @@ const spouse: Section = {
   ],
 };
 
+const seniors: Section = {
+  id: "seniors",
+  title: "Retirement years",
+  group: "About you",
+  show: (a) => senior(a) && form("1040", "1040 + Sch C", "1040-X")(a),
+  intro: "Because you (or your spouse) are 65 or older, a few extra questions can lower your tax.",
+  covers: ["Form 1040 / 1040-SR — 65+ additional standard deduction", "Senior deduction for age 65+ (tax years 2025–2028)", "Schedule R — credit for the elderly or disabled", "Schedule A — medical: Medicare, long-term care, assisted living", "Form 8821 / 2848 — someone authorized to help", "State retirement income exclusions"],
+  questions: [
+    { id: "srForm", label: "Would you like your return on Form 1040-SR (larger print, made for seniors)?", type: YN, help: "Same tax either way — it's just easier to read." },
+    { id: "srHelp", label: "Does a family member, caregiver or someone with power of attorney help you with your finances?", type: YN },
+    { id: "srHelperName", label: "Their name and relationship to you", type: "text", show: yes("srHelp") },
+    { id: "srHelperPhone", label: "Their phone number", type: "phone", show: yes("srHelp") },
+    { id: "srHelperTalk", label: "May MKB discuss your return with them?", type: YN, show: yes("srHelp"), help: "We'll send a form for you to sign authorizing this." },
+    { id: "srPoa", label: "Do they hold a power of attorney for you?", type: YN, show: yes("srHelp"), docs: [doc("Power of attorney document", "Identity", true)] },
+    { id: "srAssist", label: "How would you like to finish this interview?", type: "choice", options: ["I'll finish it myself online", "Please go through it with me by phone", "I'd like an appointment in the office"] },
+    { id: "srMedigap", label: "Do you pay for a Medicare supplement (Medigap), dental/vision plan or long-term care insurance?", type: YN, docs: [doc("Medicare supplement / long-term care premium statements", "Deductions")] },
+    { id: "srCare", label: "Do you live in, or pay for, a nursing home or assisted-living facility (for you or your spouse)?", type: YN, docs: [doc("Nursing home / assisted-living statements", "Deductions")] },
+    { id: "srHomeMods", label: "Any medical home changes this year — ramps, grab bars, stair lifts, walk-in tub?", type: YN, optional: true, docs: [doc("Receipts for medical home modifications", "Deductions")] },
+    { id: "srDisabled", label: "Are you (or your spouse) retired on permanent and total disability?", type: YN, docs: [doc("Physician's statement of permanent and total disability", "Credits", true)] },
+    { id: "srReverse", label: "Do you have a reverse mortgage?", type: YN, optional: true },
+    { id: "srCheck", label: "Do you prefer paper mail over email and the portal for anything we send?", type: YN, optional: true },
+  ],
+};
+
 const household: Section = {
   id: "household",
   title: "Your household",
@@ -151,7 +187,7 @@ const incomeScreen: Section = {
     { id: "invest", label: "Sold stocks, bonds, mutual funds or other investments (1099-B)?", type: YN },
     { id: "crypto", label: "At any time this year, did you receive, sell, exchange or otherwise dispose of a digital asset (crypto, stablecoins, NFTs)?", type: YN, help: "This question is printed on Form 1040 and must be answered." },
     { id: "retire", label: "Withdrawals from a retirement plan, IRA or pension (1099-R)?", type: YN },
-    { id: "ssa", label: "Social Security or railroad retirement benefits (SSA-1099)?", type: YN, docs: [doc("Form SSA-1099", "Income")] },
+    { id: "ssa", label: "Social Security or railroad retirement benefits (SSA-1099 / RRB-1099)?", type: YN },
     { id: "rental", label: "Owned rental property or received royalties?", type: YN },
     { id: "k1", label: "Partner, S-corp shareholder or trust beneficiary who receives a Schedule K-1?", type: YN },
     { id: "homesale", label: "Sold your home?", type: YN },
@@ -203,10 +239,33 @@ const retirement: Section = {
   covers: ["Form 1040 lines 4–5 — IRA, pension and annuity distributions", "Form 5329 — early withdrawal penalty"],
   questions: [
     { id: "rCount", label: "How many 1099-R forms did you receive?", type: "number", docs: [] },
+    { id: "rDocs", label: "Can you upload every 1099-R?", type: YN, docs: [doc("Forms 1099-R (retirement, pension and annuity distributions)", "Income")] },
     { id: "rRollover", label: "Was any of it rolled over into another retirement account within 60 days?", type: YN },
     { id: "rEarly", label: "Were you under 59½ when you took the money out?", type: YN },
     { id: "rReason", label: "What was it used for?", type: "choice", options: ["Medical expenses", "First home purchase (up to $10,000)", "Higher education", "Birth or adoption", "Disability", "Other / none of these"], show: yes("rEarly"), help: "Some uses avoid the 10% early-withdrawal penalty." },
     { id: "rWithheld", label: "Was federal tax withheld from the distribution?", type: YN, optional: true },
+    { id: "rPension", label: "Do you receive a pension or annuity?", type: YN },
+    { id: "rPensionNew", label: "Did the pension or annuity start this year?", type: YN, show: yes("rPension"), help: "We may need the plan's statement of your after-tax contributions.", docs: [doc("Pension/annuity starting statement (after-tax contributions)", "Income")] },
+    { id: "rRmd", label: "Did you take your required minimum distribution (RMD) from every IRA and retirement plan?", type: "choice", options: ["Yes, from every account", "No, or not from every account", "Not sure"], show: ageAtLeast(73), help: "Required each year once you reach 73. Missing one can mean a penalty, which can often be reduced if it's fixed quickly." },
+    { id: "rQcd", label: "Did you send any IRA money directly to a charity (a qualified charitable distribution)?", type: YN, show: ageAtLeast(70), help: "Done right, it isn't taxed — we need the charity's acknowledgment letter.", docs: [doc("Charity acknowledgment for IRA charitable distribution (QCD)", "Income")] },
+    { id: "rQcdAmt", label: "Total sent directly to charities", type: "money", show: all(ageAtLeast(70), yes("rQcd")) },
+    { id: "rInherited", label: "Did any of it come from an inherited IRA or retirement plan?", type: YN },
+  ],
+};
+
+const socialSecurity: Section = {
+  id: "socialSecurity",
+  title: "Social Security",
+  group: "Income",
+  show: yes("ssa"),
+  covers: ["Form 1040 line 6 — Social Security benefits (taxable portion)", "Lump-sum election for back payments (Pub. 915)", "Withholding on benefits (Form W-4V)"],
+  questions: [
+    { id: "ssaWho", label: "Who receives benefits?", type: "choice", options: ["Me", "My spouse", "Both of us"], show: married },
+    { id: "ssaDocs", label: "Can you upload the SSA-1099 for each person? (mailed every January)", type: YN, docs: [doc("Form SSA-1099 (Social Security benefit statement)", "Income")] },
+    { id: "rrb", label: "Railroad retirement benefits (RRB-1099)?", type: YN, docs: [doc("Form RRB-1099 / RRB-1099-R", "Income")] },
+    { id: "ssaLump", label: "Did you receive a lump-sum back payment that covers earlier years?", type: YN, help: "This can lower the tax — we'll need the SSA letter that shows which years it was for.", docs: [doc("SSA letter explaining the back payment", "Income")] },
+    { id: "ssaWithheld", label: "Do you have federal tax taken out of your Social Security (Form W-4V)?", type: YN },
+    { id: "ssaMedicare", label: "Are Medicare premiums (Part B, Part D or a Medicare Advantage plan) taken out of your benefits?", type: YN, help: "They're listed on the SSA-1099 and can count as medical expenses." },
   ],
 };
 
@@ -661,7 +720,7 @@ const finish: Section = {
 
 /* ================================================================== */
 
-const INDIVIDUAL = [amended, you, filing, spouse, household, dependents, incomeScreen, w2s, investments, retirement, rentals, k1s, otherIncome, schC, bizIncome, cogs, expenses, people, vehicleQ, vehicles, homeOffice, assets, schCOther, deductions, credits, payments, refund, finish];
+const INDIVIDUAL = [amended, you, filing, spouse, seniors, household, dependents, incomeScreen, w2s, investments, retirement, socialSecurity, rentals, k1s, otherIncome, schC, bizIncome, cogs, expenses, people, vehicleQ, vehicles, homeOffice, assets, schCOther, deductions, credits, payments, refund, finish];
 const BUSINESS = [entity, ownerRows, bizIncome, cogs, expenses, people, vehicleQ, vehicles, assets, balance, compliance, finish];
 
 /** Sections for a return's form, in interview order. */
@@ -717,6 +776,13 @@ export function flagsFor(f: TaxForm, a: Answers): string[] {
   if (a.k1 === "Yes" && rows("k1s").some((r) => r.khave === "No")) out.push("Waiting on a K-1 — consider an extension if it hasn't arrived by the deadline.");
   if (a.contractors === "Yes" && a.filed1099 !== "Yes, they're filed") out.push("1099-NEC forms for contractors haven't been filed — due January 31.");
   if (a.rEarly === "Yes" && a.rRollover !== "Yes") out.push("Early retirement withdrawal — check for the 10% penalty and any exception.");
+  if (a.rRmd === "No, or not from every account") out.push("Possible missed RMD — ask the client to take it now and consider requesting a penalty waiver (Form 5329).");
+  if (a.rRmd === "Not sure") out.push("Client isn't sure their RMDs were taken — confirm with the IRA custodian.");
+  if (a.rQcd === "Yes") out.push("Qualified charitable distribution — exclude it from taxable IRA income (\"QCD\" on line 4b) and don't deduct it again as a donation.");
+  if (senior(a) && a.ssa === "Yes" && a.ssaWithheld !== "Yes" && a.rWithheld !== "Yes" && a.estimates !== "Yes") out.push("Retirement income with no withholding or estimates — the client may owe; suggest Form W-4V or estimated payments.");
+  if (a.srAssist === "Please go through it with me by phone") out.push("Client asked to finish the interview by phone — schedule a call.");
+  if (a.srAssist === "I'd like an appointment in the office") out.push("Client asked to finish the interview in the office — schedule an appointment.");
+  if (a.srHelperTalk === "Yes") out.push("Send Form 8821 (or 2848) so MKB may speak with the client's helper.");
   if (rows("vehicles").some((r) => r.vlog === "No")) out.push("Vehicle used for business without a mileage log — ask the client to reconstruct one.");
   if (a.usesVehicle === "Yes" && rows("vehicles").some((r) => Number(r.vbiz) > Number(r.vtotal))) out.push("Business miles are higher than total miles for a vehicle.");
   return out;
@@ -755,6 +821,15 @@ export function returnNeeds(f: TaxForm, a: Answers): { label: string; code?: str
   if (a.hsa === "Yes") add("Form 8889 (HSA)");
   if (a.energy === "Yes") add("Form 5695 / 8936 (energy or vehicle credit)");
   if (a.foreign === "Yes" && a.fBalance === "$10,000 or more") add("FinCEN 114 (FBAR)");
+  if (senior(a)) {
+    if (a.srForm === "Yes") add("File on Form 1040-SR");
+    add("Additional standard deduction for 65+");
+    add("Senior deduction for 65+ (2025–2028) — check income limit");
+    if (a.srDisabled === "Yes") add("Schedule R (credit for the elderly or disabled) — check income limits");
+    if (a.state) add(`${a.state} retirement income exclusion — check state rules`);
+  }
+  if (a.rQcd === "Yes") add("Qualified charitable distribution (QCD) on line 4b");
+  if (a.ssa === "Yes") add("Social Security benefits worksheet");
   const st = new Set<string>([a.state as string, a.moved === "Yes" ? (a.prevState as string) : "", ...rows("w2s").map((r) => r.wstate)].filter(Boolean));
   if (st.size) add(`State return${st.size > 1 ? "s" : ""}: ${[...st].join(", ")}`, "STATE", st.size);
   return out;

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, Check, CheckCircle2, Circle, FileUp, Lock, MessageSquareReply, Pencil, Plus, Save, Send, Trash2, UserCog } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, Circle, FileUp, Lock, MessageSquareReply, Pencil, Plus, Save, Send, Trash2, Type, UserCog } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -40,7 +40,7 @@ function Runner({ r, clientName, by, prefillSource }: { r: TaxReturn; clientName
   const sections = useMemo(() => sectionsFor(r.form), [r.form]);
   const initial = useMemo(() => applyPrefill(sections, { ...(r.organizer.interview?.answers ?? {}) }, prefillFrom(prefillSource)), []); // eslint-disable-line react-hooks/exhaustive-deps
   const [answers, setAnswers] = useState<Answers>(initial.answers);
-  const a: Answers = useMemo(() => ({ ...answers, __form: r.form }), [answers, r.form]);
+  const a: Answers = useMemo(() => ({ ...answers, __form: r.form, __year: String(r.taxYear) }), [answers, r.form, r.taxYear]);
   const visible = sections.filter((s) => sectionVisible(s, a));
   const followUps = (r.organizer.followUps ?? []).filter((f) => f.status === "sent");
   const submitted = r.organizer.status === "submitted" || r.organizer.status === "reviewed";
@@ -55,6 +55,7 @@ function Runner({ r, clientName, by, prefillSource }: { r: TaxReturn; clientName
   const sec = visible.find((s) => s.id === cur.key);
   const [tried, setTried] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState<string | null>(null);
+  const [big, setBig] = useState(false);
   const top = useRef<HTMLDivElement>(null);
   const pg = progress(sections, a);
 
@@ -82,6 +83,7 @@ function Runner({ r, clientName, by, prefillSource }: { r: TaxReturn; clientName
             <h1 className="mt-0.5 text-[22px] font-bold tracking-tight text-ink">{FORM_LABEL[r.form]}</h1>
             <p className="mt-1 text-[13px] text-muted">Answer simple questions and we&rsquo;ll only ask what applies to you. Your answers save as you go — you can stop and come back anytime.</p>
           </div>
+          <Button icon={Type} aria-pressed={big} onClick={() => setBig(!big)}>{big ? "Normal text" : "Larger text"}</Button>
           {!submitted && <Button icon={Save} onClick={() => { persist(); toast("Saved — you can come back anytime"); }}>Save &amp; finish later</Button>}
         </div>
         <div className="mt-4 flex items-center gap-3">
@@ -91,7 +93,7 @@ function Runner({ r, clientName, by, prefillSource }: { r: TaxReturn; clientName
         </div>
       </Card>
 
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[250px_minmax(0,1fr)]">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[250px_minmax(0,1fr)]" style={big ? { zoom: 1.2 } : undefined}>
         <nav aria-label="Interview steps" className="hidden self-start lg:sticky lg:top-[140px] lg:block">
           <Card className="p-2">
             {[...new Set(steps.map((s) => s.group))].map((g) => (

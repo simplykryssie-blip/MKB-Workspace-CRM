@@ -225,7 +225,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     /** Submits the interview: documents it calls for join the checklist, and the filing status is set. */
     submitInterview(id: string, answers: Answers, by: "client" | "staff", consentName: string) {
       const r = R(id);
-      const docs = docsFor(sectionsFor(r.form), { ...answers, __form: r.form });
+      const docs = docsFor(sectionsFor(r.form), { ...answers, __form: r.form, __year: String(r.taxYear) });
       const toAdd: ChecklistItem[] = docs.filter((d) => !r.checklist.some((i) => i.name === d.name)).map((d) => ({ id: uid("ci"), ...d, required: true, source: "organizer" as const }));
       const fs = r.kind === "individual" ? (impliedFilingStatus(answers) as FilingStatus | undefined) : undefined;
       up(id, (x) =>
