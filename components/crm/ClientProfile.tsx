@@ -107,12 +107,13 @@ export function ClientProfile({ id }: { id: string }) {
 
   const gate = useClientGate(c?.id, "this client's profile");
   if (gate) return gate;
+  if (!c && !store.ready) return <div className="grid min-h-[50vh] place-items-center text-[14px] text-muted" role="status">Loading…</div>;
   if (!c)
     return (
       <div className="grid min-h-[50vh] place-items-center text-center">
         <div>
           <h1 className="text-[20px] font-bold text-ink">Client not found</h1>
-          <p className="mt-1 text-[14px] text-muted">This record doesn&rsquo;t exist in the sample data (new clients reset when the page reloads).</p>
+          <p className="mt-1 text-[14px] text-muted">It doesn&rsquo;t exist, or isn&rsquo;t available to you.</p>
           <Link href="/clients" className="mt-4 inline-block text-[14px] font-semibold text-accent">Back to clients</Link>
         </div>
       </div>

@@ -5,6 +5,7 @@
  */
 import { DEFAULT_ROLES, DEPARTMENT_CONFIG, MEMBERS, SECURITY_DEFAULTS } from "@/lib/sample/team-seed";
 import { CLIENTS } from "@/lib/sample/clients";
+import { DEFAULT_SOURCES, DEFAULT_STAGES, LEADS } from "@/lib/sample/leads";
 import { TAX_RETURNS } from "@/lib/sample/tax";
 import { BOOKS_WORKSPACES } from "@/lib/sample/books";
 import { BIZ_REQUESTS } from "@/lib/sample/biz-seed";
@@ -44,6 +45,11 @@ export async function seedDev(env: AppEnv) {
     add("INSERT INTO clients (id, type, name, contact_name, email, phone, preferred_contact, address, business, status, portal, tags, source, lead_id, since, last_activity_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       c.id, c.type, c.name, c.contactName ?? null, c.email, c.phone, c.preferredContact, JSON.stringify(c.address), c.business ? JSON.stringify({ ...c.business, einLast4: undefined, responsibleParty: c.business.responsibleParty ? { ...c.business.responsibleParty, taxIdLast4: undefined } : undefined }) : null, c.status, c.portal, JSON.stringify(c.tags), c.source, c.leadId ?? null, c.since, c.lastActivityAt, t, t);
     for (const s of new Set(c.enrollments.map((e) => e.service))) add("INSERT INTO client_services (client_id, service) VALUES (?, ?)", c.id, s);
+    add("UPDATE clients SET module_data = ? WHERE id = ?", JSON.stringify({ documents: c.documents, messages: c.messages, appointments: c.appointments, invoices: c.invoices, signatures: c.signatures }), c.id);
+    for (const e of c.enrollments) add("INSERT INTO client_enrollments (id, client_id, service, title, stage, progress, status, staff_id, started_at, due_at, fee) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", e.id, c.id, e.service, e.title, e.stage, e.progress, e.status, e.staffId, e.startedAt, e.dueAt ?? null, e.fee);
+    for (const n of c.notes) add("INSERT INTO client_notes (id, client_id, author_id, body, service, pinned, at) VALUES (?, ?, ?, ?, ?, ?, ?)", n.id, c.id, n.authorId, n.body, n.service ?? null, n.pinned ? 1 : 0, n.at);
+    for (const x of c.activity) add("INSERT OR IGNORE INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, ?, ?, ?, NULL, ?)", x.id, c.id, x.kind, x.text, x.actor, x.at);
+    if (c.dob) add("INSERT INTO vault (owner_type, owner_id, field, ciphertext, iv, key_version, last4, kind, updated_at, updated_by) VALUES ('client', ?, 'dob_year', '', '', 0, ?, NULL, ?, 's-mk')", c.id, c.dob.slice(0, 4), t);
     for (const sid of c.staffIds) add("INSERT OR IGNORE INTO record_assignments (client_id, member_id, source, record_id) VALUES (?, ?, 'client_team', '')", c.id, sid);
     // Sample identifiers use the never-issued 000 SSN area / 00 EIN prefix.
     const vault: [string, string, string | null][] = [];
@@ -66,6 +72,17 @@ export async function seedDev(env: AppEnv) {
   for (const r of BIZ_REQUESTS) { assign(r.clientId, r.assignedTo, "biz_assigned", r.id); assign(r.clientId, r.reviewerId, "biz_reviewer", r.id); }
   for (const c of EXP_CASES) assign(c.clientId, c.assignedTo, "exp_case", c.id);
   for (const m of EXP_MATTERS) for (const [role, sid] of Object.entries(m.assignments)) assign(m.clientId, sid, `exp_${role}`, m.id);
+
+  // Leads pipeline.
+  DEFAULT_STAGES.forEach((st, i) => add("INSERT INTO lead_stages (id, name, position) VALUES (?, ?, ?)", st.id, st.name, i));
+  DEFAULT_SOURCES.forEach((src, i) => add("INSERT INTO lead_sources (name, position) VALUES (?, ?)", src, i));
+  for (const l of LEADS) {
+    add("INSERT INTO leads (id, type, name, contact_name, email, phone, address, business, source, source_detail, interests, est_value, owner_id, stage_id, status, priority, tags, lost_reason, converted_client_id, converted_at, created_at, last_activity_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      l.id, l.type, l.name, l.contactName ?? null, l.email, l.phone, l.address ? JSON.stringify(l.address) : null, l.business ? JSON.stringify(l.business) : null, l.source, l.sourceDetail ?? null, JSON.stringify(l.interests), l.estValue, l.ownerId, l.stageId, l.status, l.priority, JSON.stringify(l.tags), l.lostReason ?? null, l.convertedClientId ?? null, l.convertedAt ?? null, l.createdAt, l.lastActivityAt);
+    for (const n of l.notes) add("INSERT INTO lead_notes (id, lead_id, author_id, body, pinned, at) VALUES (?, ?, ?, ?, ?, ?)", n.id, l.id, n.authorId, n.body, n.pinned ? 1 : 0, n.at);
+    for (const r of l.reminders) add("INSERT INTO lead_reminders (id, lead_id, at, note, done, owner_id) VALUES (?, ?, ?, ?, ?, ?)", r.id, l.id, r.at, r.note, r.done ? 1 : 0, r.ownerId);
+    for (const x of l.activity) add("INSERT OR IGNORE INTO lead_activity (id, lead_id, kind, text, actor, member_id, at) VALUES (?, ?, ?, ?, ?, NULL, ?)", x.id, l.id, x.kind, x.text, x.actor, x.at);
+  }
 
   // D1 batches run as one transaction.
   for (let i = 0; i < S.length; i += 90) await db.batch(S.slice(i, i + 90));

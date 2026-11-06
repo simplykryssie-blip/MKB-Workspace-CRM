@@ -91,6 +91,8 @@ export function handle<P extends Record<string, string> = Record<string, never>>
       return await fn(req, env, ((await ctx?.params) ?? {}) as P);
     } catch (e) {
       if (e instanceof HttpError) return jsonResponse({ error: e.message, code: e.code }, e.status);
+      // A duplicate key (two records claiming the same ID) is a conflict, not a server fault.
+      if (String(e).includes("UNIQUE constraint failed")) return jsonResponse({ error: "That record already exists.", code: "duplicate" }, 409);
       console.error("Unhandled API error", e);
       return jsonResponse({ error: "Something went wrong." }, 500);
     }

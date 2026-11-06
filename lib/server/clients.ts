@@ -8,8 +8,8 @@ import { all, badRequest, forbidden, HttpError, json, notFound, now, one, rateLi
 import { decryptField, encryptField } from "./crypto";
 import { audit, hasSensitivePerm, requirePermission, type Actor } from "./identity";
 
-type ClientRow = { id: string; type: "individual" | "business"; name: string; contact_name: string | null; email: string; phone: string; preferred_contact: string; address: string; business: string | null; status: string; portal: string; tags: string; source: string; lead_id: string | null; since: string; last_activity_at: string; services: string | null };
-const CLIENT_SQL = "SELECT c.*, (SELECT group_concat(service) FROM client_services s WHERE s.client_id = c.id) AS services FROM clients c";
+export type ClientRow = { id: string; type: "individual" | "business"; name: string; contact_name: string | null; email: string; phone: string; preferred_contact: string; address: string; business: string | null; status: string; portal: string; tags: string; source: string; lead_id: string | null; since: string; last_activity_at: string; services: string | null };
+export const CLIENT_SQL = "SELECT c.*, (SELECT group_concat(service) FROM client_services s WHERE s.client_id = c.id) AS services FROM clients c";
 
 export type VaultField = "tax_id" | "ein" | "dob" | "rp_tax_id";
 const FIELDS: VaultField[] = ["tax_id", "ein", "dob", "rp_tax_id"];
@@ -26,14 +26,14 @@ const toClient = (r: ClientRow, last4: Record<string, string | null>) => ({
   taxIdLast4: last4.tax_id ?? undefined, einLast4: last4.ein ?? undefined, hasDob: last4.dob !== undefined,
 });
 
-async function assignmentSets(env: AppEnv, memberId: string) {
+export async function assignmentSets(env: AppEnv, memberId: string) {
   const [mine, team] = await Promise.all([
     all<{ client_id: string }>(env.DB, "SELECT DISTINCT client_id FROM record_assignments WHERE member_id = ?", memberId),
     all<{ client_id: string }>(env.DB, "SELECT DISTINCT a.client_id FROM record_assignments a JOIN members m ON m.id = a.member_id WHERE m.manager_id = ?", memberId),
   ]);
   return { assigned: new Set(mine.map((x) => x.client_id)), teamAssigned: new Set(team.map((x) => x.client_id)) };
 }
-async function last4Map(env: AppEnv, ids: string[]) {
+export async function last4Map(env: AppEnv, ids: string[]) {
   if (!ids.length) return new Map<string, Record<string, string | null>>();
   const rows = await all<{ owner_id: string; field: string; last4: string | null }>(env.DB, `SELECT owner_id, field, last4 FROM vault WHERE owner_type = 'client' AND owner_id IN (${ids.map(() => "?").join(",")})`, ...ids);
   const m = new Map<string, Record<string, string | null>>();
@@ -42,7 +42,7 @@ async function last4Map(env: AppEnv, ids: string[]) {
 }
 
 /** May this actor open this client? (Clients may open only their own record.) */
-async function canOpen(env: AppEnv, a: Actor, row: ClientRow) {
+export async function canOpen(env: AppEnv, a: Actor, row: ClientRow) {
   if (a.kind === "client") return a.clientId === row.id;
   const sets = await assignmentSets(env, a.member.id);
   return clientAccess(a.policy, a.member, { id: row.id, services: (row.services ? row.services.split(",") : []) as ServiceKey[] }, sets);
@@ -118,6 +118,7 @@ export async function setIdentifier(env: AppEnv, a: Actor, id: string, field: Va
   const e = await encryptField(key, value, aad(id, field));
   const last4 = field === "dob" ? null : value.replace(/\D/g, "").slice(-4);
   await run(env.DB, "INSERT INTO vault (owner_type, owner_id, field, ciphertext, iv, key_version, last4, kind, updated_at, updated_by) VALUES ('client', ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(owner_type, owner_id, field) DO UPDATE SET ciphertext = excluded.ciphertext, iv = excluded.iv, key_version = excluded.key_version, last4 = excluded.last4, kind = excluded.kind, updated_at = excluded.updated_at, updated_by = excluded.updated_by", id, field, e.ciphertext, e.iv, version, last4, kind ?? null, now(), a.member.id);
+  if (field === "dob") await run(env.DB, "INSERT INTO vault (owner_type, owner_id, field, ciphertext, iv, key_version, last4, kind, updated_at, updated_by) VALUES ('client', ?, 'dob_year', '', '', 0, ?, NULL, ?, ?) ON CONFLICT(owner_type, owner_id, field) DO UPDATE SET last4 = excluded.last4, updated_at = excluded.updated_at", id, value.slice(0, 4), now(), a.member.id);
   await audit(env.DB, a, { action: "Permission change", resource: `Client ${id} — ${LABEL[field]} updated`, meta: "Value not logged" });
   return { last4 };
 }

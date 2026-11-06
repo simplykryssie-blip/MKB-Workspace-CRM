@@ -1,6 +1,6 @@
 # MKB Business Suite — Backend (Phase 3)
 
-Status: **foundation built and tested locally. Not deployed. No cloud resources created.**
+Status: **foundation + Clients & Leads connected; tested locally. Not deployed. No cloud resources created.**
 
 The backend runs on Cloudflare: the Next.js app is compiled into a Cloudflare
 Worker (OpenNext), data lives in **D1** (SQLite), files will live in **R2**, and
@@ -22,9 +22,22 @@ own local runtime and database — nothing touches a real account yet.
 | APIs | `app/api/auth/*` (sign-in, MFA, sign-out, session, password reset, invitations), `app/api/team/*` (members, invitations, role/department/grant changes, suspend/reactivate/unlock/sign-out, audit log, security policy), `app/api/clients/*` (scoped list, record, reveal/update identifiers). |
 | Screens | `/login` (sign-in, MFA setup with QR code, MFA code, forgot password), `/login/reset`, `/login/invite`. With `NEXT_PUBLIC_BACKEND=1`, staff pages send signed-out visitors to `/login`. |
 
-The modules' screens (Clients, Leads, Tax, Bookkeeping, Business Services,
-Expungement, Forms) still use the in-browser sample data. They are connected to
-the backend module by module next.
+## Connected modules
+
+| Module | Status |
+| --- | --- |
+| **Clients** | Connected. The list and profiles load from the database (only records the person may open); creating a client, editing details, services, team assignment, notes and the timeline are saved to the database. Full SSN/EIN/date of birth are sent once when entered, encrypted on arrival, and never sent back except through the audited reveal. Documents, messages, appointments, invoices and signatures are saved with the client for now and move to their own tables when the Documents, Messages and Billing modules are connected. |
+| **Leads** | Connected. Pipeline, stages and sources, notes, reminders, owner changes, marking lost/reopening and conversion to a client are saved to the database. |
+| Tax, Bookkeeping, Business Services, Expungement, Forms, Team screens | Still use in-browser sample data (next). |
+
+How saving works: the screens keep working instantly and save each change in the
+background. Every save names the version it started from; if someone else saved
+first, the save is refused and the latest version is loaded, with a notice — no one
+silently overwrites a colleague. The server checks each kind of change separately:
+details and notes need "edit", the client's team needs "assign", creating needs
+"create", and Senior Staff can only touch clients assigned to them. Note authors and
+timeline entries are recorded as the signed-in person, whatever the browser says.
+Deleted notes are hidden but kept; the client and lead timelines are append-only.
 
 ## Run it locally
 
@@ -45,6 +58,14 @@ Run inside Cloudflare's actual runtime: `npx opennextjs-cloudflare build && npx 
 
 ## Tests
 
+- Clients & Leads with the backend on (8 browser checks): server-scoped client list; a new client,
+  a note, a lead stage change and a lead conversion all survive a full reload; full identifiers
+  never appear in the page; reveal refused by the server for a role without the Tax department;
+  two people editing the same client — the second save is refused and the latest version loads.
+- Clients & Leads API (10 checks): full records with masked identifiers, encrypted creation,
+  duplicate ID/email refused, revision conflicts, note authorship from the session, hidden-not-
+  deleted notes, append-only timeline, per-change permissions (Senior Staff edit vs. assign),
+  lead permissions, conversion rules, pipeline settings, client-portal accounts blocked.
 - Backend security suite (20 checks): signed-out access, generic sign-in errors, MFA required and
   replay-protected, record-level access and denials audited, SSN reveal/update permissions,
   admin limits (no Owner assignment, no self-escalation, grants limited to what you hold, department

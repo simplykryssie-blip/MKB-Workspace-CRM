@@ -5,7 +5,8 @@
  * Same rules as the clients store: nothing leaves the browser, everything
  * resets on reload, and Phase 3 swaps these actions for authenticated API calls.
  */
-import { createContext, useContext, useMemo, useReducer, useRef } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from "react";
+import { BACKEND, RemoteError, call, debouncer, notify, pendingClientCreates } from "@/lib/sync/remote";
 import { DEFAULT_SOURCES, DEFAULT_STAGES, LEADS } from "@/lib/sample/leads";
 import { staffById } from "@/lib/sample/clients";
 import { DEFAULT_FEES, defaultTitleFor, nowIso, useClients, type NewClientInput } from "@/lib/store/clients-store";
@@ -14,16 +15,19 @@ import type { ActivityItem, ActivityKind, Lead, LeadPriority, LeadStage, Note, S
 
 const uid = (p: string) => `${p}-${Math.random().toString(36).slice(2, 9)}`;
 
-type State = { leads: Lead[]; stages: LeadStage[]; sources: string[] };
+type State = { leads: Lead[]; stages: LeadStage[]; sources: string[]; pendingRemap?: { from: string; to: string } };
 type Action =
   | { type: "reset" }
   | { type: "add"; lead: Lead }
   | { type: "update"; id: string; fn: (l: Lead) => Lead }
   | { type: "updateMany"; ids: string[]; fn: (l: Lead) => Lead }
   | { type: "stages"; stages: LeadStage[]; remap?: { from: string; to: string } }
-  | { type: "sources"; sources: string[] };
+  | { type: "sources"; sources: string[] }
+  | { type: "hydrate"; leads: Lead[]; stages: LeadStage[]; sources: string[]; known: Set<string> }
+  | { type: "replace"; lead: Lead };
 
-const init = (): State => ({ leads: structuredClone(LEADS), stages: structuredClone(DEFAULT_STAGES), sources: [...DEFAULT_SOURCES] });
+// With the backend on, leads load from the server after sign-in (never sample data).
+const init = (): State => (BACKEND ? { leads: [], stages: structuredClone(DEFAULT_STAGES), sources: [...DEFAULT_SOURCES] } : { leads: structuredClone(LEADS), stages: structuredClone(DEFAULT_STAGES), sources: [...DEFAULT_SOURCES] });
 
 function reducer(s: State, a: Action): State {
   switch (a.type) {
@@ -35,10 +39,18 @@ function reducer(s: State, a: Action): State {
       return { ...s, leads: s.leads.map((l) => (l.id === a.id ? a.fn(l) : l)) };
     case "updateMany":
       return { ...s, leads: s.leads.map((l) => (a.ids.includes(l.id) ? a.fn(l) : l)) };
+    case "hydrate": {
+      // Keep leads created here that haven't reached the server yet.
+      const local = s.leads.filter((l) => !a.leads.some((x) => x.id === l.id) && !a.known.has(l.id));
+      return { leads: [...local, ...a.leads], stages: a.stages, sources: a.sources };
+    }
+    case "replace":
+      return { ...s, leads: s.leads.some((l) => l.id === a.lead.id) ? s.leads.map((l) => (l.id === a.lead.id ? a.lead : l)) : [a.lead, ...s.leads] };
     case "stages":
       return {
         ...s,
         stages: a.stages,
+        pendingRemap: a.remap ?? s.pendingRemap,
         leads: a.remap ? s.leads.map((l) => (l.stageId === a.remap!.from ? { ...l, stageId: a.remap!.to } : l)) : s.leads,
       };
     case "sources":
@@ -204,7 +216,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
 }
 
 
-export type LeadsStore = ReturnType<typeof makeActions> & State;
+export type LeadsStore = ReturnType<typeof makeActions> & State & { ready: boolean };
 const Ctx = createContext<LeadsStore | null>(null);
 
 export function LeadsProvider({ children }: { children: React.ReactNode }) {
@@ -220,7 +232,8 @@ export function LeadsProvider({ children }: { children: React.ReactNode }) {
       makeActions(dispatch, () => ref.current, new Proxy({} as ReturnType<typeof useClients>, { get: (_t, k) => clientsRef.current[k as keyof ReturnType<typeof useClients>] })),
     [],
   );
-  const value = useMemo(() => ({ ...actions, ...state }), [actions, state]);
+  const ready = useLeadSync(state, dispatch, clientsRef);
+  const value = useMemo(() => ({ ...actions, ...state, ready }), [actions, state, ready]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
@@ -230,3 +243,94 @@ export function useLeads() {
   return v;
 }
 export const useLead = (id: string) => useLeads().leads.find((l) => l.id === id);
+
+/* ------------------------------------------------------------------ */
+/* Backend sync (only when NEXT_PUBLIC_BACKEND=1)                      */
+/* ------------------------------------------------------------------ */
+
+type RevLead = Lead & { rev?: number };
+function useLeadSync(state: State, dispatch: React.Dispatch<Action>, clientsRef: React.RefObject<ReturnType<typeof useClients>>) {
+  const [ready, setReady] = useReducer(() => true, !BACKEND);
+  const synced = useRef(new Map<string, Lead>());
+  const revs = useRef(new Map<string, number>());
+  const inflight = useRef(new Set<string>());
+  const later = useRef(debouncer(500)).current;
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const settingsSynced = useRef<{ stages: LeadStage[]; sources: string[] } | null>(null);
+
+  const reloadAll = useCallback(async () => {
+    try {
+      const r = await call<{ leads: RevLead[]; stages: LeadStage[]; sources: string[] }>("GET", "/api/leads");
+      r.leads.forEach((l) => { revs.current.set(l.id, l.rev ?? 1); synced.current.set(l.id, l); });
+      // "known" = leads the server had before: if they're gone now (e.g. no longer visible), drop them.
+      dispatch({ type: "hydrate", leads: r.leads, stages: r.stages, sources: r.sources, known: new Set(revs.current.keys()) });
+      settingsSynced.current = { stages: r.stages, sources: r.sources };
+      return r;
+    } catch (e) {
+      if (!(e instanceof RemoteError && (e.status === 401 || e.status === 403))) notify("Couldn't load leads. Check your connection and reload.");
+      return null;
+    }
+  }, []);
+  useEffect(() => { if (BACKEND) reloadAll().finally(() => setReady()); }, []);
+
+  const save = useCallback(async (id: string) => {
+    if (inflight.current.has(id)) return later(id, () => save(id));
+    const l = stateRef.current.leads.find((x) => x.id === id);
+    if (!l || synced.current.get(id) === l) return;
+    inflight.current.add(id);
+    try {
+      if (!revs.current.has(id)) {
+        const r = await call<{ lead: RevLead }>("POST", "/api/leads", { lead: l });
+        revs.current.set(id, r.lead.rev ?? 1);
+        synced.current.set(id, l);
+      } else {
+        const prev = synced.current.get(id);
+        if (l.status === "converted" && prev?.status !== "converted" && l.convertedClientId) {
+          // Wait for the new client to exist on the server, then record the conversion.
+          await pendingClientCreates.get(l.convertedClientId);
+          const client = clientsRef.current?.clients.find((c) => c.id === l.convertedClientId);
+          const r = await call<{ lead: RevLead }>("POST", `/api/leads/${id}/convert`, { clientId: l.convertedClientId, merged: client?.leadId !== id });
+          revs.current.set(id, r.lead.rev ?? 1);
+          synced.current.set(id, { ...l, status: "converted" });
+        }
+        const r = await call<{ lead: RevLead }>("PUT", `/api/leads/${id}`, { lead: { ...l, rev: revs.current.get(id) } });
+        revs.current.set(id, r.lead.rev ?? 1);
+        synced.current.set(id, l);
+      }
+    } catch (e) {
+      if (e instanceof RemoteError && e.status === 401) return;
+      notify(e instanceof RemoteError ? e.message : "Couldn't save the lead — check your connection.");
+      await reloadAll();
+    } finally {
+      inflight.current.delete(id);
+    }
+    if (stateRef.current.leads.find((x) => x.id === id) !== synced.current.get(id)) later(id, () => save(id));
+  }, []);
+
+  useEffect(() => {
+    if (!BACKEND || !ready) return;
+    state.leads.forEach((l) => { if (synced.current.get(l.id) !== l) later(l.id, () => save(l.id)); });
+  }, [state.leads, ready]);
+
+  // Pipeline stages and sources.
+  useEffect(() => {
+    if (!BACKEND || !ready || !settingsSynced.current) return;
+    const cur = settingsSynced.current;
+    if (cur.stages === state.stages && cur.sources === state.sources) return;
+    later("__settings", async () => {
+      const st = stateRef.current;
+      try {
+        await call("PUT", "/api/leads/settings", { stages: st.stages, sources: st.sources, remap: st.pendingRemap });
+        settingsSynced.current = { stages: st.stages, sources: st.sources };
+        // Leads moved out of a removed stage got new revisions on the server.
+        if (st.pendingRemap) await reloadAll();
+      } catch (e) {
+        notify(e instanceof RemoteError ? e.message : "Couldn't save pipeline settings.");
+        await reloadAll();
+      }
+    });
+  }, [state.stages, state.sources, ready]);
+
+  return ready;
+}

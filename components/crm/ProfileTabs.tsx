@@ -59,6 +59,7 @@ import { useBooks } from "@/lib/store/books-store";
 import { useBiz } from "@/lib/store/biz-store";
 import { useExp } from "@/lib/store/exp-store";
 import { useTeam } from "@/lib/store/team-store";
+import { BACKEND } from "@/lib/sync/remote";
 import { ReturnStatusBadge } from "@/components/tax/TaxBits";
 
 export type Act = {
@@ -263,6 +264,11 @@ export function Sensitive({ c, field, masked }: { c: Client; field: "taxId" | "e
     if (!allowed) {
       team.log({ action: "Sensitive reveal", resource: `Client ${c.id} — ${label}`, meta: "Denied: role lacks the reveal permission", success: false });
       return toast("Your role can't reveal this — it needs the separate sensitive-information permission.", "info");
+    }
+    if (BACKEND) {
+      // The server checks record access and the reveal permission, and writes the audit entry.
+      store.revealRemote(c.id, field).then((v) => { if (!v) return toast("Full value isn't available for this record", "info"); setShown(field === "dob" ? isoToDob(v) : v); toast("Revealed for 30 seconds — recorded in the audit log", "info"); }).catch((e) => toast(e instanceof Error ? e.message : "Couldn't reveal", "info"));
+      return;
     }
     team.log({ action: "Sensitive reveal", resource: `Client ${c.id} — ${label}` });
     const full = field === "dob" ? isoToDob(c.dob) : store.reveal(c.id, field);

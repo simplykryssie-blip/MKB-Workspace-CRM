@@ -8,6 +8,7 @@ import { SelectField, TextArea, TextField } from "@/components/ui/Field";
 import { useExp } from "@/lib/store/exp-store";
 import { useClients } from "@/lib/store/clients-store";
 import { useTeam } from "@/lib/store/team-store";
+import { BACKEND } from "@/lib/sync/remote";
 import { TaxIdInput } from "@/components/ui/FormattedInputs";
 import { maskTaxId, validateTaxId, type TaxIdType } from "@/lib/validation";
 import { SSN_POLICY } from "@/lib/expunge/config";
@@ -107,7 +108,7 @@ export function SsnField({ c, matterId }: { c: Client; matterId: string }) {
         ) : <span className="text-[13px] text-muted">Not provided yet</span>}
         <span className="ml-auto flex gap-1.5">
           {c.taxIdLast4 && (canReveal ? (
-            <Button size="sm" variant="ghost" icon={full ? EyeOff : Eye} onClick={() => { if (full) { setFull(null); return; } const v = store.reveal(c.id, "taxId"); exp.logAccess(matterId, "Revealed full SSN"); team.log({ action: "Sensitive reveal", resource: `Client ${c.id} — full SSN`, department: "exp", meta: matterId }); setFull(v ?? null); }}>{full ? "Hide" : "Reveal (logged)"}</Button>
+            <Button size="sm" variant="ghost" icon={full ? EyeOff : Eye} onClick={() => { if (full) { setFull(null); return; } exp.logAccess(matterId, "Revealed full SSN"); if (BACKEND) { store.revealRemote(c.id, "taxId").then((v) => setFull(v ?? null)).catch(() => setFull(null)); return; } const v = store.reveal(c.id, "taxId"); team.log({ action: "Sensitive reveal", resource: `Client ${c.id} — full SSN`, department: "exp", meta: matterId }); setFull(v ?? null); }}>{full ? "Hide" : "Reveal (logged)"}</Button>
           ) : <span className="inline-flex items-center gap-1 text-[12px] text-muted"><Lock size={12} /> This role can&rsquo;t reveal SSNs</span>)}
           {canEdit && !editing && <Button size="sm" variant="ghost" onClick={() => { setEditing(true); setVal(""); setTried(false); }}>{c.taxIdLast4 ? "Update" : "Enter (given by phone)"}</Button>}
         </span>

@@ -16,7 +16,8 @@ import { ExpProvider } from "@/lib/store/exp-store";
 import { TeamProvider } from "@/lib/store/team-store";
 import { AccessGuard, PreviewSwitcher } from "@/components/team/AccessGuard";
 import { ToastProvider } from "@/components/ui/Toast";
-import { SessionGate } from "@/components/auth/SessionGate";
+import { SessionGate, SignedInAs } from "@/components/auth/SessionGate";
+import { BACKEND } from "@/lib/sync/remote";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -57,7 +58,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <FlaskConical size={14} className="shrink-0" />
           <span className="hidden truncate md:inline">Design preview — all names, amounts and dates are fictional sample data.</span>
           <span className="sr-only sm:not-sr-only sm:truncate md:hidden">Fictional sample data</span>
-          <span className="ml-auto min-w-0"><PreviewSwitcher /></span>
+          <span className="ml-auto min-w-0">{BACKEND ? <SignedInAs /> : <PreviewSwitcher />}</span>
           <span className="sm:hidden">
             <ThemeToggle />
           </span>

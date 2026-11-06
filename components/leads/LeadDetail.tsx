@@ -57,12 +57,13 @@ export function LeadDetail({ id }: { id: string }) {
   const [kind, setKind] = useState<ActivityKind | "all">("all");
   const [showDone, setShowDone] = useState(false);
 
+  if (!lead && !store.ready) return <div className="grid min-h-[50vh] place-items-center text-[14px] text-muted" role="status">Loading…</div>;
   if (!lead)
     return (
       <div className="grid min-h-[50vh] place-items-center text-center">
         <div>
           <h1 className="text-[20px] font-bold text-ink">Lead not found</h1>
-          <p className="mt-1 text-[14px] text-muted">It may have been created in an earlier preview session (sample data resets on reload).</p>
+          <p className="mt-1 text-[14px] text-muted">It doesn&rsquo;t exist, or isn&rsquo;t available to you.</p>
           <Link href="/leads" className="mt-4 inline-block text-[14px] font-semibold text-accent">Back to leads</Link>
         </div>
       </div>

@@ -8,6 +8,8 @@
  * Nothing leaves the browser and nothing persists past a page reload.
  * In Phase 3 these actions become authenticated API calls with the same shapes.
  */
+import { useEffect } from "react";
+import { BACKEND, RemoteError, call, debouncer, notify, pendingClientCreates } from "@/lib/sync/remote";
 import { createContext, useCallback, useContext, useMemo, useReducer, useRef } from "react";
 import { CLIENTS, SAMPLE_NOW, STAGES, staffById } from "@/lib/sample/clients";
 import type {
@@ -37,7 +39,10 @@ type State = { clients: Client[]; vault: Record<string, VaultEntry> };
 type Action =
   | { type: "reset" }
   | { type: "addClient"; client: Client; vault?: VaultEntry }
-  | { type: "update"; id: string; fn: (c: Client) => Client; vault?: VaultEntry };
+  | { type: "update"; id: string; fn: (c: Client) => Client; vault?: VaultEntry }
+  | { type: "hydrate"; clients: Client[]; known: Set<string> }
+  | { type: "replace"; client: Client }
+  | { type: "dropVault"; id: string };
 
 function reducer(state: State, a: Action): State {
   switch (a.type) {
@@ -45,6 +50,18 @@ function reducer(state: State, a: Action): State {
       return init();
     case "addClient":
       return { clients: [a.client, ...state.clients], vault: a.vault ? { ...state.vault, [a.client.id]: a.vault } : state.vault };
+    case "hydrate": {
+      // Keep anything created here that the server doesn't have yet (it's still being saved).
+      const local = state.clients.filter((c) => !a.clients.some((x) => x.id === c.id) && !a.known.has(c.id));
+      return { clients: [...local, ...a.clients], vault: Object.fromEntries(Object.entries(state.vault).filter(([id]) => local.some((c) => c.id === id))) };
+    }
+    case "replace":
+      return { ...state, clients: state.clients.some((c) => c.id === a.client.id) ? state.clients.map((c) => (c.id === a.client.id ? a.client : c)) : [a.client, ...state.clients] };
+    case "dropVault": {
+      const v = { ...state.vault };
+      delete v[a.id];
+      return { ...state, vault: v };
+    }
     case "update":
       return {
         clients: state.clients.map((c) => (c.id === a.id ? a.fn(c) : c)),
@@ -66,7 +83,8 @@ const sampleVault = (): Record<string, VaultEntry> =>
       },
     ]),
   );
-const init = (): State => ({ clients: structuredClone(CLIENTS), vault: sampleVault() });
+// With the backend on, records load from the server after sign-in (never sample data).
+const init = (): State => (BACKEND ? { clients: [], vault: {} } : { clients: structuredClone(CLIENTS), vault: sampleVault() });
 
 function log(c: Client, kind: ActivityKind, text: string, actor: ActivityItem["actor"] = "staff"): Client {
   const at = nowIso();
@@ -114,14 +132,17 @@ export const DEFAULT_FEES: Record<ServiceKey, number> = { tax: 425, books: 650, 
 
 const last4 = (v?: string) => (v ? v.replace(/\D/g, "").slice(-4) : undefined);
 
-function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => number, getVault: () => Record<string, VaultEntry>) {
+type Remote = { setIds: (id: string, v: Parameters<ReturnType<typeof makeStore>["updateTaxIds"]>[1]) => Promise<void> };
+const maskedDob = (iso?: string) => (iso ? `${iso.slice(0, 4)}-••-••` : undefined);
+
+function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => number, getVault: () => Record<string, VaultEntry>, remote?: Remote) {
   const up = (id: string, fn: (c: Client) => Client) => dispatch({ type: "update", id, fn });
 
   return {
     reset: () => dispatch({ type: "reset" }),
 
     addClient(input: NewClientInput): string {
-      const id = `c-${Math.floor(2000 + Math.random() * 7000)}`;
+      const id = `c-${Math.floor(100000 + Math.random() * 899_900_000)}`;
       const at = nowIso();
       const staffIds = input.staffIds.length ? input.staffIds : ["s-mk"];
       const enrollments: Enrollment[] = input.services.map((s) => ({
@@ -189,15 +210,17 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
     updateTaxIds(id: string, v: { taxId?: string; taxIdType?: "SSN" | "ITIN"; ein?: string; dob?: string; rp?: { name: string; title: string; taxIdType: "SSN" | "ITIN"; taxId?: string } }) {
       const changed = [v.taxId && (v.taxIdType ?? "SSN"), v.ein && "EIN", v.dob && "date of birth", v.rp && "responsible party", v.rp?.taxId && `responsible party ${v.rp.taxIdType}`].filter(Boolean).join(", ");
       if (!changed) return;
+      // Backend: full numbers go straight to the server's encrypted vault; the browser keeps only last 4.
+      if (BACKEND && remote) remote.setIds(id, v);
       dispatch({
         type: "update",
         id,
-        vault: { ...(v.taxId ? { taxId: v.taxId } : {}), ...(v.ein ? { ein: v.ein } : {}), ...(v.rp?.taxId ? { rpTaxId: v.rp.taxId } : {}) },
+        vault: BACKEND ? undefined : { ...(v.taxId ? { taxId: v.taxId } : {}), ...(v.ein ? { ein: v.ein } : {}), ...(v.rp?.taxId ? { rpTaxId: v.rp.taxId } : {}) },
         fn: (c) =>
           log(
             {
               ...c,
-              dob: v.dob ?? c.dob,
+              dob: v.dob ? (BACKEND ? maskedDob(v.dob) : v.dob) : c.dob,
               taxIdType: v.taxId ? v.taxIdType : c.taxIdType,
               taxIdLast4: v.taxId ? last4(v.taxId) : c.taxIdLast4,
               business: c.business
@@ -221,6 +244,12 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
       });
     },
 
+    /** Backend: audited reveal from the server's vault (needs record access and the reveal permission). */
+    async revealRemote(id: string, field: "taxId" | "ein" | "dob" | "rpTaxId"): Promise<string | undefined> {
+      const f = field === "taxId" ? "tax_id" : field === "rpTaxId" ? "rp_tax_id" : field;
+      const r = await call<{ value: string }>("POST", `/api/clients/${id}/identifiers/${f}`);
+      return r.value;
+    },
     /** Audited reveal of a full identifier. Returns undefined if none on file. */
     reveal(id: string, field: "taxId" | "ein" | "dob" | "rpTaxId"): string | undefined {
       const label = field === "taxId" ? "SSN/ITIN" : field === "ein" ? "EIN" : field === "rpTaxId" ? "responsible party SSN/ITIN" : "date of birth";
@@ -466,7 +495,7 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
   };
 }
 
-export type ClientStore = ReturnType<typeof makeStore> & { clients: Client[] };
+export type ClientStore = ReturnType<typeof makeStore> & { clients: Client[]; ready: boolean };
 
 const Ctx = createContext<ClientStore | null>(null);
 
@@ -476,8 +505,9 @@ export function ClientsProvider({ children }: { children: React.ReactNode }) {
   const getNext = useCallback(() => counter.n++, [counter]);
   const vaultRef = useRef(state.vault);
   vaultRef.current = state.vault;
-  const actions = useMemo(() => makeStore(dispatch, getNext, () => vaultRef.current), [getNext]);
-  const value = useMemo(() => ({ ...actions, clients: state.clients }), [actions, state.clients]);
+  const sync = useClientSync(state, dispatch);
+  const actions = useMemo(() => makeStore(dispatch, getNext, () => vaultRef.current, sync.remote), [getNext, sync.remote]);
+  const value = useMemo(() => ({ ...actions, clients: state.clients, ready: sync.ready }), [actions, state.clients, sync.ready]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
@@ -493,3 +523,111 @@ export function useClient(id: string) {
 }
 
 export { staffById };
+
+/* ------------------------------------------------------------------ */
+/* Backend sync (only when NEXT_PUBLIC_BACKEND=1)                      */
+/* ------------------------------------------------------------------ */
+
+type Rev = Client & { rev?: number };
+/**
+ * Loads clients from the server, then saves every change back: new clients are
+ * created (identifiers go to the encrypted vault), edited clients are saved with
+ * the revision they started from. If someone else saved first, the latest
+ * version is loaded instead. The server checks permissions on every save.
+ */
+function useClientSync(state: State, dispatch: React.Dispatch<Action>) {
+  const [ready, setReady] = useReducer(() => true, !BACKEND);
+  const synced = useRef(new Map<string, Client>()); // last version the server has (by object identity)
+  const revs = useRef(new Map<string, number>());
+  const inflight = useRef(new Set<string>());
+  const later = useRef(debouncer(500)).current;
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  const adopt = useCallback((c: Rev, replace: boolean) => {
+    revs.current.set(c.id, c.rev ?? 1);
+    if (replace) dispatch({ type: "replace", client: c });
+    synced.current.set(c.id, replace ? c : stateRef.current.clients.find((x) => x.id === c.id) ?? c);
+  }, []);
+  const reload = useCallback(async (id: string) => {
+    try {
+      const r = await call<{ client: Rev }>("GET", `/api/clients/${id}?full=1`);
+      revs.current.set(id, r.client.rev ?? 1);
+      dispatch({ type: "replace", client: r.client });
+      synced.current.set(id, r.client);
+    } catch { /* no longer accessible */ }
+  }, []);
+
+  useEffect(() => {
+    if (!BACKEND) return;
+    call<{ clients: Rev[] }>("GET", "/api/clients?full=1")
+      .then((r) => {
+        r.clients.forEach((c) => { revs.current.set(c.id, c.rev ?? 1); synced.current.set(c.id, c); });
+        dispatch({ type: "hydrate", clients: r.clients, known: new Set() });
+        setReady();
+      })
+      .catch((e) => { if (!(e instanceof RemoteError && e.status === 401)) { notify("Couldn't load clients. Check your connection and reload."); setReady(); } });
+  }, []);
+
+  const save = useCallback(async (id: string) => {
+    if (inflight.current.has(id)) return later(id, () => save(id)); // one save at a time per client
+    const c = stateRef.current.clients.find((x) => x.id === id);
+    if (!c || synced.current.get(id) === c) return;
+    inflight.current.add(id);
+    try {
+      if (!revs.current.has(id)) {
+        // New client: create it, sending identifiers once (then forget them in the browser).
+        const v = stateRef.current.vault[id] ?? {};
+        const created = (async () => {
+          const r = await call<{ client: Rev }>("POST", "/api/clients", {
+            client: c,
+            fromLeadId: c.leadId,
+            identifiers: { taxId: v.taxId, taxIdType: c.taxIdType, ein: v.ein, rpTaxId: v.rpTaxId, dob: c.dob && /^\d{4}-\d{2}-\d{2}$/.test(c.dob) ? c.dob : undefined },
+          });
+          dispatch({ type: "dropVault", id });
+          const now = stateRef.current.clients.find((x) => x.id === id);
+          // Keep edits made while creating; otherwise show the server's (masked) version.
+          adopt(r.client, now === c);
+          return true;
+        })();
+        pendingClientCreates.set(id, created.catch(() => false));
+        await created;
+      } else {
+        const r = await call<{ client: Rev }>("PUT", `/api/clients/${id}`, { client: { ...c, rev: revs.current.get(id) } });
+        revs.current.set(id, r.client.rev ?? 1);
+        synced.current.set(id, c);
+      }
+    } catch (e) {
+      if (e instanceof RemoteError && e.status === 401) return;
+      notify(e instanceof RemoteError ? e.message : "Couldn't save — check your connection.");
+      await reload(id);
+    } finally {
+      inflight.current.delete(id);
+    }
+    // Anything changed while we were saving gets its own save.
+    if (stateRef.current.clients.find((x) => x.id === id) !== synced.current.get(id)) later(id, () => save(id));
+  }, []);
+
+  useEffect(() => {
+    if (!BACKEND || !ready) return;
+    state.clients.forEach((c) => { if (synced.current.get(c.id) !== c) later(c.id, () => save(c.id)); });
+  }, [state.clients, ready]);
+
+  const remote = useMemo<Remote | undefined>(() => (BACKEND ? {
+    async setIds(id, v) {
+      const put = (f: string, value: string, kind?: string) => call("PUT", `/api/clients/${id}/identifiers/${f}`, { value, kind });
+      try {
+        await pendingClientCreates.get(id);
+        if (v.taxId) await put("tax_id", v.taxId, v.taxIdType);
+        if (v.ein) await put("ein", v.ein);
+        if (v.dob) await put("dob", v.dob);
+        if (v.rp?.taxId) await put("rp_tax_id", v.rp.taxId, v.rp.taxIdType);
+      } catch (e) {
+        notify(e instanceof RemoteError ? e.message : "Couldn't save the identifier.");
+        await reload(id);
+      }
+    },
+  } : undefined), []);
+
+  return { ready, remote };
+}
