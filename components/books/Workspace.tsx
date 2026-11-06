@@ -523,7 +523,7 @@ function ReviewTab({ w, m, open }: { w: BooksWorkspace; m: BooksMonth; open: (d:
       </Card>
 
       <ResolveItemDialog w={w} m={m} itemId={resolving} onClose={() => setResolving(null)} />
-      <StatementDialog w={w} m={m} accountId={stmt} onClose={() => setStmt(null)} />
+      <StatementDialog key={stmt ?? "none"} w={w} m={m} accountId={stmt} onClose={() => setStmt(null)} />
       <DiscrepancyDialog w={w} m={m} accountId={disc} onClose={() => setDisc(null)} />
     </div>
   );

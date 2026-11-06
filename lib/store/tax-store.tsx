@@ -11,6 +11,8 @@
 import { createContext, useContext, useMemo, useReducer, useRef } from "react";
 import { DEFAULT_FEE_SCHEDULE, ORGANIZERS, RETURN_STATUSES, baseChecklist, defaultPricing, dueDates, priceTotal, type ChecklistItem, type FeeItem, type FilingStatus, type PriceLine, type ReturnStatus, type TaxForm, type TaxReturn } from "@/lib/tax/config";
 import { TAX_RETURNS } from "@/lib/sample/tax";
+import { docsFor, type Answers } from "@/lib/tax/interview/engine";
+import { impliedFilingStatus, sectionsFor } from "@/lib/tax/interview/questions";
 import { SAMPLE_NOW, staffById } from "@/lib/sample/clients";
 import { nowIso, useClients } from "@/lib/store/clients-store";
 import type { ActivityItem, ActivityKind, Client, ClientDocument, Invoice } from "@/lib/types";
@@ -208,6 +210,71 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       up(id, (x) => log({ ...x, organizer: { ...x.organizer, status: "reviewed", reviewedAt: nowIso() } }, "intake", "Organizer reviewed"));
       a.applyOrganizerDocs(id);
     },
+    /* ---------------- Guided interview ---------------- */
+    /** Saves progress as the client (or staff) goes — nothing is lost if they stop partway. */
+    saveInterview(id: string, answers: Answers, by: "client" | "staff", step?: number) {
+      up(id, (x) => ({
+        ...x,
+        organizer: {
+          ...x.organizer,
+          status: x.organizer.status === "not_sent" || x.organizer.status === "sent" ? "in_progress" : x.organizer.status,
+          interview: { ...x.organizer.interview, answers, updatedAt: nowIso(), enteredBy: by, step: step ?? x.organizer.interview?.step },
+        },
+      }));
+    },
+    /** Submits the interview: documents it calls for join the checklist, and the filing status is set. */
+    submitInterview(id: string, answers: Answers, by: "client" | "staff", consentName: string) {
+      const r = R(id);
+      const docs = docsFor(sectionsFor(r.form), { ...answers, __form: r.form });
+      const toAdd: ChecklistItem[] = docs.filter((d) => !r.checklist.some((i) => i.name === d.name)).map((d) => ({ id: uid("ci"), ...d, required: true, source: "organizer" as const }));
+      const fs = r.kind === "individual" ? (impliedFilingStatus(answers) as FilingStatus | undefined) : undefined;
+      up(id, (x) =>
+        log(
+          {
+            ...x,
+            filingStatus: fs ?? x.filingStatus,
+            checklist: [...x.checklist, ...toAdd],
+            organizer: { ...x.organizer, status: "submitted", submittedAt: nowIso(), sentAt: x.organizer.sentAt ?? nowIso(), interview: { ...x.organizer.interview, answers, updatedAt: nowIso(), enteredBy: by, consentName } },
+          },
+          "intake",
+          `Tax interview submitted${by === "staff" ? " (entered by staff)" : " by client"} — ${toAdd.length} document${toAdd.length === 1 ? "" : "s"} added to the checklist`,
+          by === "client" ? "client" : "staff",
+        ),
+      );
+      clients().logActivity(r.clientId, "message", `Tax interview submitted for ${label(r)}`);
+      if (r.status === "Intake") moveTo(id, "Awaiting Documents", "interview submitted");
+      return toAdd.length;
+    },
+    /** Preparer questions are collected as drafts, then sent to the client together in one request. */
+    addFollowUp(id: string, question: string, ref?: string) {
+      up(id, (x) => ({ ...x, organizer: { ...x.organizer, followUps: [...(x.organizer.followUps ?? []), { id: uid("fu"), question, ref, status: "draft" }] } }));
+    },
+    removeFollowUp(id: string, fuId: string) {
+      up(id, (x) => ({ ...x, organizer: { ...x.organizer, followUps: (x.organizer.followUps ?? []).filter((f) => f.id !== fuId) } }));
+    },
+    sendFollowUps(id: string): number {
+      const r = R(id);
+      const drafts = (r.organizer.followUps ?? []).filter((f) => f.status === "draft");
+      if (!drafts.length) return 0;
+      const at = nowIso();
+      up(id, (x) => log({ ...x, organizer: { ...x.organizer, followUps: (x.organizer.followUps ?? []).map((f) => (f.status === "draft" ? { ...f, status: "sent", askedAt: at } : f)) } }, "message", `Sent ${drafts.length} follow-up question${drafts.length > 1 ? "s" : ""} to the client in one request`));
+      clients().logActivity(r.clientId, "message", `${drafts.length} follow-up question${drafts.length > 1 ? "s" : ""} sent for ${label(r)}`);
+      return drafts.length;
+    },
+    answerFollowUps(id: string, replies: Record<string, string>, by: "client" | "staff") {
+      const at = nowIso();
+      const n = Object.values(replies).filter((v) => v.trim()).length;
+      up(id, (x) => log({ ...x, organizer: { ...x.organizer, followUps: (x.organizer.followUps ?? []).map((f) => (f.status === "sent" && replies[f.id]?.trim() ? { ...f, status: "answered", answer: replies[f.id].trim(), answeredAt: at } : f)) } }, "message", `${n} follow-up answer${n === 1 ? "" : "s"} received`, by === "client" ? "client" : "staff"));
+    },
+    /** Adds price lines for schedules the interview indicates (skips codes already priced). */
+    applyNeeds(id: string, needs: { label: string; code?: string; qty?: number }[]): number {
+      const r = R(id);
+      const fees = get().fees;
+      const add = needs.filter((n) => n.code && !r.pricing.lines.some((l) => l.code === n.code) && fees.some((f) => f.code === n.code));
+      add.forEach((n) => { const f = fees.find((x) => x.code === n.code)!; a.addLine(id, { code: f.code, description: f.label, qty: n.qty ?? 1, unit: f.price }); });
+      return add.length;
+    },
+
     /** Answers like "Rental property: Yes" add the matching documents to the checklist. */
     applyOrganizerDocs(id: string): number {
       const r = R(id);

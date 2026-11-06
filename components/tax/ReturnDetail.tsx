@@ -48,12 +48,13 @@ import { FILING_STATUSES, FORM_LABEL, ORGANIZERS, STATUS_META, STATUS_PATH, dueD
 import { fmtDate, fmtDateTime, relTime, usd } from "@/lib/format";
 import { formatPhone, maskDOB, maskEIN, maskTaxId } from "@/lib/validation";
 import type { Client } from "@/lib/types";
+import { InterviewTab } from "./InterviewTab";
 import { AccessPreviewBar, DueChip, NoAccess, ReturnStatusBadge } from "./TaxBits";
 import { AckDialog, AddItemDialog, AddLineDialog, ResolveDialog, SignOffDialog, StatusDialog, TaxInvoiceDialog, TransmitDialog, WaiveDialog } from "./TaxDialogs";
 
 const TABS = [
   { key: "overview", label: "Overview", icon: ClipboardList },
-  { key: "organizer", label: "Organizer", icon: NotebookPen },
+  { key: "organizer", label: "Interview", icon: NotebookPen },
   { key: "documents", label: "Documents", icon: FolderOpen },
   { key: "review", label: "Review & approval", icon: ShieldCheck },
   { key: "efile", label: "E-file", icon: Send },
@@ -106,7 +107,7 @@ export function ReturnDetail({ id }: { id: string }) {
   const next = (() => {
     const s = r.status;
     if (s === "Intake")
-      return { text: "Send the organizer and request this return's documents through the client portal.", primary: { label: "Send organizer & requests", icon: Send, run: () => { tax.sendOrganizer(r.id); toast("Organizer and document requests sent — status: Awaiting Documents"); }, can: A.edit }, secondary: { label: "Fill organizer in office", run: () => go("organizer"), can: A.edit } };
+      return { text: "Send the organizer and request this return's documents through the client portal.", primary: { label: "Send organizer & requests", icon: Send, run: () => { tax.sendOrganizer(r.id); toast("Organizer and document requests sent — status: Awaiting Documents"); }, can: A.edit }, secondary: { label: "Fill interview with client", run: () => go("organizer"), can: A.edit } };
     if (s === "Awaiting Documents")
       return out.length
         ? { text: `${out.length} required document${out.length > 1 ? "s" : ""} still outstanding.`, primary: { label: "Remind client", icon: Send, run: () => { const n = tax.remindAll(r.id) + tax.requestAllMissing(r.id); toast(n ? "Client reminded" : "Nothing to remind — mark items received on the Documents tab"); }, can: A.edit }, secondary: { label: "Mark ready anyway", run: () => { if (confirm(`${out.length} required documents are outstanding. Move to Ready for Review anyway?`)) { tax.markReadyForReview(r.id, `override — ${out.length} documents outstanding`); toast("Moved to Ready for Review"); } }, can: A.edit } }
@@ -241,7 +242,7 @@ export function ReturnDetail({ id }: { id: string }) {
 
       <div className="pt-5">
         {tab === "overview" && <OverviewTab r={r} client={client} otherYears={otherYears} />}
-        {tab === "organizer" && <OrganizerTab r={r} />}
+        {tab === "organizer" && <InterviewTab r={r} />}
         {tab === "documents" && <DocumentsTab r={r} client={client} onAdd={() => setDlg("additem")} onWaive={setWaiveId} />}
         {tab === "review" && <ReviewTab r={r} client={client} onSignoff={() => setDlg("signoff")} />}
         {tab === "efile" && <EfileTab r={r} onTransmit={() => setDlg("transmit")} onAck={setAckId} onResolve={() => setDlg("resolve")} />}
@@ -385,83 +386,6 @@ function OverviewTab({ r, client, otherYears }: { r: TaxReturn; client: Client; 
 }
 
 /* ================================================================== */
-
-function OrganizerTab({ r }: { r: TaxReturn }) {
-  const tax = useTax();
-  const toast = useToast();
-  const tpl = ORGANIZERS[r.kind];
-  const [answers, setAnswers] = useState<Record<string, string>>(r.organizer.answers);
-  useEffect(() => setAnswers(r.organizer.answers), [r.organizer.answers]);
-  const sections = useMemo(() => [...new Set(tpl.questions.map((q) => q.section))], [tpl]);
-  const can = tax.access.edit;
-  const dirty = JSON.stringify(answers) !== JSON.stringify(r.organizer.answers);
-  const suggested = tpl.questions.filter((q) => q.docs && (answers[q.id] === "Yes" || (q.type === "number" && Number(answers[q.id]) > 0))).flatMap((q) => q.docs!).filter((d) => !r.checklist.some((i) => i.name === d.name));
-  const statusTone = { not_sent: "neutral", sent: "info", in_progress: "warning", submitted: "info", reviewed: "success" } as const;
-  const statusText = { not_sent: "Not sent", sent: "Sent — waiting on client", in_progress: "In progress", submitted: "Submitted — needs review", reviewed: "Reviewed" } as const;
-
-  return (
-    <div className="grid grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
-      <Card>
-        <CardHeader icon={NotebookPen} title={tpl.title} subtitle={`TY ${r.taxYear} · answers drive the document checklist`} action={<Badge tone={statusTone[r.organizer.status]}>{statusText[r.organizer.status]}</Badge>} />
-        <div className="space-y-6 px-5 pb-5 sm:px-6">
-          {sections.map((sec) => (
-            <fieldset key={sec}>
-              <legend className="mb-2 text-[13px] font-semibold uppercase tracking-wide text-muted">{sec}</legend>
-              <div className="divide-y divide-line rounded-xl border border-line">
-                {tpl.questions.filter((q) => q.section === sec).map((q) => (
-                  <div key={q.id} className="flex flex-wrap items-center gap-3 px-3.5 py-2.5">
-                    <label htmlFor={`org-${q.id}`} className="min-w-[200px] flex-1 text-[13.5px] text-ink">{q.label}</label>
-                    {q.type === "yesno" ? (
-                      <div role="radiogroup" aria-label={q.label} className="flex rounded-lg border border-line p-0.5" id={`org-${q.id}`}>
-                        {["Yes", "No"].map((v) => (
-                          <button key={v} type="button" role="radio" aria-checked={answers[q.id] === v} disabled={!can} onClick={() => setAnswers((a) => ({ ...a, [q.id]: v }))} className={`rounded-md px-3 py-1 text-[12.5px] font-semibold ${answers[q.id] === v ? "bg-accent text-white" : "text-muted hover:text-ink"} disabled:opacity-60`}>
-                            {v}
-                          </button>
-                        ))}
-                      </div>
-                    ) : q.type === "select" ? (
-                      <select id={`org-${q.id}`} disabled={!can} value={answers[q.id] ?? ""} onChange={(e) => setAnswers((a) => ({ ...a, [q.id]: e.target.value }))} className="h-8 rounded-lg border border-line bg-surface px-2 text-[13px] text-ink">
-                        <option value="">—</option>
-                        {q.options!.map((o) => <option key={o} value={o}>{o}</option>)}
-                      </select>
-                    ) : (
-                      <input id={`org-${q.id}`} type={q.type === "number" ? "number" : "text"} min={0} disabled={!can} value={answers[q.id] ?? ""} onChange={(e) => setAnswers((a) => ({ ...a, [q.id]: e.target.value }))} className="h-8 w-24 rounded-lg border border-line bg-surface px-2 text-right text-[13px] text-ink tabular-nums" />
-                    )}
-                  </div>
-                ))}
-              </div>
-            </fieldset>
-          ))}
-        </div>
-      </Card>
-      <div className="space-y-5 xl:sticky xl:top-[140px] xl:self-start">
-        <Card className="space-y-3 p-5">
-          {r.organizer.status === "not_sent" && <Button variant="primary" icon={Send} className="w-full" disabled={!can} onClick={() => { tax.sendOrganizer(r.id); toast("Organizer sent to client portal"); }}>Send to client portal</Button>}
-          {(r.organizer.status === "sent" || r.organizer.status === "in_progress") && <Button icon={Send} className="w-full" disabled={!can} onClick={() => { tax.remindAll(r.id); toast("Organizer reminder sent"); }}>Remind client</Button>}
-          <Button className="w-full" disabled={!can || !dirty} onClick={() => { tax.saveOrganizer(r.id, answers, false); toast("Answers saved"); }}>Save answers</Button>
-          {r.organizer.status !== "submitted" && r.organizer.status !== "reviewed" && <Button className="w-full" disabled={!can} onClick={() => { tax.saveOrganizer(r.id, answers, true); toast("Organizer submitted (entered by staff)"); }}>Submit on client&rsquo;s behalf</Button>}
-          {r.organizer.status === "submitted" && <Button variant="primary" icon={CheckCircle2} className="w-full" disabled={!can} onClick={() => { tax.saveOrganizer(r.id, answers, true); tax.reviewOrganizer(r.id); toast("Organizer reviewed"); }}>Mark reviewed</Button>}
-          <p className="text-[12px] text-muted">
-            {r.organizer.sentAt && <>Sent {fmtDate(r.organizer.sentAt)}. </>}
-            {r.organizer.submittedAt && <>Submitted {fmtDate(r.organizer.submittedAt)}. </>}
-            {r.organizer.reviewedAt && <>Reviewed {fmtDate(r.organizer.reviewedAt)}.</>}
-          </p>
-        </Card>
-        <Card>
-          <CardHeader title="Documents from answers" subtitle={suggested.length ? `${suggested.length} to add to the checklist` : "Checklist is up to date"} />
-          <ul className="space-y-1.5 px-5 pb-4 sm:px-6">
-            {suggested.map((d) => <li key={d.name} className="flex items-center gap-2 text-[13px] text-ink-2"><FilePlus2 size={14} className="text-accent" /> {d.name}</li>)}
-          </ul>
-          {suggested.length > 0 && (
-            <div className="px-5 pb-5 sm:px-6">
-              <Button size="sm" disabled={!can} onClick={() => { tax.saveOrganizer(r.id, answers, false); setTimeout(() => { const n = tax.applyOrganizerDocs(r.id); toast(`Added ${n} document(s) to the checklist`); }, 0); }}>Add to checklist</Button>
-            </div>
-          )}
-        </Card>
-      </div>
-    </div>
-  );
-}
 
 /* ================================================================== */
 

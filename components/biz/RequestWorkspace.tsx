@@ -180,7 +180,7 @@ export function RequestWorkspace({ id }: { id: string }) {
         {tab === "activity" && <HistoryTab r={r} />}
       </div>
 
-      <QuoteDialog r={r} open={dlg === "quote"} onClose={() => setDlg(null)} />
+      {dlg === "quote" && <QuoteDialog r={r} open onClose={() => setDlg(null)} />}
       <InfoRequestDialog r={r} open={dlg === "info"} onClose={() => setDlg(null)} />
       <AgencyDialog r={r} open={dlg === "agency" || dlg === "agency-approve" || dlg === "agency-follow"} initialKind={dlg === "agency-approve" ? "approved" : dlg === "agency-follow" ? "follow_up" : undefined} onClose={() => setDlg(null)} />
       <CompletionDialog r={r} open={dlg === "completion"} onClose={() => setDlg(null)} />

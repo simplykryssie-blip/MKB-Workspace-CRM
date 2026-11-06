@@ -191,5 +191,18 @@ function buildReturn(sp: Spec): TaxReturn {
   };
 }
 
-export const TAX_RETURNS: TaxReturn[] = SPECS.map(buildReturn);
+/** Sample: Morgan started the 2026 interview in the portal and stopped partway through the business section. */
+const MORGAN_INTERVIEW = {
+  fname: "Morgan", lname: "Mockwell", ssn: "•••-••-0124", dob: "1979-08-21", occupation: "Property manager", phone: "(555) 010-0124", email: "morgan.mockwell@example.com",
+  street: "6 Test Court", city: "Lakeside", state: "GA", zip: "30002", moved: "No", blind: "No", dependentOfOther: "No", ippin: "No", newClient: "No", photoId: "Yes",
+  marital: "Single (never married)", paidHome: "No", hasDeps: "No",
+  w2: "No", unemp: "No", interest: "Yes", invest: "No", crypto: "No", retire: "No", ssa: "No", rental: "Yes", k1: "No", homesale: "No", gambling: "No", alimonyIn: "No", foreign: "No", otherInc: "No",
+  intCount: "1",
+  rentals: [{ paddr: "14 Sample Lane, Lakeside GA", ptype: "Single-family home", pown: "100", pdays: "365", ppersonal: "0", pincome: "21600", pmortgage: "Yes", pbought: "No", pmanage: "Yes" }],
+  bizName: "Mockwell Rental Properties", bizStructure: "Single-member LLC", bizEinYn: "No", bizWhat: "Property management",
+};
+
+export const TAX_RETURNS: TaxReturn[] = SPECS.map(buildReturn).map((r) =>
+  r.clientId === "c-1009" && r.taxYear === 2026 ? { ...r, organizer: { ...r.organizer, interview: { answers: MORGAN_INTERVIEW, updatedAt: "2026-11-03T19:20:00.000Z", enteredBy: "client" as const, step: 14 } } } : r,
+);
 export const TAX_YEARS = [2026, 2025, 2024, 2023];

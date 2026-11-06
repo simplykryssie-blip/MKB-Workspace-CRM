@@ -67,14 +67,9 @@ export function StatementDialog({ w, m, accountId, onClose }: { w: BooksWorkspac
   const toast = useToast();
   const r = m.recons.find((x) => x.accountId === accountId);
   const acct = w.accounts.find((a) => a.id === accountId);
-  const [date, setDate] = useState("");
-  const [bal, setBal] = useState("");
-  useEffect(() => {
-    if (r) {
-      setDate((r.statementDate ?? periodEnd(m.period)).slice(0, 10));
-      setBal(r.endingBalance != null && !r.sample ? String(r.endingBalance) : "");
-    }
-  }, [accountId]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Initial values are set on mount (the dialog is keyed by account), never by a later effect that could overwrite typing.
+  const [date, setDate] = useState(() => (r ? (r.statementDate ?? periodEnd(m.period)).slice(0, 10) : ""));
+  const [bal, setBal] = useState(() => (r && r.endingBalance != null && !r.sample ? String(r.endingBalance) : ""));
   if (!r || !acct) return null;
   const valid = date && bal !== "" && !isNaN(Number(bal));
   return (

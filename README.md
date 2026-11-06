@@ -89,6 +89,17 @@ npm run build && npm start
   **These are interface checks for review, not security.** The production backend must enforce
   every permission on every request and write the audit log server-side; MFA, password, session and
   lockout settings are stored for the Phase 3 authentication service, which enforces them.
+- **Guided tax interview** (Tax return → Interview tab, and the client portal): one sitting,
+  branching on every answer, with repeating entries (W-2s, dependents, rentals, K-1s, vehicles,
+  owners). Paths for Form 1040, 1040 + Schedule C (sole proprietor / single-member LLC), 1040-X,
+  1065 (partnership / multi-member LLC), 1120-S and 1120; the 990 interview is not built yet.
+  Answers pre-fill from the client profile, save as you go, and resume at the first unfinished step.
+  Submitting adds the documents the answers call for to the checklist and sets the filing status.
+  Staff see a coverage map of the return's parts, automatic flags (e.g. self-employment on a plain
+  1040, ownership not totalling 100%, S-corp officer without wages), the schedules the return needs
+  with one-click pricing, and a follow-up request that collects every question and sends them to the
+  client together. SSN/EIN/bank numbers keep only the last four digits (production: encrypted vault).
+  The question sets are a draft (TY 2026 v1) that MKB's preparer must review and approve each year.
 
 Changes reset on page reload. Nothing is sent to a server.
 

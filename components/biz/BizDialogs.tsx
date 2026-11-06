@@ -249,14 +249,9 @@ export function NewRequestDialog({ open, onClose, onCreated, preset }: { open: b
 export function QuoteDialog({ r, open, onClose }: { r: ServiceRequest; open: boolean; onClose: () => void }) {
   const biz = useBiz();
   const toast = useToast();
-  const [lines, setLines] = useState<QuoteLine[]>([]);
-  const [note, setNote] = useState("");
-  useEffect(() => {
-    if (open) {
-      setLines(r.quote.lines.length ? r.quote.lines.map((l) => ({ ...l })) : [{ id: uid("q"), kind: "service", label: r.serviceName, amount: 0 }]);
-      setNote(r.quote.note ?? "");
-    }
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Mounted fresh each time it opens (see RequestWorkspace), so the starting lines never overwrite edits.
+  const [lines, setLines] = useState<QuoteLine[]>(() => (r.quote.lines.length ? r.quote.lines.map((l) => ({ ...l })) : [{ id: uid("q"), kind: "service", label: r.serviceName, amount: 0 }]));
+  const [note, setNote] = useState(r.quote.note ?? "");
   const valid = lines.length > 0 && lines.every((l) => l.label.trim() && !isNaN(l.amount) && l.amount >= 0);
   const locked = r.quote.status === "accepted";
   const save = (send: boolean) => {
@@ -847,18 +842,11 @@ export function RuleDialog({ rule, open, onClose, defaultState }: { rule?: Compl
   const biz = useBiz();
   const toast = useToast();
   const blank = (): ComplianceRule => ({ id: uid("rule"), state: defaultState ?? "GA", entityTypes: ["LLC"], appliesTo: "both", kind: "annual_report", label: "", description: "", agency: "", frequency: "annual", due: "manual", source: "" });
-  const [v, setV] = useState<ComplianceRule>(blank());
-  const [dueType, setDueType] = useState<"fixed" | "anniversary" | "manual">("manual");
-  const [fee, setFee] = useState("");
+  // Mounted fresh (keyed) each time it opens, so initial values never overwrite what the user types.
+  const [v, setV] = useState<ComplianceRule>(() => (rule ? structuredClone(rule) : blank()));
+  const [dueType, setDueType] = useState<"fixed" | "anniversary" | "manual">(() => (rule ? (typeof rule.due === "object" ? "fixed" : rule.due) : "manual"));
+  const [fee, setFee] = useState(() => (rule?.filingFee != null ? String(rule.filingFee) : ""));
   const [verifiedNow, setVerifiedNow] = useState(false);
-  useEffect(() => {
-    if (!open) return;
-    const r = rule ? structuredClone(rule) : blank();
-    setV(r);
-    setDueType(typeof r.due === "object" ? "fixed" : r.due);
-    setFee(r.filingFee != null ? String(r.filingFee) : "");
-    setVerifiedNow(false);
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
   const fixed = typeof v.due === "object" ? v.due : { month: 1, day: 1 };
   const due: ComplianceRule["due"] = dueType === "fixed" ? fixed : dueType;
   const valid = v.label.trim() && v.agency.trim() && v.source.trim() && (v.entityTypes === "any" || v.entityTypes.length > 0) && (dueType !== "fixed" || (fixed.month >= 1 && fixed.month <= 12 && fixed.day >= 1 && fixed.day <= 31)) && (fee === "" || Number(fee) >= 0);

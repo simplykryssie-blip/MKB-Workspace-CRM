@@ -228,12 +228,26 @@ export const REJECTION_REASONS = [
 /* Return model                                                        */
 /* ------------------------------------------------------------------ */
 
+export type FollowUp = { id: string; question: string; ref?: string; status: "draft" | "sent" | "answered"; answer?: string; askedAt?: string; answeredAt?: string };
+
 export type OrganizerState = {
   status: "not_sent" | "sent" | "in_progress" | "submitted" | "reviewed";
   sentAt?: string;
   submittedAt?: string;
   reviewedAt?: string;
+  /** Earlier quick screener answers (kept for returns created before the full interview). */
   answers: Record<string, string>;
+  /** Full guided interview (see lib/tax/interview). Sensitive numbers are kept as last four only. */
+  interview?: {
+    answers: import("@/lib/tax/interview/engine").Answers;
+    updatedAt?: string;
+    enteredBy?: "client" | "staff";
+    consentName?: string;
+    /** Section the client stopped on, so they resume where they left off. */
+    step?: number;
+  };
+  /** Preparer questions sent back to the client in one request. */
+  followUps?: FollowUp[];
 };
 
 export type ChecklistItem = {

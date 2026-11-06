@@ -668,7 +668,7 @@ function StatesTab() {
           </Card>
         </div>
       </div>
-      <RuleDialog rule={rule ?? undefined} defaultState={state === "LOCAL" ? "LOCAL" : state} open={rule !== undefined} onClose={() => setRule(undefined)} />
+      {rule !== undefined && <RuleDialog key={rule?.id ?? "new"} rule={rule ?? undefined} defaultState={state === "LOCAL" ? "LOCAL" : state} open onClose={() => setRule(undefined)} />}
       <ChecklistDialog list={cl ?? undefined} state={state} open={cl !== undefined} onClose={() => setCl(undefined)} />
       <VerifyDialog title={verifyRule ? `${stateName(verifyRule.state)} — ${verifyRule.label}` : ""} current={verifyRule?.source.startsWith("Sample placeholder") ? "" : verifyRule?.source} open={!!verifyRule} onClose={() => setVerifyRule(null)} onVerify={(by, src) => { if (verifyRule) { biz.saveRule({ ...verifyRule, source: src, lastVerifiedAt: SAMPLE_NOW.toISOString(), verifiedBy: by }); } }} />
     </div>

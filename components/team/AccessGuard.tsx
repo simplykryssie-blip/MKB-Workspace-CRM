@@ -10,6 +10,7 @@ import { TextArea } from "@/components/ui/Field";
 import { useToast } from "@/components/ui/Toast";
 import { useClients } from "@/lib/store/clients-store";
 import { useBooks } from "@/lib/store/books-store";
+import { useTax } from "@/lib/store/tax-store";
 import { useTeam } from "@/lib/store/team-store";
 import { MODULES, STATUS_META, type ModuleKey } from "@/lib/team/config";
 
@@ -36,8 +37,9 @@ export function moduleForPath(path: string): ModuleKey | null {
 export const moduleLabel = (k: ModuleKey) => MODULES.find((m) => m.key === k)!.label;
 
 /** Portal routes a client may open: only their own. */
-function clientPortalLinks(clientId: string, workspaces: { id: string; clientId: string; businessName: string }[]) {
+function clientPortalLinks(clientId: string, workspaces: { id: string; clientId: string; businessName: string }[], returns: { id: string; clientId: string; taxYear: number; form: string; status: string }[] = []) {
   return [
+    ...returns.filter((r) => r.clientId === clientId && r.status !== "Completed").map((r) => ({ href: `/services/tax-preparation/returns/${r.id}/interview`, label: `Tax interview — ${r.taxYear} ${r.form}` })),
     { href: `/services/record-expungement/portal/${clientId}`, label: "Expungement" },
     { href: `/services/business-services/portal/${clientId}`, label: "Business services" },
     ...workspaces.filter((w) => w.clientId === clientId).map((w) => ({ href: `/services/bookkeeping/${w.id}/client`, label: `Bookkeeping — ${w.businessName}` })),
@@ -101,9 +103,10 @@ export function AccessGuard({ children }: { children: React.ReactNode }) {
   const team = useTeam();
   const { clients } = useClients();
   const books = useBooks();
+  const tax = useTax();
   if (team.acting.kind === "client") {
     const cid = team.acting.clientId;
-    const links = clientPortalLinks(cid, books.workspaces);
+    const links = clientPortalLinks(cid, books.workspaces, tax.returns);
     const ok = links.some((l) => path === l.href);
     if (ok) return <>{children}</>;
     const name = clients.find((c) => c.id === cid)?.name;
