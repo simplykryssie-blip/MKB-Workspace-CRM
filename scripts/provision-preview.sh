@@ -35,13 +35,23 @@ echo "== Migrations (remote preview database)"
 $W d1 migrations apply DB --env preview --remote
 
 echo "== Encryption key"
+# Cloudflare keeps secrets on the Worker itself, so the key can only be attached once the
+# preview Worker exists (it is uploaded together with the first preview deploy).
 if $W secret list --env preview 2>/dev/null | grep -q ENCRYPTION_KEY; then
-  echo "ENCRYPTION_KEY already set — not replaced (replacing it would make encrypted data unreadable)."
+  echo "ENCRYPTION_KEY already set on the preview Worker — not replaced (that would make encrypted data unreadable)."
 else
-  umask 077
-  node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64'))" > "$KEY_COPY"
-  $W secret put ENCRYPTION_KEY --env preview < "$KEY_COPY" >/dev/null
-  printf '1' | $W secret put ENCRYPTION_KEY_VERSION --env preview >/dev/null
-  echo "Key stored as a Cloudflare secret. A copy was written to $KEY_COPY for the owner's password manager — delete it afterwards."
+  if [ ! -s "$KEY_COPY" ]; then
+    umask 077
+    node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64'))" > "$KEY_COPY"
+    echo "New encryption key generated: $KEY_COPY"
+  else
+    echo "Reusing the encryption key already generated in $KEY_COPY"
+  fi
+  if $W secret put ENCRYPTION_KEY --env preview < "$KEY_COPY" >/dev/null 2>&1; then
+    printf '1' | $W secret put ENCRYPTION_KEY_VERSION --env preview >/dev/null
+    echo "Key stored as a Cloudflare secret on the preview Worker."
+  else
+    echo "Preview Worker doesn't exist yet: the key will be attached with the first preview deploy."
+  fi
 fi
 echo "Done. Nothing was deployed."
