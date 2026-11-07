@@ -1,6 +1,6 @@
 # MKB Business Suite — Backend (Phase 3)
 
-Status: **foundation + Clients, Leads, Team & Permissions, Forms and Tax Preparation connected; tested locally. Not deployed. No cloud resources created.**
+Status: **foundation + Clients, Leads, Team & Permissions, Forms and Tax Preparation connected. A protected preview runs at https://mkb-crm-preview.krystal-21e.workers.dev (Worker `mkb-crm-preview`, D1 `mkb-crm-preview`, R2 `mkb-crm-files-preview`) with an empty database — no client data. The live site (`mkb-workspace-crm`) is unchanged.**
 
 The backend runs on Cloudflare: the Next.js app is compiled into a Cloudflare
 Worker (OpenNext), data lives in **D1** (SQLite), files will live in **R2**, and
@@ -93,6 +93,19 @@ Run inside Cloudflare's actual runtime: `npx opennextjs-cloudflare build && npx 
   encryption at rest, append-only audit log, server-side sign-out.
 - Sign-in screens (5 checks), including MFA setup with a real authenticator code.
 - All 10 existing interface suites (217 checks) still pass.
+
+## Preview deployment
+
+- Provision (once): `scripts/provision-preview.sh` — creates the D1 database and R2 bucket, writes
+  `env.preview` in `wrangler.jsonc`, applies migrations remotely.
+- Deploy: `node scripts/deploy-preview.mjs --secrets-file <json>` — builds with the backend on, puts
+  page files in R2 bucket `mkb-crm-static-preview` (served by a small wrapper worker, because this
+  development environment's proxy can't use Workers Static Assets uploads) and deploys. Secrets:
+  `ENCRYPTION_KEY`, `ENCRYPTION_KEY_VERSION`, `OWNER_SETUP_TOKEN`, optionally `RESEND_API_KEY`.
+- First sign-in: `/login/setup?token=<OWNER_SETUP_TOKEN>` creates the Owner account and the system
+  settings (roles, departments, security policy, lead pipeline, tax fees). It refuses once any team
+  member exists.
+- New migrations: `npx wrangler d1 migrations apply DB --env preview --remote`.
 
 ## Before anything goes live (needs your approval)
 
