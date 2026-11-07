@@ -15,6 +15,7 @@ import {
   UserPlus,
   Users,
   Layers,
+  Globe,
   type LucideIcon,
 } from "lucide-react";
 
@@ -37,6 +38,7 @@ export const NAV: { section?: string; items: NavItem[] }[] = [
       { label: "Clients", href: "/clients", icon: Users },
       { label: "Leads", href: "/leads", icon: UserPlus, badgeKey: "leadsDue" },
       { label: "Forms", href: "/forms", icon: ClipboardList },
+      { label: "Website", href: "/website", icon: Globe },
     ],
   },
   {

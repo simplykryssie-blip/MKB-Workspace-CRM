@@ -241,6 +241,8 @@ export const AUDIT_ACTIONS = [
   "Access request",
   "Security settings",
   "Record update",
+  "Website update",
+  "Website publish",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 export type AuditEvent = { id: string; at: string; actorId: string; action: AuditAction; resource: string; department?: DeptKey; meta?: string; success: boolean };

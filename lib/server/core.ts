@@ -66,12 +66,12 @@ export const clientIp = (req: Request) => req.headers.get("cf-connecting-ip") ??
  * Blocks cross-site requests that change data: they must be JSON and come from
  * the app's own origin. (Session cookies are also SameSite=Lax.)
  */
-export function checkSameOrigin(req: Request, env: AppEnv) {
+export function checkSameOrigin(req: Request, env: AppEnv, rawBody = false) {
   if (req.method === "GET" || req.method === "HEAD") return;
   const origin = req.headers.get("origin");
   const allowed = env.APP_ORIGIN ?? new URL(req.url).origin;
   if (!origin || origin !== allowed) throw new HttpError(403, "Request blocked (cross-site).", "bad_origin");
-  if (!(req.headers.get("content-type") ?? "").includes("application/json")) throw new HttpError(415, "Send JSON.", "bad_content_type");
+  if (!rawBody && !(req.headers.get("content-type") ?? "").includes("application/json")) throw new HttpError(415, "Send JSON.", "bad_content_type");
 }
 
 /** Parses a JSON body (max 64 KB). */
@@ -83,13 +83,14 @@ export async function body<T = Record<string, unknown>>(req: Request): Promise<T
 export const str = (v: unknown, max = 500) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 
 /** Wraps a route handler: errors become JSON responses; unexpected errors are hidden from the caller. */
-export function handle<P extends Record<string, string> = Record<string, never>>(fn: (req: Request, env: AppEnv, params: P) => Promise<Response>) {
+/** `rawBody`: the route reads a file upload instead of JSON (the same-origin check still applies). */
+export function handle<P extends Record<string, string> = Record<string, never>>(fn: (req: Request, env: AppEnv, params: P) => Promise<Response>, opts: { rawBody?: boolean } = {}) {
   return async (req: Request, ctx: { params: Promise<P> }) => {
     let env: AppEnv | undefined;
     try {
       env = await getEnv();
       if (env.BACKEND_ENABLED !== "true" && !isDev(env)) return jsonResponse({ error: "Backend not enabled." }, 503);
-      checkSameOrigin(req, env);
+      checkSameOrigin(req, env, opts.rawBody);
       return await fn(req, env, ((await ctx?.params) ?? {}) as P);
     } catch (e) {
       if (e instanceof HttpError) return jsonResponse({ error: e.message, code: e.code }, e.status);

@@ -32,6 +32,7 @@ export function moduleForPath(path: string): ModuleKey | null {
     ["/tasks", "dashboard"],
     ["/team", "team"],
     ["/settings", "settings"],
+    ["/website", "settings"],
   ];
   return map.find(([p]) => path === p || path.startsWith(`${p}/`))?.[1] ?? null;
 }
