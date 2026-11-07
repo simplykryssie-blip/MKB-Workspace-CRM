@@ -89,16 +89,20 @@ export async function deletePage(env: AppEnv, a: Actor, id: string) {
   await audit(env.DB, a, { action: "Website publish", resource: `Website page “${p.title}”`, meta: "Page deleted (removed from the live site)" });
 }
 
-/** Publishes the drafts: settings and every page (or only `pageIds`). */
+/**
+ * Publishes drafts. Without `pageIds`: the settings and every page that is already
+ * live (draft pages stay drafts). With `pageIds`: those pages (this is how a draft
+ * page goes live) plus the settings.
+ */
 export async function publish(env: AppEnv, a: Actor, b: { pageIds?: string[] }) {
   requirePermission(a, "settings", "approve");
   const t = now();
   const ids = Array.isArray(b.pageIds) ? b.pageIds.map((x) => str(x, 60)) : null;
   const st = [env.DB.prepare("UPDATE website_settings SET published = draft, published_at = ? WHERE id = 1").bind(t)];
   if (ids) for (const id of ids) st.push(env.DB.prepare("UPDATE website_pages SET published = draft, published_at = ? WHERE id = ? AND deleted_at IS NULL").bind(t, id));
-  else st.push(env.DB.prepare("UPDATE website_pages SET published = draft, published_at = ? WHERE deleted_at IS NULL").bind(t));
+  else st.push(env.DB.prepare("UPDATE website_pages SET published = draft, published_at = ? WHERE deleted_at IS NULL AND published IS NOT NULL").bind(t));
   await env.DB.batch(st);
-  await audit(env.DB, a, { action: "Website publish", resource: "Public website", meta: ids ? `Published ${ids.length} page(s)` : "Published all pages" });
+  await audit(env.DB, a, { action: "Website publish", resource: "Public website", meta: ids ? `Published ${ids.length} page(s)` : "Published changes to live pages" });
   return { publishedAt: t };
 }
 
@@ -128,7 +132,8 @@ export async function importMkb(env: AppEnv, a: Actor) {
   st.push(env.DB.prepare("INSERT INTO website_settings (id, draft, published, rev, updated_at, updated_by, published_at) VALUES (1, ?, ?, 1, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET draft = excluded.draft, published = excluded.published, rev = rev + 1, updated_at = excluded.updated_at, published_at = excluded.published_at").bind(settings, settings, t, by, t));
   for (const p of MKB_PAGES) {
     const d = JSON.stringify(cleanSections(p.draft));
-    st.push(env.DB.prepare("INSERT INTO website_pages (id, slug, title, description, nav, position, draft, published, rev, updated_at, updated_by, published_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)").bind(p.id, p.slug, p.title, p.description, p.nav ? 1 : 0, p.position, d, d, t, by, t));
+    // Draft-only pages (e.g. the WISP funnel) are loaded without a published copy.
+    st.push(env.DB.prepare("INSERT INTO website_pages (id, slug, title, description, nav, position, draft, published, rev, updated_at, updated_by, published_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)").bind(p.id, p.slug, p.title, p.description, p.nav ? 1 : 0, p.position, d, p.published ? d : null, t, by, p.published ? t : null));
   }
   if (!(await one(env.DB, "SELECT 1 FROM forms WHERE slug = 'contact'"))) {
     const stage = await one<{ id: string }>(env.DB, "SELECT id FROM lead_stages ORDER BY position LIMIT 1");

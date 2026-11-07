@@ -111,10 +111,30 @@ export function WebsiteEditor() {
         await new Promise((r) => setTimeout(r, 900)); // let pending saves finish
         await call("POST", "/api/website/publish", {});
         await load();
-      } else setSite((w) => (w ? { settings: { ...w.settings, published: w.settings.draft }, pages: w.pages.map((p) => ({ ...p, published: p.draft })) } : w));
-      toast("Published — your changes are live.");
+      } else setSite((w) => (w ? { settings: { ...w.settings, published: w.settings.draft }, pages: w.pages.map((p) => (p.published ? { ...p, published: p.draft } : p)) } : w));
+      toast("Published — your changes to live pages are on the site.");
     } catch (e) { fail(e); }
     setBusy(false);
+  };
+  const publishPage = async (p: SitePage) => {
+    setBusy(true);
+    try {
+      if (BACKEND) {
+        await new Promise((r) => setTimeout(r, 900));
+        await call("POST", "/api/website/publish", { pageIds: [p.id] });
+        await load();
+      } else setSite((w) => (w ? { ...w, pages: w.pages.map((x) => (x.id === p.id ? { ...x, published: x.draft } : x)) } : w));
+      toast(`“${p.title}” is live.`);
+    } catch (e) { fail(e); }
+    setBusy(false);
+  };
+  const unpublishPage = async (p: SitePage) => {
+    if (!window.confirm(`Take “${p.title}” off the live site? It stays here as a draft.`)) return;
+    try {
+      if (BACKEND) { await call("POST", `/api/website/pages/${p.id}`, { action: "unpublish" }); await load(); }
+      else setSite((w) => (w ? { ...w, pages: w.pages.map((x) => (x.id === p.id ? { ...x, published: null } : x)) } : w));
+      toast(`“${p.title}” is now a draft.`, "info");
+    } catch (e) { fail(e); }
   };
   const importMkb = async () => {
     setBusy(true);
@@ -122,7 +142,7 @@ export function WebsiteEditor() {
     setBusy(false);
   };
 
-  const pending = useMemo(() => (site ? (!same(site.settings.draft, site.settings.published) ? 1 : 0) + site.pages.filter((p) => !same(p.draft, p.published)).length : 0), [site]);
+  const pending = useMemo(() => (site ? (!same(site.settings.draft, site.settings.published) ? 1 : 0) + site.pages.filter((p) => p.published && !same(p.draft, p.published)).length : 0), [site]);
   const nav = useMemo(() => (site ? [...site.pages].sort((a, b) => a.position - b.position).filter((p) => p.nav && p.slug).map((p) => ({ slug: p.slug, title: p.title })) : []), [site]);
 
   if (!team.can("settings", "view")) return <p className="text-[14px] text-muted">You don&rsquo;t have access to the website editor.</p>;
@@ -134,7 +154,7 @@ export function WebsiteEditor() {
       <div className="mx-auto max-w-xl rounded-3xl border border-line bg-surface p-8 text-center shadow-soft">
         <Globe size={34} className="mx-auto text-accent" />
         <h1 className="mt-3 text-[20px] font-bold text-ink">Your website</h1>
-        <p className="mt-2 text-[14px] text-ink-2">Load MKB&rsquo;s website — the pages rebuilt from your old site (Home, Bookkeeping, Business Services, Tax Preparation, Payroll, About, Resources, Contact, the calculator and WISP pages) — and a &ldquo;Website contact&rdquo; form whose answers become leads assigned to you.</p>
+        <p className="mt-2 text-[14px] text-ink-2">Load MKB&rsquo;s website — the pages rebuilt from your old site (Home, Bookkeeping, Business Services, Tax Preparation, Payroll, About, Resources, Contact and the calculator) — and a &ldquo;Website contact&rdquo; form whose answers become leads assigned to you. The WISP funnel pages (Builder, Generator, LegalShield next steps) are loaded as drafts, not on the live site.</p>
         <Button variant="primary" className="mt-5" icon={Rocket} disabled={busy || !canPublish} onClick={importMkb}>{busy ? "Loading…" : "Load MKB’s website"}</Button>
         {!canPublish && <p className="mt-2 text-[12.5px] text-muted">Needs permission to publish the website (Company Settings → approve).</p>}
       </div>
@@ -148,7 +168,7 @@ export function WebsiteEditor() {
     <div>
       <PageHeader
         title="Website"
-        subtitle={pending ? `${pending} unpublished change${pending === 1 ? "" : "s"} — visitors still see the last published version.` : "Everything is published."}
+        subtitle={pending ? `${pending} unpublished change${pending === 1 ? "" : "s"} to live pages — visitors still see the last published version.` : "Live pages are up to date."}
         actions={
           <div className="flex flex-wrap gap-2">
             <Button icon={Eye} onClick={() => setPreview(true)}>Preview</Button>
@@ -165,7 +185,7 @@ export function WebsiteEditor() {
             <span className="sr-only">Page</span>
             <select value={sel} onChange={(e) => setSel(e.target.value)} className="h-11 w-full rounded-xl border border-line bg-surface px-3 text-[15px] text-ink">
               <option value="settings">Site settings</option>
-              {pages.map((p) => <option key={p.id} value={p.id}>{p.title}{same(p.draft, p.published) ? "" : " •"}</option>)}
+              {pages.map((p) => <option key={p.id} value={p.id}>{p.title}{!p.published ? " (draft)" : same(p.draft, p.published) ? "" : " •"}</option>)}
             </select>
           </label>
           <nav className="hidden overflow-hidden rounded-2xl border border-line bg-surface lg:block" aria-label="Pages">
@@ -174,8 +194,8 @@ export function WebsiteEditor() {
               <button key={p.id} type="button" onClick={() => setSel(p.id)} className={`flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-[14px] ${sel === p.id ? "bg-accent-soft font-semibold text-accent" : "text-ink-2 hover:bg-surface-hover"}`}>
                 <span className="truncate">{p.title}</span>
                 <span className="flex shrink-0 items-center gap-1.5">
-                  {!p.nav && p.slug && <span className="text-[11px] text-faint">hidden</span>}
-                  {!same(p.draft, p.published) && <span className="h-2 w-2 rounded-full bg-warning" title="Unpublished changes" />}
+                  {!p.published ? <span className="rounded-md bg-warning-soft px-1.5 text-[11px] font-semibold text-warning-ink">Draft</span> : !p.nav && p.slug ? <span className="text-[11px] text-faint">not in menu</span> : null}
+                  {p.published && !same(p.draft, p.published) && <span className="h-2 w-2 rounded-full bg-warning" title="Unpublished changes" />}
                 </span>
               </button>
             ))}
@@ -187,7 +207,7 @@ export function WebsiteEditor() {
           {sel === "settings" || !page ? (
             <SettingsForm s={site.settings.draft} onChange={updateSettings} disabled={!canEdit} />
           ) : (
-            <PageForm key={page.id} page={page} onChange={(patch) => updatePage(page.id, patch)} setSections={(fn) => setSections(page.id, fn)} onDelete={() => removePage(page)} disabled={!canEdit} canDelete={canPublish && page.slug !== ""} />
+            <PageForm key={page.id} page={page} onChange={(patch) => updatePage(page.id, patch)} setSections={(fn) => setSections(page.id, fn)} onDelete={() => removePage(page)} disabled={!canEdit} canDelete={canPublish && page.slug !== ""} onPublish={canPublish ? () => publishPage(page) : undefined} onUnpublish={canPublish && page.slug !== "" ? () => unpublishPage(page) : undefined} busy={busy} />
           )}
         </div>
       </div>
@@ -249,7 +269,7 @@ function SettingsForm({ s, onChange, disabled }: { s: SiteSettings; onChange: (p
 }
 
 /* ---------------------------------------------------------------- one page */
-function PageForm({ page, onChange, setSections, onDelete, disabled, canDelete }: { page: SitePage; onChange: (p: Partial<SitePage>) => void; setSections: (fn: (s: Section[]) => Section[]) => void; onDelete: () => void; disabled: boolean; canDelete: boolean }) {
+function PageForm({ page, onChange, setSections, onDelete, disabled, canDelete, onPublish, onUnpublish, busy }: { page: SitePage; onChange: (p: Partial<SitePage>) => void; setSections: (fn: (s: Section[]) => Section[]) => void; onDelete: () => void; disabled: boolean; canDelete: boolean; onPublish?: () => void; onUnpublish?: () => void; busy: boolean }) {
   const [adding, setAdding] = useState(false);
   const [open, setOpen] = useState<string | null>(page.draft[0]?.id ?? null);
   const isHome = page.slug === "";
@@ -270,7 +290,17 @@ function PageForm({ page, onChange, setSections, onDelete, disabled, canDelete }
           {!isHome && <Checkbox label="Show in the menu" checked={page.nav} disabled={disabled} onChange={(e) => onChange({ nav: e.target.checked })} />}
           <TextField label="Menu order" type="number" min={0} max={999} value={page.position} disabled={disabled} onChange={(e) => onChange({ position: Number(e.target.value) })} />
         </div>
-        <p className="mt-3 text-[12.5px] text-muted">{page.published ? "Live on the site." : "Not published yet — visitors can't see this page."}</p>
+        {page.published ? (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-success-soft/50 px-3 py-2.5">
+            <span className="text-[13px] text-ink-2"><strong className="text-success-ink">Live.</strong> {same(page.draft, page.published) ? "Visitors see this version." : "Your edits go live when you tap Publish."}</span>
+            {onUnpublish && <Button size="sm" variant="ghost" onClick={onUnpublish}>Take off the live site</Button>}
+          </div>
+        ) : (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-warning-soft/60 px-3 py-2.5">
+            <span className="text-[13px] text-ink-2"><strong className="text-warning-ink">Draft.</strong> Not on the live site — the Publish button doesn&rsquo;t include it.</span>
+            {onPublish && <Button size="sm" variant="primary" icon={Rocket} disabled={busy} onClick={onPublish}>Publish this page</Button>}
+          </div>
+        )}
       </Panel>
 
       <div>

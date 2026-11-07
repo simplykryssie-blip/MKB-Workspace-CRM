@@ -267,3 +267,12 @@ business-owner insights.
   martinbilbojr.legalshieldassociate.com). Not MKB client-facing content.
 - Footer links "About" and "Contact" pointed to /about and /contact, which didn't exist
   (pages were /about-mkb; no contact page).
+
+## How these came over (decisions, 2026-11-07)
+
+- WISP Builder → WISP Generator → WISP Next Steps (LegalShield) are a **separate funnel**, not part
+  of the main website: loaded as **drafts** (not on the live site, not in the menu). "Start My WISP"
+  goes to the funnel's WISP Generator page, which links to Monarch Tax Suite's working generator
+  (the old generator page was cut off at 4,096 characters and never displayed).
+- Calculator: kept, not in the menu.
+- Get Started / About Us duplicates dropped; "Let's Talk" (/contact) has a real form → Leads.
