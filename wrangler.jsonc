@@ -53,7 +53,8 @@
         "BACKEND_ENABLED": "true",
         "APP_ORIGIN": "https://mkb-crm-preview.krystal-21e.workers.dev",
         "EMAIL_FROM": "MKB Financial Group <no-reply@mkbfinancialgroup.com>",
-        "WEBSITE_HOSTS": "mkbfinancialgroup.com,www.mkbfinancialgroup.com"
+        "WEBSITE_HOSTS": "mkbfinancialgroup.com,www.mkbfinancialgroup.com",
+        "APP_ORIGINS": "https://preview.mkbfinancialgroup.com"
       }
     }
   }
