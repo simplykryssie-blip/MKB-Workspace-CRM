@@ -19,20 +19,15 @@ export function middleware(req: NextRequest) {
   const path = req.nextUrl.pathname;
   if (siteHosts.includes(host)) {
     // One address: example.com → www.example.com (when both are website domains).
+    // Redirects are built from the visitor's own host: on Cloudflare, req.nextUrl can carry the
+    // Worker's internal address (the Access-protected workers.dev name), which visitors must never see.
+    const search = req.nextUrl.search;
     if (!host.startsWith("www.") && siteHosts.includes(`www.${host}`)) {
-      const url = req.nextUrl.clone();
-      url.host = `www.${host}`;
-      url.port = "";
-      url.protocol = "https:";
-      return NextResponse.redirect(url, 301);
+      return NextResponse.redirect(`https://www.${host}${path}${search}`, 301);
     }
     // Addresses from the old website.
     const moved = OLD_PATHS[path.replace(/\/+$/, "")];
-    if (moved !== undefined) {
-      const url = req.nextUrl.clone();
-      url.pathname = moved;
-      return NextResponse.redirect(url, 301);
-    }
+    if (moved !== undefined) return NextResponse.redirect(`https://${host}${moved}${search}`, 301);
     if (/^\/(_next|brand|favicon|icon|apple-icon|f\/|api\/public\/)/.test(path)) return NextResponse.next();
     if (path.startsWith("/api/")) return new NextResponse("Not found", { status: 404 });
     const url = req.nextUrl.clone();
