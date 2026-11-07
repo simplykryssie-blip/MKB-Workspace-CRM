@@ -16,6 +16,8 @@ export type AppEnv = Omit<CloudflareEnv, "APP_ENV" | "BACKEND_ENABLED"> & {
   EMAIL_FROM?: string;
   /** Public origin of the app, e.g. https://suite.mkbfinancial.example — used for links and request-origin checks. */
   APP_ORIGIN?: string;
+  /** Domains that show the public website, e.g. "mkbfinancialgroup.com,www.mkbfinancialgroup.com". */
+  WEBSITE_HOSTS?: string;
   /** One-time link secret for creating the Owner account in an empty database. */
   OWNER_SETUP_TOKEN?: string;
   /** Development only: password given to sample team members by the dev seed. */
@@ -70,9 +72,14 @@ export function checkSameOrigin(req: Request, env: AppEnv, rawBody = false) {
   if (req.method === "GET" || req.method === "HEAD") return;
   const origin = req.headers.get("origin");
   const allowed = env.APP_ORIGIN ?? new URL(req.url).origin;
-  if (!origin || origin !== allowed) throw new HttpError(403, "Request blocked (cross-site).", "bad_origin");
+  // The public website's domains may only call the public form API (no cookies are involved there).
+  const sitePublic = new URL(req.url).pathname.startsWith("/api/public/") && websiteOrigins(env).includes(origin ?? "");
+  if (!origin || (origin !== allowed && !sitePublic)) throw new HttpError(403, "Request blocked (cross-site).", "bad_origin");
   if (!rawBody && !(req.headers.get("content-type") ?? "").includes("application/json")) throw new HttpError(415, "Send JSON.", "bad_content_type");
 }
+
+/** https origins of the public website's domains (WEBSITE_HOSTS, comma-separated). */
+export const websiteOrigins = (env: AppEnv) => (env.WEBSITE_HOSTS ?? "").toLowerCase().split(",").map((h) => h.trim()).filter(Boolean).map((h) => `https://${h}`);
 
 /** Parses a JSON body (max 64 KB). */
 export async function body<T = Record<string, unknown>>(req: Request): Promise<T> {

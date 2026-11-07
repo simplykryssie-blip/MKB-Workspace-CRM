@@ -10,6 +10,7 @@ import { NextResponse, type NextRequest } from "next/server";
  *    comes from.
  */
 const ON = process.env.NEXT_PUBLIC_BACKEND === "1";
+const OLD_PATHS: Record<string, string> = { "/about-mkb": "/about", "/about-us": "/about", "/get-started": "/contact", "/mkb-financial-group": "/" };
 const STAFF_FREE = /^\/(api|login|f\/|site(\/|$)|_next|brand|favicon|icon|apple-icon)/;
 
 export function middleware(req: NextRequest) {
@@ -17,6 +18,21 @@ export function middleware(req: NextRequest) {
   const siteHosts = (process.env.WEBSITE_HOSTS ?? "").toLowerCase().split(",").map((h) => h.trim()).filter(Boolean);
   const path = req.nextUrl.pathname;
   if (siteHosts.includes(host)) {
+    // One address: example.com → www.example.com (when both are website domains).
+    if (!host.startsWith("www.") && siteHosts.includes(`www.${host}`)) {
+      const url = req.nextUrl.clone();
+      url.host = `www.${host}`;
+      url.port = "";
+      url.protocol = "https:";
+      return NextResponse.redirect(url, 301);
+    }
+    // Addresses from the old website.
+    const moved = OLD_PATHS[path.replace(/\/+$/, "")];
+    if (moved !== undefined) {
+      const url = req.nextUrl.clone();
+      url.pathname = moved;
+      return NextResponse.redirect(url, 301);
+    }
     if (/^\/(_next|brand|favicon|icon|apple-icon|f\/|api\/public\/)/.test(path)) return NextResponse.next();
     if (path.startsWith("/api/")) return new NextResponse("Not found", { status: 404 });
     const url = req.nextUrl.clone();
