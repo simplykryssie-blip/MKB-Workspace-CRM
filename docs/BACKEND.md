@@ -119,7 +119,10 @@ Run inside Cloudflare's actual runtime: `npx opennextjs-cloudflare build && npx 
    free plan's 10 ms limit allows.
 4. **Resend**: verify the sending domain (SPF/DKIM) for MKB's email address.
 5. **Cloudflare Access** on the preview URL until launch.
-6. **Before real client data**: an independent security review, D1 backups / Time Travel confirmed,
+6. **Replace the preview's Resend key** (created by Claude during setup, send-only but not limited to
+   one domain): create a new sending-access key limited to mkbfinancialgroup.com in Resend, paste it
+   into the Worker's `RESEND_API_KEY` secret in Cloudflare, then delete "MKB CRM preview (send only)".
+7. **Before real client data**: an independent security review, D1 backups / Time Travel confirmed,
    an encryption-key rotation plan (`key_version` is stored with every encrypted value), a data
    retention policy, and the IRS safeguards expected of a tax preparer (written information
    security plan).
