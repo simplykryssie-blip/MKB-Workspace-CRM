@@ -16,6 +16,8 @@ export type AppEnv = Omit<CloudflareEnv, "APP_ENV" | "BACKEND_ENABLED"> & {
   EMAIL_FROM?: string;
   /** Public origin of the app, e.g. https://suite.mkbfinancial.example — used for links and request-origin checks. */
   APP_ORIGIN?: string;
+  /** One-time link secret for creating the Owner account in an empty database. */
+  OWNER_SETUP_TOKEN?: string;
   /** Development only: password given to sample team members by the dev seed. */
   DEV_SEED_PASSWORD?: string;
 };

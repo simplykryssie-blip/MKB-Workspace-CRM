@@ -50,7 +50,9 @@
       ],
       "vars": {
         "APP_ENV": "production",
-        "BACKEND_ENABLED": "true"
+        "BACKEND_ENABLED": "true",
+        "APP_ORIGIN": "https://mkb-crm-preview.krystal-21e.workers.dev",
+        "EMAIL_FROM": "MKB Financial Group <no-reply@mkbfinancialgroup.com>"
       }
     }
   }
