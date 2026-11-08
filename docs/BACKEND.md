@@ -1,6 +1,6 @@
 # MKB Business Suite — Backend (Phase 3)
 
-Status: **foundation + Clients, Leads, Team & Permissions, Forms and Tax Preparation connected. A protected preview runs at https://mkb-crm-preview.krystal-21e.workers.dev (Worker `mkb-crm-preview`, D1 `mkb-crm-preview`, R2 `mkb-crm-files-preview`) with an empty database — no client data. The live site (`mkb-workspace-crm`) is unchanged.**
+Status: **foundation + Clients, Leads, Team & Permissions, Forms and Tax Preparation connected. The CRM runs at https://preview.mkbfinancialgroup.com (also https://mkb-crm-preview.krystal-21e.workers.dev), both behind Cloudflare Access; the public website is https://www.mkbfinancialgroup.com (same Worker, WEBSITE_HOSTS). Email sends through Resend from no-reply@mkbfinancialgroup.com (domain verified). Previously: a protected preview at https://mkb-crm-preview.krystal-21e.workers.dev (Worker `mkb-crm-preview`, D1 `mkb-crm-preview`, R2 `mkb-crm-files-preview`) with an empty database — no client data. The live site (`mkb-workspace-crm`) is unchanged.**
 
 The backend runs on Cloudflare: the Next.js app is compiled into a Cloudflare
 Worker (OpenNext), data lives in **D1** (SQLite), files will live in **R2**, and

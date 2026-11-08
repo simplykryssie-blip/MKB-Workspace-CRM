@@ -51,10 +51,10 @@
       "vars": {
         "APP_ENV": "production",
         "BACKEND_ENABLED": "true",
-        "APP_ORIGIN": "https://mkb-crm-preview.krystal-21e.workers.dev",
+        "APP_ORIGIN": "https://preview.mkbfinancialgroup.com",
         "EMAIL_FROM": "MKB Financial Group <no-reply@mkbfinancialgroup.com>",
         "WEBSITE_HOSTS": "mkbfinancialgroup.com,www.mkbfinancialgroup.com",
-        "APP_ORIGINS": "https://preview.mkbfinancialgroup.com"
+        "APP_ORIGINS": "https://mkb-crm-preview.krystal-21e.workers.dev"
       }
     }
   }
