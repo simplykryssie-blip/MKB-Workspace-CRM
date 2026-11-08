@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { FileSignature, History, Mail, RotateCcw, Save } from "lucide-react";
+import { DollarSign, ExternalLink, FileSignature, History, Mail, Plus, RotateCcw, Save, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -13,14 +13,16 @@ import { LETTER_INFO, LETTER_KEYS, PLACEHOLDERS, type Letter, type LetterKey } f
 import { useLetters } from "@/lib/engagement/use-letters";
 import { EMAIL_TEMPLATES, WORDING_FIELDS, renderEmail, type EmailWording, type TemplateKey } from "@/lib/email/templates";
 import { fmtDate } from "@/lib/format";
+import { checkFees, expungeFee, feeWords, money, type ServiceFees } from "@/lib/fees/config";
+import { useServiceFees } from "@/lib/fees/use-fees";
 
 const SAMPLE = { clientName: "Jordan Sample", date: "November 8, 2026", taxYear: "2025", service: "Foundation", fee: "$399", firstName: "Jordan", count: "2 documents" };
 const input = "w-full rounded-xl border border-line bg-surface px-3 text-[14px] text-ink disabled:opacity-60";
 
 export function SettingsPage() {
-  const [tab, setTab] = useState<"letters" | "emails">("letters");
+  const [tab, setTab] = useState<"letters" | "emails" | "fees">("letters");
   useEffect(() => {
-    const read = () => setTab(window.location.hash === "#emails" ? "emails" : "letters");
+    const read = () => { const h = window.location.hash.slice(1); setTab(h === "emails" || h === "fees" ? h : "letters"); };
     read();
     window.addEventListener("hashchange", read);
     return () => window.removeEventListener("hashchange", read);
@@ -29,14 +31,14 @@ export function SettingsPage() {
     <div className="space-y-5">
       <div>
         <h1 className="text-[24px] font-bold tracking-tight text-ink sm:text-[28px]">Settings</h1>
-        <p className="mt-1 text-[14px] text-muted">Wording clients see: engagement letters and automatic emails.</p>
+        <p className="mt-1 text-[14px] text-muted">Engagement letters, automatic client emails and your service fees.</p>
       </div>
       <div role="tablist" className="flex flex-wrap gap-2">
-        {([["letters", "Engagement letters", FileSignature], ["emails", "Client emails", Mail]] as const).map(([k, l, Icon]) => (
+        {([["letters", "Engagement letters", FileSignature], ["emails", "Client emails", Mail], ["fees", "Fees", DollarSign]] as const).map(([k, l, Icon]) => (
           <button key={k} role="tab" aria-selected={tab === k} onClick={() => { setTab(k); history.replaceState(null, "", `#${k}`); }} className={`inline-flex h-10 items-center gap-2 rounded-xl border px-4 text-[14px] font-semibold ${tab === k ? "border-accent bg-accent-soft text-accent-ink" : "border-line bg-surface text-ink-2 hover:bg-surface-hover"}`}><Icon size={16} />{l}</button>
         ))}
       </div>
-      {tab === "letters" ? <LettersEditor /> : <EmailsEditor />}
+      {tab === "letters" ? <LettersEditor /> : tab === "emails" ? <EmailsEditor /> : <FeesEditor />}
     </div>
   );
 }
@@ -48,6 +50,8 @@ function LettersEditor() {
   const toast = useToast();
   const canEdit = team.can("settings", "settings");
   const L = useLetters();
+  const F = useServiceFees();
+  const vars = useMemo(() => ({ ...(F.fees ? feeWords(F.fees) : {}), ...SAMPLE }), [F.fees]);
   const [key, setKey] = useState<LetterKey>("terms");
   const cur = L.letters?.[key];
   const [title, setTitle] = useState("");
@@ -101,7 +105,7 @@ function LettersEditor() {
               <Button size="sm" variant={preview ? "primary" : "ghost"} onClick={() => setPreview(true)}>Preview with a sample client</Button>
             </div>
             {preview ? (
-              <div className="rounded-xl border border-line bg-bg p-4"><LetterView title={title} body={body} vars={SAMPLE} /></div>
+              <div className="rounded-xl border border-line bg-bg p-4"><LetterView title={title} body={body} vars={vars} /></div>
             ) : (
               <>
                 <div><label htmlFor="lt-title" className="mb-1 block text-[13px] font-medium text-ink-2">Title</label><input id="lt-title" disabled={!canEdit} value={title} onChange={(e) => setTitle(e.target.value)} className={`${input} h-10`} /></div>
@@ -142,7 +146,7 @@ function LettersEditor() {
                 {canEdit && <Button size="sm" icon={RotateCcw} onClick={() => { setTitle(old.title); setBody(old.body); setPreview(false); setOld(null); toast(`Version ${old.version} copied into the editor — save to make it current`, "info"); }}>Use this wording</Button>}
                 <Button size="sm" variant="ghost" onClick={() => setOld(null)}>Close</Button>
               </div>
-              <div className="rounded-xl border border-line bg-bg p-4"><LetterView title={old.title} body={old.body} version={old.version} vars={SAMPLE} /></div>
+              <div className="rounded-xl border border-line bg-bg p-4"><LetterView title={old.title} body={old.body} version={old.version} vars={vars} /></div>
             </div>
           )}
         </Card>
@@ -220,6 +224,112 @@ function EmailsEditor() {
           <div className="px-3 pb-3">{html && <iframe title="Email preview" srcDoc={html.html} className="h-[720px] w-full rounded-xl border border-line bg-white" />}</div>
         </Card>
       </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+
+function Num({ id, label, value, onChange, disabled, step = 1, prefix, suffix }: { id: string; label: string; value: number; onChange: (n: number) => void; disabled?: boolean; step?: number; prefix?: string; suffix?: string }) {
+  return (
+    <div>
+      <label htmlFor={id} className="mb-1 block text-[13px] font-medium text-ink-2">{label}</label>
+      <div className="flex items-center gap-1.5">
+        {prefix && <span className="text-[13px] text-muted">{prefix}</span>}
+        <input id={id} type="number" inputMode="decimal" min={0} step={step} disabled={disabled} value={Number.isFinite(value) ? value : ""} onChange={(e) => onChange(e.target.value === "" ? NaN : Number(e.target.value))} className={`${input} h-10 max-w-[140px]`} />
+        {suffix && <span className="text-[13px] text-muted">{suffix}</span>}
+      </div>
+    </div>
+  );
+}
+
+function FeesEditor() {
+  const team = useTeam();
+  const toast = useToast();
+  const canEdit = team.can("settings", "settings");
+  const F = useServiceFees();
+  const [f, setF] = useState<ServiceFees | null>(null);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { if (F.fees) setF(structuredClone(F.fees)); }, [F.fees]);
+  if (!f) return <Card className="p-8 text-center text-muted">Loading fees…</Card>;
+  const dirty = JSON.stringify(f) !== JSON.stringify(F.fees);
+  const err = checkFees(f);
+  const plans = f.books.plans;
+  const setPlan = (i: number, patch: Partial<ServiceFees["books"]["plans"][number]>) => setF({ ...f, books: { ...f.books, plans: plans.map((p, j) => (j === i ? { ...p, ...patch } : p)) } });
+  const save = async () => {
+    if (!BACKEND) return toast("Saving fees needs the live CRM (preview or production).", "info");
+    if (err) return toast(err, "info");
+    setSaving(true);
+    try { await call("PUT", "/api/service-fees", { fees: f }); F.reload(); toast("Fees saved — letters and new work use them right away"); } catch (e) { toast(e instanceof Error ? e.message : "Couldn't save", "info"); }
+    setSaving(false);
+  };
+  const ro = !canEdit;
+  return (
+    <div className="space-y-5">
+      {ro && <p className="rounded-xl bg-surface-2 px-3 py-2 text-[13px] text-muted">You can see the fees. Changing them needs the &ldquo;Manage settings&rdquo; permission.</p>}
+      <Card>
+        <CardHeader icon={DollarSign} title="Tax preparation" subtitle="Return prices (forms, schedules, states, amendments, extensions) are in the Tax Center fee schedule. Back-end bank and service bureau fees come with billing." />
+        <div className="px-5 pb-5 sm:px-6"><Button icon={ExternalLink} href="/services/tax-preparation#fees">Open the tax fee schedule</Button></div>
+      </Card>
+
+      <Card>
+        <CardHeader icon={DollarSign} title="Bookkeeping plans" subtitle="Monthly price and what each plan includes. Clients over their limits get an overage bill; after the set number of months in a row they move up a plan." />
+        <div className="space-y-3 px-5 pb-5 sm:px-6">
+          {plans.map((p, i) => (
+            <div key={i} className="grid gap-3 rounded-xl border border-line p-3 sm:grid-cols-[1.3fr_1fr_1fr_1fr_auto] sm:items-end">
+              <div><label htmlFor={`bp-name-${i}`} className="mb-1 block text-[13px] font-medium text-ink-2">Plan name</label><input id={`bp-name-${i}`} disabled={ro} value={p.key} onChange={(e) => setPlan(i, { key: e.target.value })} className={`${input} h-10`} /></div>
+              <Num id={`bp-fee-${i}`} label="Price / month" prefix="$" value={p.fee} disabled={ro} onChange={(n) => setPlan(i, { fee: n })} />
+              <Num id={`bp-tx-${i}`} label="Transactions" suffix="/ mo" value={p.transactions} disabled={ro} onChange={(n) => setPlan(i, { transactions: n })} />
+              <Num id={`bp-acct-${i}`} label="Accounts" value={p.accounts} disabled={ro} onChange={(n) => setPlan(i, { accounts: n })} />
+              {canEdit && <button type="button" aria-label={`Remove ${p.key || "plan"}`} disabled={plans.length < 2} onClick={() => setF({ ...f, books: { ...f.books, plans: plans.filter((_, j) => j !== i) } })} className="grid h-10 w-10 place-items-center rounded-lg text-muted hover:bg-surface-hover disabled:opacity-40"><Trash2 size={16} /></button>}
+            </div>
+          ))}
+          {canEdit && <Button size="sm" icon={Plus} onClick={() => setF({ ...f, books: { ...f.books, plans: [...plans, { key: "", fee: 0, transactions: 0, accounts: 0 }] } })}>Add plan</Button>}
+          <div className="grid gap-4 border-t border-line pt-4 sm:grid-cols-3">
+            <Num id="bo-tx" label="Overage per extra transaction" prefix="$" step={0.01} value={f.books.overagePerTransaction} disabled={ro} onChange={(n) => setF({ ...f, books: { ...f.books, overagePerTransaction: n } })} />
+            <Num id="bo-acct" label="Overage per extra account" prefix="$" step={0.01} value={f.books.overagePerAccount} disabled={ro} onChange={(n) => setF({ ...f, books: { ...f.books, overagePerAccount: n } })} />
+            <Num id="bo-up" label="Move up a plan after" suffix="months in a row over" value={f.books.upgradeAfterMonths} disabled={ro} onChange={(n) => setF({ ...f, books: { ...f.books, upgradeAfterMonths: n } })} />
+          </div>
+          {!f.books.overagePerTransaction && !f.books.overagePerAccount && <p className="text-[12.5px] text-warning-ink">Set your overage prices — they&rsquo;re $0 until you do.</p>}
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader icon={DollarSign} title="Record expungement" subtitle="Basic expungements only. Third-party fees (court, clerk, fingerprinting, records) are billed separately." />
+        <div className="space-y-3 px-5 pb-5 sm:px-6">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Num id="ex-base" label="MKB fee" prefix="$" value={f.expunge.baseFee} disabled={ro} onChange={(n) => setF({ ...f, expunge: { ...f.expunge, baseFee: n } })} />
+            <Num id="ex-incl" label="Covers up to" suffix="charges" value={f.expunge.chargesIncluded} disabled={ro} onChange={(n) => setF({ ...f, expunge: { ...f.expunge, chargesIncluded: n } })} />
+            <Num id="ex-extra" label="Each additional charge" prefix="$" value={f.expunge.extraChargeFee} disabled={ro} onChange={(n) => setF({ ...f, expunge: { ...f.expunge, extraChargeFee: n } })} />
+          </div>
+          <p className="text-[12.5px] text-muted">Examples: 1–{f.expunge.chargesIncluded} charges = {money(expungeFee(f.expunge, 1))} · {f.expunge.chargesIncluded + 1} charges = {money(expungeFee(f.expunge, f.expunge.chargesIncluded + 1))} · {f.expunge.chargesIncluded + 2} charges = {money(expungeFee(f.expunge, f.expunge.chargesIncluded + 2))}</p>
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader icon={DollarSign} title="Business services" subtitle="Each business service has its own price in the Business Services catalog. That module is being connected next; its prices will be edited there." />
+      </Card>
+
+      <Card>
+        <CardHeader icon={DollarSign} title="Late payments (all services)" subtitle="Used in the Standard terms of every engagement letter." />
+        <div className="space-y-3 px-5 pb-5 sm:px-6">
+          <div className="grid gap-4 sm:grid-cols-4">
+            <Num id="lt-grace" label="Late after" suffix="days" value={f.late.graceDays} disabled={ro} onChange={(n) => setF({ ...f, late: { ...f.late, graceDays: n } })} />
+            <Num id="lt-admin" label="Late admin fee" prefix="$" value={f.late.adminFee} disabled={ro} onChange={(n) => setF({ ...f, late: { ...f.late, adminFee: n } })} />
+            <Num id="lt-rate" label="Interest" suffix="% per month" step={0.1} value={f.late.monthlyRatePct} disabled={ro} onChange={(n) => setF({ ...f, late: { ...f.late, monthlyRatePct: n } })} />
+            <Num id="lt-court" label="Court after" suffix="days late" value={f.late.courtAfterDays} disabled={ro} onChange={(n) => setF({ ...f, late: { ...f.late, courtAfterDays: n } })} />
+          </div>
+          <p className="text-[12.5px] text-muted">Louisiana generally caps agreed interest at 12% a year (1% per month), so this can&rsquo;t be set higher. Have your attorney confirm the admin fee and rate.</p>
+        </div>
+      </Card>
+
+      {canEdit && (
+        <div className="sticky bottom-3 flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-surface p-3 shadow-pop">
+          <Button variant="primary" icon={Save} disabled={!dirty || saving || !!err} onClick={save}>{saving ? "Saving…" : "Save fees"}</Button>
+          {dirty && <Button variant="ghost" icon={RotateCcw} onClick={() => setF(structuredClone(F.fees!))}>Undo changes</Button>}
+          {err && dirty && <span role="alert" className="text-[13px] text-danger-ink">{err}</span>}
+        </div>
+      )}
     </div>
   );
 }

@@ -15,6 +15,8 @@ import { notify } from "./notifications";
 import { sendTemplate } from "./email";
 import { buildIntakePdf, buildLetterPdf } from "./intake-pdf";
 import { letterVersion } from "./engagement";
+import { loadFees } from "./settings";
+import { feeWords } from "@/lib/fees/config";
 import { fillLetter, taxLetterFor } from "@/lib/engagement/letters";
 import { randomId } from "./crypto";
 
@@ -166,7 +168,7 @@ async function saveEngagementPdf(env: AppEnv, a: Actor, r: TaxReturn, clientName
   if (!e || a.kind !== "staff") return null;
   const [l, t] = await Promise.all([letterVersion(env, e.letterKey, e.version), letterVersion(env, "terms", e.termsVersion)]);
   if (!l || !t) return null;
-  const vars = { clientName, date: longDate(e.acceptedAt), taxYear: String(r.taxYear), service: "", fee: "" };
+  const vars = { ...feeWords(await loadFees(env)), clientName, date: longDate(e.acceptedAt), taxYear: String(r.taxYear), service: "", fee: "" };
   const recorder = e.recordedBy ? (await one<{ name: string }>(env.DB, "SELECT name FROM members WHERE id = ?", e.recordedBy))?.name : undefined;
   const pdf = await buildLetterPdf({ clientName, parts: [{ title: fillLetter(l.title, vars), body: fillLetter(l.body, vars), version: l.version }, { title: fillLetter(t.title, vars), body: fillLetter(t.body, vars), version: t.version }], acceptedName: e.acceptedName, acceptedAt: e.acceptedAt, method: e.method, recordedBy: recorder });
   const fileName = `MKB-Engagement-Letter-${r.taxYear}-${clientName.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "")}.pdf`;

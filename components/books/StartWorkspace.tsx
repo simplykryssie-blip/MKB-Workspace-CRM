@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
@@ -11,8 +11,10 @@ import { useBooks } from "@/lib/store/books-store";
 import { useTeam } from "@/lib/store/team-store";
 import { meId } from "@/lib/sample/clients";
 import { REPORT_TYPES, periodLabel, type ReportType } from "@/lib/books/config";
+import { DEFAULT_SERVICE_FEES } from "@/lib/fees/config";
+import { useServiceFees } from "@/lib/fees/use-fees";
 
-/** MKB's bookkeeping packages (from the website). Fees can be adjusted per client. */
+/** MKB's bookkeeping packages (defaults; the live prices come from Settings → Fees). Fees can be adjusted per client. */
 export const BOOKS_PLANS = [
   { key: "Foundation", fee: 399, detail: "Up to 150 transactions • 3 financial accounts" },
   { key: "Essential", fee: 549, detail: "Up to 400 transactions • 5 financial accounts" },
@@ -41,12 +43,16 @@ export function StartWorkspace({ open, onClose, onCreated }: { open: boolean; on
   const toast = useToast();
   const staff = useMemo(() => team.members.filter((m) => m.status === "active"), [team.members]);
   const months = useMemo(monthOptions, []);
+  const F = useServiceFees();
+  const plans = useMemo(() => (F.fees?.books.plans ?? DEFAULT_SERVICE_FEES.books.plans).map((p) => ({ key: p.key, fee: p.fee, detail: `Up to ${p.transactions.toLocaleString()} transactions • ${p.accounts} financial accounts` })), [F.fees]);
   const [clientId, setClientId] = useState("");
   const client = clients.clients.find((c) => c.id === clientId);
   const [businessName, setBusinessName] = useState("");
   const [entityType, setEntityType] = useState("LLC");
-  const [plan, setPlan] = useState<string>("Foundation");
-  const [fee, setFee] = useState(399);
+  const [plan, setPlan] = useState<string>(DEFAULT_SERVICE_FEES.books.plans[0].key);
+  const [fee, setFee] = useState(DEFAULT_SERVICE_FEES.books.plans[0].fee);
+  // When the saved prices arrive, start from the first plan's current price.
+  useEffect(() => { if (F.fees) { setPlan(F.fees.books.plans[0].key); setFee(F.fees.books.plans[0].fee); } }, [F.fees]);
   const [reports, setReports] = useState<ReportType[]>(DEFAULT_REPORTS);
   const [bookkeeperId, setBookkeeperId] = useState(meId());
   const [reviewerId, setReviewerId] = useState(meId());
@@ -84,9 +90,9 @@ export function StartWorkspace({ open, onClose, onCreated }: { open: boolean; on
         <div>
           <span className="mb-1.5 block text-[13px] font-medium text-ink-2">Plan</span>
           <div className="grid gap-2 sm:grid-cols-2">
-            {BOOKS_PLANS.map((p) => (
+            {plans.map((p) => (
               <button key={p.key} type="button" onClick={() => { setPlan(p.key); setFee(p.fee); }} className={`rounded-xl border p-3 text-left ${plan === p.key ? "border-accent bg-accent-soft/50" : "border-line hover:bg-surface-hover"}`}>
-                <span className="block text-[14px] font-semibold text-ink">{p.key} · ${p.fee}{p.key === "Advanced" ? "+" : ""}/mo</span>
+                <span className="block text-[14px] font-semibold text-ink">{p.key} · ${p.fee}/mo</span>
                 <span className="block text-[12.5px] text-muted">{p.detail}</span>
               </button>
             ))}

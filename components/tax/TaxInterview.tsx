@@ -14,6 +14,8 @@ import { useTeam } from "@/lib/store/team-store";
 import { FORM_LABEL, type EngagementAcceptance, type TaxReturn } from "@/lib/tax/config";
 import { fillLetter, taxLetterFor } from "@/lib/engagement/letters";
 import { useLetters } from "@/lib/engagement/use-letters";
+import { useServiceFees } from "@/lib/fees/use-fees";
+import { feeWords } from "@/lib/fees/config";
 import { LetterView } from "@/components/engagement/LetterView";
 import { display, docsFor, maskLast4, missingIn, progress, qVisible, rowsOf, sectionVisible, type Answers, type Q, type Row, type Section } from "@/lib/tax/interview/engine";
 import { INTERVIEW_VERSION, sectionsFor } from "@/lib/tax/interview/questions";
@@ -314,6 +316,8 @@ function Review({ r, sections, a, answers, by, goTo }: { r: TaxReturn; sections:
   const [agree, setAgree] = useState(false);
   const [sig, setSig] = useState("");
   const L = useLetters();
+  const F = useServiceFees();
+  const fw = F.fees ? feeWords(F.fees) : {};
   const letterKey = taxLetterFor(r.kind);
   const already = r.organizer.engagement;
   const [accepted, setAccepted] = useState(false);
@@ -414,8 +418,8 @@ function Review({ r, sections, a, answers, by, goTo }: { r: TaxReturn; sections:
           <>
             <p className="mt-0.5 text-[12.5px] text-muted">{by === "staff" ? "Go over the letter with the client. Their typed name below is their acceptance." : "Please read our engagement letter. Typing your name below accepts it."}</p>
             <div tabIndex={0} aria-label="Engagement letter text" className="scrollbar-thin mt-3 max-h-[340px] space-y-6 overflow-y-auto rounded-xl border border-line bg-bg p-4">
-              <LetterView title={L.letters![letterKey].title} body={L.letters![letterKey].body} version={L.letters![letterKey].version} vars={{ clientName: sig.trim() || "you", date: new Date().toLocaleDateString("en-US", { dateStyle: "long" }), taxYear: String(r.taxYear) }} />
-              <LetterView title={L.letters!.terms.title} body={L.letters!.terms.body} version={L.letters!.terms.version} vars={{ clientName: sig.trim() || "you" }} />
+              <LetterView title={L.letters![letterKey].title} body={L.letters![letterKey].body} version={L.letters![letterKey].version} vars={{ ...fw, clientName: sig.trim() || "you", date: new Date().toLocaleDateString("en-US", { dateStyle: "long" }), taxYear: String(r.taxYear) }} />
+              <LetterView title={L.letters!.terms.title} body={L.letters!.terms.body} version={L.letters!.terms.version} vars={{ ...fw, clientName: sig.trim() || "you" }} />
             </div>
             <label className="mt-3 flex items-start gap-2 text-[13.5px] text-ink"><input type="checkbox" checked={accepted} onChange={() => setAccepted(!accepted)} className="mt-0.5 h-4 w-4 accent-[var(--accent)]" />{by === "staff" ? "The client read the engagement letter and standard terms and agreed to them." : "I have read and agree to the engagement letter and standard terms."}</label>
           </>

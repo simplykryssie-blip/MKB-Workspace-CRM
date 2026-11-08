@@ -29,6 +29,13 @@ export const PLACEHOLDERS: { key: string; label: string }[] = [
   { key: "taxYear", label: "Tax year (tax letters)" },
   { key: "service", label: "Service or plan name" },
   { key: "fee", label: "Fee or monthly plan price, if known" },
+  { key: "lateGrace", label: "Days before a payment is late (Settings → Fees)" },
+  { key: "lateAdmin", label: "Late admin fee (Settings → Fees)" },
+  { key: "lateRate", label: "Late interest rate (Settings → Fees)" },
+  { key: "courtDays", label: "Days late before court action (Settings → Fees)" },
+  { key: "booksOverage", label: "Bookkeeping overage rates (Settings → Fees)" },
+  { key: "upgradeMonths", label: "Months over the limit before a plan change (Settings → Fees)" },
+  { key: "expungeFee", label: "Expungement fee wording (Settings → Fees)" },
 ];
 
 const T = (title: string, body: string) => ({ title, body: body.trim() });
@@ -65,6 +72,11 @@ If your refund is reduced, delayed, offset or intercepted (for example, for back
 
 Fees are non-refundable once work has started. We may hold work we prepared until fees are paid, but we will always return your original records.
 
+## Late payments
+- If fees are not paid within {{lateGrace}} days of the due date, a {{lateAdmin}} late administrative fee is added.
+- After that, the unpaid balance accrues interest at {{lateRate}} until paid.
+- If fees remain unpaid {{courtDays}} days after the due date, MKB may pursue collection, including filing suit in court, and you agree to pay reasonable collection costs and attorney fees allowed by law.
+
 ## IRS and state notices
 If you receive a notice about a return we prepared, send it to us right away.
 - Simple notices (for example, a request to verify your identity or information, or a small math or document correction) are handled at no charge.
@@ -73,7 +85,7 @@ If you receive a notice about a return we prepared, send it to us right away.
 ## LegalShield (optional)
 We may share information about LegalShield, a separate company that offers prepaid legal plans. LegalShield is not part of MKB's services and enrolling is completely optional.
 
-Disclosure: a person with a close personal relationship to MKB's owner is an independent LegalShield associate and may earn compensation if you enroll. Whether you enroll has no effect on our services or fees.
+Someone connected to MKB may earn a commission if you enroll.
 
 ## Privacy and your tax information
 We protect your information with secure systems and limit access to the people working on your file. Federal law (Internal Revenue Code section 7216) limits how tax preparers may use and share tax return information. We will not use or share your tax return information for any purpose other than preparing your return and providing the services you engaged us for without your separate written consent.
@@ -93,7 +105,7 @@ Either of us may end this engagement in writing at any time. You agree to pay fo
 Our liability for any claim related to this engagement is limited to the fees you paid for the service involved. We are not responsible for taxes, penalties or interest caused by incomplete or inaccurate information you provided, or by documents or approvals you delivered late. You are always responsible for the tax you owe.
 
 ## Resolving disagreements
-If a disagreement arises, we both agree to first try to resolve it in good faith by talking for at least 30 days. If that does not resolve it, the disagreement will be settled by binding arbitration in Louisiana under the Consumer Arbitration Rules of the American Arbitration Association, instead of in court. Either of us may still use small claims court for claims within its limits. This letter is governed by the laws of the State of Louisiana.
+If a disagreement arises, we both agree to first try to resolve it in good faith by talking for at least 30 days. If that does not resolve it, the disagreement will be settled by binding arbitration in Louisiana under the Consumer Arbitration Rules of the American Arbitration Association, instead of in court. Either of us may still use small claims court for claims within its limits, and MKB may go to court to collect unpaid fees as described under Late payments. This letter is governed by the laws of the State of Louisiana.
 
 ## The whole agreement
 These terms and your service letter are our entire agreement about the service. Any change must be in writing. An electronic copy is as valid as the original.
@@ -177,7 +189,11 @@ Thank you for choosing MKB Financial Group LLC for your bookkeeping. This letter
 Unless we agree in writing, bookkeeping does not include payroll processing, sales tax filings, tax returns, catch-up or clean-up work for prior months, or financial statements prepared under CPA standards (audits, reviews or compilations). We are not a CPA firm.
 
 ## Fees
-Your plan is {{fee}} per month, billed monthly in advance. If your transaction volume or number of accounts goes above your plan's limits for two months in a row, we will tell you before moving you to the plan that fits. Catch-up and clean-up work is quoted separately.
+Your plan is {{fee}} per month, billed monthly in advance.
+
+- Overage: in any month your transactions or accounts go over your plan's limits, you will receive an additional bill for the overage at {{booksOverage}}.
+- Plan change: if you are over your plan's limits for {{upgradeMonths}} months in a row, we will move you to the plan that fits your volume, starting with the next month's bill, and let you know when we do.
+- Catch-up and clean-up work is quoted separately.
 
 ## Ending the plan
 Either of us may end the plan with 30 days' written notice. Fees already billed are non-refundable.
@@ -219,6 +235,9 @@ Dear {{clientName}},
 
 Thank you for choosing MKB Financial Group LLC. This letter explains the expungement support services we will provide.
 
+## Basic expungements only
+We handle basic expungements only. If we find that your record needs a complex expungement, we will tell you before any fee is charged for that part and refer you to a licensed attorney.
+
 ## What we will do
 - Help you gather your criminal history records and court documents.
 - Organize your information and prepare the expungement paperwork for your review, using the information and records you provide.
@@ -235,7 +254,7 @@ We cannot guarantee that any record will be expunged, sealed or removed, or how 
 You agree to give us complete and truthful information about your full criminal history, including all arrests and charges in every state. Missing information can delay or prevent expungement.
 
 ## Fees
-Our service fee is {{fee}}. Court costs, clerk fees, fingerprinting and records fees are separate and shown on your invoice. Fees are non-refundable once we have requested records or prepared paperwork.
+Our service fee is {{expungeFee}}. This fee does not include third-party fees such as court costs, clerk fees, fingerprinting and records fees, which are separate and shown on your invoice. Fees are non-refundable once we have requested records or prepared paperwork.
 
 By accepting below, you confirm that you have read this letter and the Standard Terms and agree to them.
 

@@ -10,6 +10,8 @@ import { useToast } from "@/components/ui/Toast";
 import { useTax, waitForReturnSave } from "@/lib/store/tax-store";
 import { fillLetter, taxLetterFor } from "@/lib/engagement/letters";
 import { useLetters } from "@/lib/engagement/use-letters";
+import { useServiceFees } from "@/lib/fees/use-fees";
+import { feeWords } from "@/lib/fees/config";
 import { LetterView } from "@/components/engagement/LetterView";
 import { ORGANIZERS, type FollowUp, type TaxReturn } from "@/lib/tax/config";
 import { coverage, display, docsFor, progress, qVisible, rowsOf, sectionVisible, type Answers, type Q } from "@/lib/tax/interview/engine";
@@ -252,6 +254,8 @@ function EngagementCard({ r, can }: { r: TaxReturn; can: boolean }) {
   const tax = useTax();
   const toast = useToast();
   const L = useLetters();
+  const F = useServiceFees();
+  const fw = F.fees ? feeWords(F.fees) : {};
   const e = r.organizer.engagement;
   const key = taxLetterFor(r.kind);
   const [open, setOpen] = useState(false);
@@ -290,7 +294,7 @@ function EngagementCard({ r, can }: { r: TaxReturn; can: boolean }) {
             ) : (
               <div className="space-y-3 rounded-xl border border-line p-3">
                 <div className="scrollbar-thin max-h-[260px] space-y-5 overflow-y-auto rounded-lg bg-bg p-3">
-                  {L.letters && <><LetterView title={L.letters[key].title} body={L.letters[key].body} version={L.letters[key].version} vars={{ clientName: name || "the client", taxYear: String(r.taxYear), date: new Date().toLocaleDateString("en-US", { dateStyle: "long" }) }} /><LetterView title={L.letters.terms.title} body={L.letters.terms.body} version={L.letters.terms.version} vars={{ clientName: name || "the client" }} /></>}
+                  {L.letters && <><LetterView title={L.letters[key].title} body={L.letters[key].body} version={L.letters[key].version} vars={{ ...fw, clientName: name || "the client", taxYear: String(r.taxYear), date: new Date().toLocaleDateString("en-US", { dateStyle: "long" }) }} /><LetterView title={L.letters.terms.title} body={L.letters.terms.body} version={L.letters.terms.version} vars={{ ...fw, clientName: name || "the client" }} /></>}
                 </div>
                 <div className="flex flex-wrap gap-3">
                   <label className="flex items-center gap-2 text-[13px]"><input type="radio" name={`em-${r.id}`} checked={method === "in_office"} onChange={() => setMethod("in_office")} className="accent-[var(--accent)]" />Accepted in the office</label>
