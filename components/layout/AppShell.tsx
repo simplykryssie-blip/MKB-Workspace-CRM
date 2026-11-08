@@ -54,15 +54,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <Sidebar collapsed={collapsed} onToggleCollapsed={toggle} mobileOpen={mobileOpen} onCloseMobile={() => setMobileOpen(false)} />
       <div className="min-w-0 flex-1">
         <Topbar onOpenMenu={() => setMobileOpen(true)} />
+        {BACKEND ? (
+          <EnvBar />
+        ) : (
         <div className="flex items-center gap-2 border-b border-warning/25 bg-warning-soft px-4 py-1.5 text-[12px] font-medium text-warning-ink sm:px-6 lg:px-8">
           <FlaskConical size={14} className="shrink-0" />
           <span className="hidden truncate md:inline">Design preview — all names, amounts and dates are fictional sample data.</span>
           <span className="sr-only sm:not-sr-only sm:truncate md:hidden">Fictional sample data</span>
-          <span className="ml-auto min-w-0">{BACKEND ? <SignedInAs /> : <PreviewSwitcher />}</span>
+          <span className="ml-auto min-w-0"><PreviewSwitcher /></span>
           <span className="sm:hidden">
             <ThemeToggle />
           </span>
         </div>
+        )}
         <main className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8"><AccessGuard>{children}</AccessGuard></main>
       </div>
     </div>
@@ -75,5 +79,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     </FormsProvider>
     </LeadsProvider>
     </ClientsProvider>
+  );
+}
+
+/**
+ * With the backend on: who is signed in, and — on the test environment
+ * (preview.* or workers.dev) — a clear "Preview" label so it is never mistaken
+ * for the real CRM.
+ */
+function EnvBar() {
+  const [preview, setPreview] = useState(false);
+  useEffect(() => setPreview(/^preview\.|\.workers\.dev$|^localhost/.test(window.location.hostname)), []);
+  return (
+    <div className={`flex items-center gap-2 border-b px-4 py-1.5 text-[12px] font-medium sm:px-6 lg:px-8 ${preview ? "border-warning/25 bg-warning-soft text-warning-ink" : "border-line bg-surface text-muted"}`}>
+      {preview && <><FlaskConical size={14} className="shrink-0" /><span className="truncate">Preview — test environment. Use app.mkbfinancialgroup.com for real work.</span></>}
+      <span className="ml-auto min-w-0"><SignedInAs /></span>
+      <span className="sm:hidden"><ThemeToggle /></span>
+    </div>
   );
 }

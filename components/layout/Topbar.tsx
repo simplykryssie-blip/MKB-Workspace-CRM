@@ -47,7 +47,7 @@ export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
             )}
             items={[
               { label: "Keyboard shortcuts: ⌘K / Ctrl+K search", icon: Keyboard, onSelect: () => document.getElementById("global-search")?.focus() },
-              { label: "About this design preview", icon: CircleHelp, onSelect: () => toast("Design preview: all data is fictional and resets on reload. No backend is connected.", "info") },
+              ...(process.env.NEXT_PUBLIC_BACKEND === "1" ? [] : [{ label: "About this design preview", icon: CircleHelp, onSelect: () => toast("Design preview: all data is fictional and resets on reload. No backend is connected.", "info") }]),
             ]}
           />
           <Notifications />

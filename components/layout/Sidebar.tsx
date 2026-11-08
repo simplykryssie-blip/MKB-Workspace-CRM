@@ -85,7 +85,7 @@ export function Sidebar({ collapsed, onToggleCollapsed, mobileOpen, onCloseMobil
 
         {/* Footer: portal link + collapse toggle share one row when expanded, stack as icons in the rail */}
         <div className={`flex shrink-0 gap-1 border-t border-rail-line p-2.5 ${collapsed ? "md:flex-col" : "md:flex-col lg:flex-row"}`}>
-          <Link
+          {process.env.NEXT_PUBLIC_BACKEND !== "1" && <Link
             href="/portal"
             onClick={onCloseMobile}
             className={`flex flex-1 items-center gap-3 rounded-xl px-3 py-2 text-[13px] text-rail-muted hover:bg-rail-hover hover:text-rail-ink ${collapsed ? "md:justify-center md:px-0" : "md:justify-center md:px-0 lg:justify-start lg:px-3"}`}
@@ -93,7 +93,7 @@ export function Sidebar({ collapsed, onToggleCollapsed, mobileOpen, onCloseMobil
           >
             <ExternalLink size={17} />
             <span className={collapsed ? "md:hidden" : "md:hidden lg:inline"}>Client portal preview</span>
-          </Link>
+          </Link>}
           <button
             onClick={onToggleCollapsed}
             className="hidden h-9 w-full shrink-0 place-items-center rounded-xl text-rail-muted hover:bg-rail-hover hover:text-rail-ink lg:grid lg:w-9"

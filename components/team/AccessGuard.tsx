@@ -99,6 +99,21 @@ export function NoAccess({ title, detail, request }: { title: string; detail: st
   );
 }
 
+const BACKEND = process.env.NEXT_PUBLIC_BACKEND === "1";
+/** Sections that still run on sample data (closed when the backend is on). */
+const NOT_CONNECTED: [string, string][] = [
+  ["/services/bookkeeping", "Bookkeeping"],
+  ["/services/business-services", "Business Services"],
+  ["/services/record-expungement", "Record Expungement"],
+  ["/appointments", "Appointments"],
+  ["/documents", "Documents"],
+  ["/invoices", "Invoices & Payments"],
+  ["/messages", "Messages"],
+  ["/tasks", "Tasks"],
+  ["/settings", "Settings"],
+  ["/portal", "The client portal"],
+];
+
 /** Route-level guard: module permissions for team members; own-portal-only for clients. */
 export function AccessGuard({ children }: { children: React.ReactNode }) {
   const path = usePathname();
@@ -127,6 +142,20 @@ export function AccessGuard({ children }: { children: React.ReactNode }) {
   if (!team.ready) return <div className="grid min-h-[50vh] place-items-center text-[14px] text-muted" role="status">Loading…</div>;
   if (!me || me.status !== "active")
     return <NoAccess title={`Account ${me ? STATUS_META[me.status].label.toLowerCase() : "not found"}`} detail="This account can't sign in. In production the authentication service blocks it before any page loads." />;
+  // Modules not yet connected to the database would only show in-browser sample data
+  // (and lose anything typed), so with the backend on they're closed until built.
+  const notYet = BACKEND ? NOT_CONNECTED.find(([p]) => path === p || path.startsWith(`${p}/`)) : undefined;
+  if (notYet)
+    return (
+      <div className="grid min-h-[50vh] place-items-center">
+        <div className="max-w-md rounded-2xl border border-line bg-surface p-8 text-center shadow-soft">
+          <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-accent-soft text-accent"><Lock size={22} /></span>
+          <h1 className="mt-4 text-[20px] font-bold tracking-tight text-ink">{notYet[1]} isn&rsquo;t connected yet</h1>
+          <p className="mt-2 text-[14px] text-muted">This section is being built. Until it&rsquo;s connected to the database, it stays closed so no real work is entered somewhere it can&rsquo;t be saved.</p>
+          <Link href="/dashboard" className="mt-5 inline-flex h-10 items-center rounded-xl bg-accent px-4 text-[14px] font-semibold text-white hover:bg-accent-hover">Back to dashboard</Link>
+        </div>
+      </div>
+    );
   const mod = moduleForPath(path);
   if (mod && !team.can(mod))
     return <NoAccess title={`No access to ${moduleLabel(mod)}`} detail={`Your role (${team.myRole?.name}) and departments don't include ${moduleLabel(mod)}. Belonging to one department never grants access to another.`} request={{ kind: "module", target: mod, label: `${moduleLabel(mod)} — view access` }} />;
