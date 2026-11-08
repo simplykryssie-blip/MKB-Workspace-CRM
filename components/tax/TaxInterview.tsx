@@ -25,11 +25,13 @@ export const interviewHref = (id: string) => `/services/tax-preparation/returns/
 export function TaxInterview({ id }: { id: string }) {
   const tax = useTax();
   const team = useTeam();
-  const { clients } = useClients();
+  const { clients, ready: clientsReady } = useClients();
   const r = tax.returns.find((x) => x.id === id);
   const c = clients.find((x) => x.id === r?.clientId);
   const gate = useClientGate(r?.clientId, "this tax interview");
   if (gate) return gate;
+  // With the backend on, the return arrives from the server a moment after the page opens.
+  if (!tax.ready || !clientsReady) return <Card className="p-10 text-center text-muted"><span role="status">Loading the interview…</span></Card>;
   if (!r || !c) return <Card className="p-10 text-center text-muted">Interview not found.</Card>;
   if (r.form === "990") return <Card className="p-10 text-center"><h1 className="text-[20px] font-bold text-ink">Nonprofit interview coming next</h1><p className="mt-2 text-[14px] text-muted">The guided interview for Form 990 hasn&rsquo;t been built yet. Your preparer will collect this return&rsquo;s information directly.</p></Card>;
   return <Runner key={r.id} r={r} clientName={c.name} by={team.acting.kind === "client" ? "client" : "staff"} prefillSource={c} />;
