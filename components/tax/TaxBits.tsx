@@ -14,6 +14,7 @@ const STATUS_ICON: Record<ReturnStatus, typeof Clock> = {
   "Ready for Review": FileSearch,
   "In Preparation": PenLine,
   "Awaiting Client Approval": Clock,
+  "Awaiting Final Approval": Eye,
   "Ready to E-file": FileCheck2,
   Submitted: Send,
   Accepted: CheckCircle2,

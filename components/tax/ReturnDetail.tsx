@@ -49,6 +49,10 @@ import { fmtDate, fmtDateTime, relTime, usd } from "@/lib/format";
 import { formatPhone, maskDOB, maskEIN, maskTaxId } from "@/lib/validation";
 import type { Client } from "@/lib/types";
 import { InterviewTab } from "./InterviewTab";
+import { DueDiligenceCard, ExtensionCard, ExtensionDialog, FinalApprovalCard } from "./ReviewParts";
+import { ddComplete } from "@/lib/tax/due-diligence";
+import { useTeam } from "@/lib/store/team-store";
+import { useRouter } from "next/navigation";
 import { AccessPreviewBar, DueChip, NoAccess, ReturnStatusBadge } from "./TaxBits";
 import { AckDialog, AddItemDialog, AddLineDialog, ResolveDialog, SignOffDialog, StatusDialog, TaxInvoiceDialog, TransmitDialog, WaiveDialog } from "./TaxDialogs";
 
@@ -62,10 +66,12 @@ const TABS = [
   { key: "activity", label: "Activity", icon: ActivityIcon },
 ] as const;
 type Tab = (typeof TABS)[number]["key"];
-type Dlg = "signoff" | "transmit" | "resolve" | "status" | "additem" | "addline" | "invoice" | "payment" | null;
+type Dlg = "signoff" | "extension" | "transmit" | "resolve" | "status" | "additem" | "addline" | "invoice" | "payment" | null;
 
 export function ReturnDetail({ id }: { id: string }) {
   const tax = useTax();
+  const team = useTeam();
+  const router = useRouter();
   const { clients } = useClients();
   const toast = useToast();
   const r = tax.returns.find((x) => x.id === id);
@@ -113,6 +119,10 @@ export function ReturnDetail({ id }: { id: string }) {
   /* ---------------- Guided next step ---------------- */
   const next = (() => {
     const s = r.status;
+    if (r.extensionOnly && !r.extension)
+      return { text: "Extension only: file the extension in the tax software, then record it here.", primary: { label: "File extension", icon: Send, run: () => setDlg("extension"), can: A.edit } };
+    if (r.extensionOnly)
+      return { text: `Extension filed — new due date ${fmtDate(r.extension!.dueAt)}. Start the full return when the client is ready.`, primary: { label: "Start full return", icon: ArrowRight, run: () => { tax.startFullReturn(r.id); toast("Full return started"); }, can: A.edit } };
     if (s === "Intake")
       return { text: "Send the organizer and request this return's documents through the client portal.", primary: { label: "Send organizer & requests", icon: Send, run: () => { tax.sendOrganizer(r.id); toast("Organizer and document requests sent — status: Awaiting Documents"); }, can: A.edit }, secondary: { label: "Fill interview with client", run: () => go("organizer"), can: A.edit } };
     if (s === "Awaiting Documents")
@@ -120,6 +130,12 @@ export function ReturnDetail({ id }: { id: string }) {
         ? { text: `${out.length} required document${out.length > 1 ? "s" : ""} still outstanding.`, primary: { label: "Remind client", icon: Send, run: () => { const n = tax.remindAll(r.id) + tax.requestAllMissing(r.id); toast(n ? "Client reminded" : "Nothing to remind — mark items received on the Documents tab"); }, can: A.edit }, secondary: { label: "Mark ready anyway", run: () => { if (confirm(`${out.length} required documents are outstanding. Move to Ready for Review anyway?`)) { tax.markReadyForReview(r.id, `override — ${out.length} documents outstanding`); toast("Moved to Ready for Review"); } }, can: A.edit } }
         : { text: "All required documents are in.", primary: { label: "Mark ready for review", icon: FileCheck2, run: () => { tax.markReadyForReview(r.id); toast("Ready for Review"); }, can: A.edit } };
     if (s === "Ready for Review") return { text: `Documents are in. ${staffById(r.preparerId).name} reviews them and starts the return.`, primary: { label: "Start preparation", icon: ArrowRight, run: () => { tax.startPreparation(r.id); toast("In Preparation"); }, can: A.edit } };
+    if (s === "In Preparation" && r.kind === "individual" && !r.reviewSignoff && !ddComplete(r.dueDiligence))
+      return { text: "Complete the due diligence checklist (or mark it not applicable) before the reviewer signs off.", primary: { label: "Due diligence", icon: ShieldCheck, run: () => go("review"), can: A.edit } };
+    if (s === "Awaiting Final Approval")
+      return team.myRole?.isOwner
+        ? { text: "The client approved and signed. Your final approval unlocks e-filing.", primary: { label: "Review & approve", icon: ShieldCheck, run: () => go("review"), can: true } }
+        : { text: "Waiting for the Owner's final approval before e-filing.", primary: null };
     if (s === "In Preparation")
       return r.reviewSignoff
         ? { text: `Reviewed by ${staffById(r.reviewSignoff.by).name}. Send the return and e-file authorization to the client.`, primary: { label: "Send for client approval", icon: Send, run: () => { tax.sendForApproval(r.id); toast("Sent for client approval — signature request on the client profile"); }, can: A.edit } }
@@ -171,14 +187,22 @@ export function ReturnDetail({ id }: { id: string }) {
             </div>
           </div>
           <div className="flex flex-wrap items-start gap-2 lg:justify-end">
+            {r.extensionOnly && <Badge tone="info">Extension only</Badge>}
             {r.dueAt && !r.extension && !["Submitted", "Accepted", "Completed"].includes(r.status) && (
-              <Button size="sm" disabled={!A.edit} onClick={() => { tax.fileExtension(r.id); toast("Extension recorded"); }}>File extension</Button>
+              <Button size="sm" disabled={!A.edit} onClick={() => setDlg("extension")}>File extension</Button>
             )}
+            {r.extensionOnly && r.extension && <Button size="sm" variant="primary" disabled={!A.edit} onClick={() => { tax.startFullReturn(r.id); toast("Full return started — return fees added"); }}>Start full return</Button>}
             <Menu
               label="More return actions"
               trigger={({ toggle }) => <Button size="sm" icon={MoreHorizontal} onClick={toggle} aria-label="More return actions"><span className="sr-only">More</span></Button>}
               items={[
                 { label: "Change status (override)…", icon: RotateCcw, disabled: !A.review, onSelect: () => setDlg("status") },
+                { label: "Amend this return", icon: FilePlus2, disabled: !A.edit || !["Submitted", "Accepted", "Completed"].includes(r.status), onSelect: () => {
+                  if (!confirm(`Start an amended return for ${r.taxYear}? It's created as a new, linked return (${r.kind === "individual" ? "Form 1040-X" : `amended ${r.form}`}).`)) return;
+                  const id = tax.createReturn({ clientId: r.clientId, taxYear: r.taxYear, form: r.kind === "individual" ? "1040-X" : r.form, filingStatus: r.filingStatus, preparerId: r.preparerId, reviewerId: r.reviewerId, states: r.states, amendsReturnId: r.id });
+                  toast("Amended return created");
+                  router.push(`/services/tax-preparation/returns/${id}`);
+                } },
                 { label: "Export return summary", icon: Download, onSelect: () => downloadPlaceholder(`${r.id}-summary`, `SAMPLE — ${client.name} TY ${r.taxYear} ${r.form}\nStatus: ${r.status}\nPreparer: ${staffById(r.preparerId).name}\nReviewer: ${staffById(r.reviewerId).name}\n(No tax data in the design preview.)\n`) },
               ]}
             />
@@ -264,6 +288,7 @@ export function ReturnDetail({ id }: { id: string }) {
 
       <SignOffDialog r={r} open={dlg === "signoff"} onClose={() => setDlg(null)} />
       <TransmitDialog r={r} open={dlg === "transmit"} onClose={() => setDlg(null)} />
+      <ExtensionDialog r={r} open={dlg === "extension"} onClose={() => setDlg(null)} />
       <ResolveDialog r={r} open={dlg === "resolve"} onClose={() => setDlg(null)} />
       <StatusDialog r={r} open={dlg === "status"} onClose={() => setDlg(null)} />
       <AddItemDialog r={r} open={dlg === "additem"} onClose={() => setDlg(null)} />
@@ -296,8 +321,16 @@ function OverviewTab({ r, client, otherYears }: { r: TaxReturn; client: Client; 
   const [note, setNote] = useState("");
   const { due, extended } = dueDates(r.form, r.taxYear);
   const rp = client.business?.responsibleParty;
+  const amendedBy = tax.returns.filter((x) => x.amendsReturnId === r.id);
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-2">
+      {(r.amendsReturnId || amendedBy.length > 0) && (
+        <div role="note" className="rounded-xl border border-info/30 bg-info-soft/50 px-4 py-3 text-[13.5px] text-ink xl:col-span-2">
+          {r.amendsReturnId && <p>This is an amended return. Original: <Link className="font-semibold text-accent hover:underline" href={`/services/tax-preparation/returns/${r.amendsReturnId}`}>{r.amendsReturnId}</Link></p>}
+          {amendedBy.map((x) => <p key={x.id}>Amended by <Link className="font-semibold text-accent hover:underline" href={`/services/tax-preparation/returns/${x.id}`}>{x.id}</Link> ({x.status})</p>)}
+        </div>
+      )}
+      <ExtensionCard r={r} />
       <Card>
         <CardHeader icon={r.kind === "business" ? Building2 : User} title={r.kind === "business" ? "Business tax profile" : "Taxpayer"} subtitle="From the central client profile — edit it there" action={<Button size="sm" variant="ghost" href={`/clients/${client.id}`}>Client profile</Button>} />
         <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2.5 px-5 pb-5 text-[13.5px] sm:px-6">
@@ -503,9 +536,11 @@ function ReviewTab({ r, client, onSignoff }: { r: TaxReturn; client: Client; onS
   const clientStore = useClients();
   const toast = useToast();
   const sig = r.approvalSignatureId ? client.signatures.find((s) => s.id === r.approvalSignatureId) : undefined;
-  const canSignoff = ["In Preparation", "Ready for Review"].includes(r.status);
+  const ddOk = r.kind === "business" || ddComplete(r.dueDiligence);
+  const canSignoff = ["In Preparation", "Ready for Review"].includes(r.status) && ddOk;
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-2">
+      {r.kind === "individual" && <div className="xl:col-span-2"><DueDiligenceCard r={r} /></div>}
       <Card>
         <CardHeader icon={ShieldCheck} title="Reviewer sign-off" subtitle={`Assigned reviewer: ${staffById(r.reviewerId).name}`} />
         <div className="space-y-3 px-5 pb-5 sm:px-6">
@@ -521,7 +556,7 @@ function ReviewTab({ r, client, onSignoff }: { r: TaxReturn; client: Client; onS
             {!r.reviewSignoff && <Button variant="primary" icon={ShieldCheck} disabled={!tax.access.review || !canSignoff} onClick={onSignoff}>Sign off</Button>}
             {r.reviewSignoff && ["In Preparation", "Awaiting Client Approval"].includes(r.status) && <Button disabled={!tax.access.review} onClick={() => { tax.clearSignOff(r.id); toast("Sign-off removed"); }}>Remove sign-off</Button>}
           </div>
-          {!canSignoff && !r.reviewSignoff && <p className="text-[12px] text-muted">Available once the return is in preparation.</p>}
+          {!canSignoff && !r.reviewSignoff && <p className="text-[12px] text-muted">{ddOk ? "Available once the return is in preparation." : "Complete the due diligence checklist first."}</p>}
         </div>
       </Card>
       <Card>
@@ -546,6 +581,7 @@ function ReviewTab({ r, client, onSignoff }: { r: TaxReturn; client: Client; onS
           {r.status === "In Preparation" && !r.reviewSignoff && <p className="text-[12px] text-muted">Needs reviewer sign-off first.</p>}
         </div>
       </Card>
+      <div className="xl:col-span-2"><FinalApprovalCard r={r} /></div>
     </div>
   );
 }
@@ -587,7 +623,7 @@ function EfileTab({ r, onTransmit, onAck, onResolve }: { r: TaxReturn; onTransmi
           ))}
         </ul>
       )}
-      <p className="border-t border-line px-5 py-3 text-[12px] text-muted sm:px-6">Sample mode — no data is transmitted. Phase 3 connects an authorized e-file provider.</p>
+      <p className="border-t border-line px-5 py-3 text-[12px] text-muted sm:px-6">Returns are transmitted in your tax software. Record the submission ID and the IRS/state acknowledgement here.</p>
     </Card>
   );
 }

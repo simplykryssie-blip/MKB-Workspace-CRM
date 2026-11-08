@@ -10,7 +10,7 @@
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { BACKEND, RemoteError, call, debouncer, notify, pendingClientCreates } from "@/lib/sync/remote";
-import { DEFAULT_FEE_SCHEDULE, ORGANIZERS, RETURN_STATUSES, STATUS_PATH, baseChecklist, defaultPricing, dueDates, priceTotal, type ChecklistItem, type FeeItem, type EngagementAcceptance, type FilingStatus, type PriceLine, type ReturnStatus, type TaxForm, type TaxReturn } from "@/lib/tax/config";
+import { DEFAULT_FEE_SCHEDULE, ORGANIZERS, RETURN_STATUSES, STATUS_PATH, baseChecklist, defaultPricing, dueDates, priceTotal, type ChecklistItem, type FeeItem, type EngagementAcceptance, type FilingStatus, type PriceLine, type ReturnStatus, type TaxForm, type TaxReturn, type Extension, type DueDiligence } from "@/lib/tax/config";
 import { TAX_RETURNS } from "@/lib/sample/tax";
 import { docsFor, type Answers } from "@/lib/tax/interview/engine";
 import { impliedFilingStatus, sectionsFor } from "@/lib/tax/interview/questions";
@@ -126,7 +126,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     if (r.status === status) return;
     // Same rule the server enforces: no review until the engagement letter is accepted.
     const at = STATUS_PATH.indexOf("Ready for Review"), from = STATUS_PATH.indexOf(r.status), to = STATUS_PATH.indexOf(status);
-    if (BACKEND && to >= at && from >= 0 && from < at && !r.organizer.engagement) {
+    if (RULES.requireEngagement && to >= at && from >= 0 && from < at && !r.organizer.engagement) {
       notify("The client needs to accept the engagement letter first (Interview tab → Engagement letter).");
       return;
     }
@@ -147,19 +147,24 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     reset: () => dispatch({ type: "reset" }),
     setPreset: (preset: AccessPreset) => dispatch({ type: "preset", preset }),
 
-    createReturn(input: { clientId: string; taxYear: number; form: TaxForm; filingStatus?: FilingStatus; preparerId: string; reviewerId: string; states: string[]; extension?: boolean }): string {
+    createReturn(input: { clientId: string; taxYear: number; form: TaxForm; filingStatus?: FilingStatus; preparerId: string; reviewerId: string; states: string[]; extension?: boolean; extensionOnly?: boolean; amendsReturnId?: string }): string {
       const c = C(input.clientId)!;
-      const id = `TR-${input.clientId}-${input.taxYear}${get().returns.some((r) => r.id === `TR-${input.clientId}-${input.taxYear}`) ? `-${input.form.replace(/\W/g, "")}` : ""}`;
+      const base = `TR-${input.clientId}-${input.taxYear}`;
+      const taken = (x: string) => get().returns.some((r) => r.id === x);
+      let id = input.amendsReturnId ? `${base}-AMD` : `${base}${taken(base) ? `-${input.form.replace(/\W/g, "")}` : ""}`;
+      for (let n = 2; taken(id); n++) id = `${input.amendsReturnId ? `${base}-AMD` : base}-${n}`;
       const { due, extended } = dueDates(input.form, input.taxYear);
       // Link to an existing engagement for this year, or create one on the client profile.
       const title = `${input.taxYear} ${c.type === "business" ? "Business" : input.form === "1040-X" ? "Amended" : "Individual"} return (${input.form})`;
       const existing = c.enrollments.find((e) => e.service === "tax" && e.title.startsWith(String(input.taxYear)) && !get().returns.some((r) => r.enrollmentId === e.id));
       const enrollmentId = existing?.id ?? clients().enroll(c.id, { service: "tax", title, staffId: input.preparerId, fee: 0 });
       const fees = get().fees;
-      const lines: PriceLine[] = defaultPricing(input.form).map((p) => {
-        const f = fees.find((x) => x.code === p.code)!;
-        return { id: uid("p"), code: p.code, description: f.label, qty: p.code === "STATE" || p.code === "STATE-B" ? Math.max(1, input.states.length) : p.qty, unit: f.price };
-      });
+      const priced = (code: string, qty = 1, fallback?: { label: string; price: number }): PriceLine[] => { const f = fees.find((x) => x.code === code) ?? (fallback ? { code, ...fallback } : undefined); return f ? [{ id: uid("p"), code, description: f.label, qty, unit: f.price }] : []; };
+      const lines: PriceLine[] = input.extensionOnly
+        ? priced(c.type === "business" ? "EXT-B" : "EXT-I", 1, { label: c.type === "business" ? "Extension (Form 7004)" : "Extension (Form 4868)", price: c.type === "business" ? 75 : 50 })
+        : input.amendsReturnId && c.type === "business"
+          ? priced("PRIOR", 1, { label: "Prior-year / amended review", price: 125 }).map((l) => ({ ...l, description: `Amended ${input.form} return` }))
+          : defaultPricing(input.form).flatMap((p) => priced(p.code, p.code === "STATE" || p.code === "STATE-B" ? Math.max(1, input.states.length) : p.qty));
       const checklist: ChecklistItem[] = baseChecklist(c.type, { hasEin: !!c.business?.einLast4, form: input.form }).map((s) => ({ id: uid("ci"), ...s, required: true, source: "standard" }));
       const at = nowIso();
       const r: TaxReturn = {
@@ -176,13 +181,15 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
         reviewerId: input.reviewerId,
         dueAt: due,
         extension: input.extension && extended ? { filedAt: at, dueAt: extended } : undefined,
+        extensionOnly: input.extensionOnly || undefined,
+        amendsReturnId: input.amendsReturnId,
         organizer: { status: "not_sent", answers: {} },
         checklist,
         efile: [],
         pricing: { lines, discount: 0 },
         statusHistory: [{ status: "Intake", at, by: meId() }],
         notes: [],
-        activity: [{ id: uid("x"), kind: "intake", text: `Return created — TY ${input.taxYear} ${input.form}`, at, actor: "staff" }],
+        activity: [{ id: uid("x"), kind: "intake", text: `Return created — TY ${input.taxYear} ${input.form}${input.amendsReturnId ? ` (amends ${input.amendsReturnId})` : ""}${input.extensionOnly ? " — extension only" : ""}`, at, actor: "staff" }],
         createdAt: at,
       };
       dispatch({ type: "add", r });
@@ -197,12 +204,47 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     updateDetails(id: string, patch: Partial<Pick<TaxReturn, "filingStatus" | "states" | "form">>) {
       up(id, (r) => log({ ...r, ...patch }, "status", "Updated return details"));
     },
-    fileExtension(id: string) {
+    /** Extension filed in the tax software: jurisdictions, estimated tax and payment. Adds the extension fee if missing. */
+    fileExtension(id: string, d: Omit<Extension, "filedAt" | "dueAt"> = {}) {
       const r = R(id);
       const { extended } = dueDates(r.form, r.taxYear);
       if (!extended) return;
-      up(id, (x) => log({ ...x, extension: { filedAt: nowIso(), dueAt: extended } }, "status", `Extension filed — due ${new Date(extended).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`));
-      clients().logActivity(r.clientId, "status", `${label(r)}: extension filed`);
+      const code = r.kind === "business" ? "EXT-B" : "EXT-I";
+      const fee = get().fees.find((f) => f.code === code);
+      const due = new Date(extended).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+      const filings = d.filings ?? [{ jurisdiction: "Federal", result: "pending" as const }];
+      up(id, (x) => log({
+        ...x,
+        extension: { filedAt: nowIso(), dueAt: extended, filings, estimatedTax: d.estimatedTax, paymentsMade: d.paymentsMade, payWithExtension: d.payWithExtension, payMethod: d.payMethod },
+        pricing: fee && !x.pricing.lines.some((l) => l.code === code) ? { ...x.pricing, lines: [...x.pricing.lines, { id: uid("p"), code, description: fee.label, qty: 1, unit: fee.price }] } : x.pricing,
+      }, "status", `Extension filed (${filings.map((f) => f.jurisdiction).join(" + ")}) — new due date ${due}${d.payWithExtension ? ` · $${d.payWithExtension.toLocaleString()} paid with the extension` : ""}`));
+      clients().logActivity(r.clientId, "status", `${label(r)}: extension filed — due ${due}`);
+    },
+    recordExtensionResult(id: string, jurisdiction: string, result: "accepted" | "rejected", reason?: string, submissionId?: string) {
+      up(id, (x) => (x.extension ? log({ ...x, extension: { ...x.extension, filings: (x.extension.filings ?? []).map((f) => (f.jurisdiction === jurisdiction ? { ...f, result, reason, submissionId: submissionId || f.submissionId, resultAt: nowIso() } : f)) } }, "status", `Extension ${result} — ${jurisdiction}${reason ? `: ${reason}` : ""}`) : x));
+    },
+    markExtensionNotified(id: string) {
+      up(id, (x) => (x.extension ? { ...x, extension: { ...x.extension, clientNotifiedAt: nowIso() } } : x));
+    },
+    /** An extension-only return becomes a full return: adds the return's standard fees. */
+    startFullReturn(id: string) {
+      const r = R(id);
+      const fees = get().fees;
+      const add: PriceLine[] = defaultPricing(r.form).filter((p) => !r.pricing.lines.some((l) => l.code === p.code)).flatMap((p) => { const f = fees.find((x) => x.code === p.code); return f ? [{ id: uid("p"), code: p.code, description: f.label, qty: p.code === "STATE" || p.code === "STATE-B" ? Math.max(1, r.states.length) : p.qty, unit: f.price }] : []; });
+      up(id, (x) => log({ ...x, extensionOnly: undefined, pricing: { ...x.pricing, lines: [...x.pricing.lines, ...add] } }, "status", "Full return started (was extension only)"));
+    },
+    saveDueDiligence(id: string, dd: DueDiligence) {
+      up(id, (x) => log({ ...x, dueDiligence: dd }, "status", dd.completedAt ? (dd.applies ? `Due diligence completed (${dd.credits.join(", ")})` : "Due diligence: not applicable (no EITC, CTC/ODC, AOTC or HOH)") : "Due diligence updated"));
+    },
+    /** Owner's final approval: unlocks e-filing. */
+    finalApprove(id: string, note?: string) {
+      const r = R(id);
+      up(id, (x) => log({ ...x, ownerApproval: { by: meId(), at: nowIso(), note: note || undefined } }, "status", `Final approval by ${staffById(meId()).name}${note ? ` — ${note}` : ""}`));
+      if (r.status === "Awaiting Final Approval") moveTo(id, "Ready to E-file", "final approval given");
+      clients().logActivity(r.clientId, "status", `${label(r)}: final approval`);
+    },
+    clearFinalApproval(id: string) {
+      up(id, (x) => log({ ...x, ownerApproval: undefined }, "status", "Final approval withdrawn"));
     },
     /** Manual override (owner / reviewer) — any status, with a reason. */
     setStatus: (id: string, status: ReturnStatus, note?: string) => moveTo(id, status, note),
@@ -424,11 +466,11 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       const r = R(id);
       if (r.approvalSignatureId) clients().markSigned(r.clientId, r.approvalSignatureId);
       up(id, (x) => ({ ...x, clientApprovedAt: nowIso() }));
-      moveTo(id, "Ready to E-file", "client approved and signed");
+      moveTo(id, RULES.requireOwnerApproval && !r.ownerApproval ? "Awaiting Final Approval" : "Ready to E-file", "client approved and signed");
     },
-    submitEfile(id: string, jurisdictions: string[]) {
+    submitEfile(id: string, jurisdictions: string[], ids: Record<string, string> = {}) {
       const at = nowIso();
-      const attempts = jurisdictions.map((j) => ({ id: uid("ef"), jurisdiction: j, submittedAt: at, submissionId: `SAMPLE-${Math.random().toString(36).slice(2, 8).toUpperCase()}`, result: "pending" as const }));
+      const attempts = jurisdictions.map((j) => ({ id: uid("ef"), jurisdiction: j, submittedAt: at, submissionId: ids[j]?.trim() || (BACKEND ? "Not recorded" : `SAMPLE-${Math.random().toString(36).slice(2, 8).toUpperCase()}`), result: "pending" as const }));
       up(id, (x) => log({ ...x, efile: [...attempts, ...x.efile] }, "status", `E-filed: ${jurisdictions.join(" + ")} (${attempts.map((t) => t.submissionId).join(", ")})`));
       moveTo(id, "Submitted", `transmitted ${jurisdictions.join(" + ")}`);
     },
@@ -564,6 +606,7 @@ function useTaxSync(state: State, dispatch: React.Dispatch<Action>) {
         const t = me.perms?.tax ?? [];
         setAccess({ edit: t.includes("edit"), review: t.includes("approve"), efile: t.includes("approve"), billing: t.includes("edit"), sensitiveDocs: !!me.sensitive?.includes("tax.taxDocs"), revealIds: !!me.sensitive?.includes("tax.revealSsn") });
         if (t.includes("view")) await reload();
+        RULES = (await call<{ rules: typeof RULES }>("GET", "/api/settings/tax-rules").catch(() => ({ rules: { requireOwnerApproval: true, requireEngagement: true } }))).rules;
       } catch { /* signed out */ }
       setReady(true);
     })();
@@ -622,5 +665,8 @@ function useTaxSync(state: State, dispatch: React.Dispatch<Action>) {
 }
 
 let saveWaiter: ((id: string) => Promise<boolean>) | null = null;
+/** Workflow rules from Settings (live CRM). The design preview skips the Owner approval step. */
+let RULES = { requireOwnerApproval: false, requireEngagement: false };
+export const taxRules = () => RULES;
 /** Resolves once the return's latest changes are saved on the server (true), or after ~15 seconds (false). */
 export const waitForReturnSave = (id: string) => (saveWaiter ? saveWaiter(id) : Promise.resolve(true));

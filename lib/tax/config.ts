@@ -15,6 +15,7 @@ export const RETURN_STATUSES = [
   "Ready for Review",
   "In Preparation",
   "Awaiting Client Approval",
+  "Awaiting Final Approval",
   "Ready to E-file",
   "Submitted",
   "Accepted",
@@ -24,7 +25,7 @@ export const RETURN_STATUSES = [
 export type ReturnStatus = (typeof RETURN_STATUSES)[number];
 
 /** Linear path used for the stepper ("Rejected" branches off "Submitted"). */
-export const STATUS_PATH: ReturnStatus[] = ["Intake", "Awaiting Documents", "Ready for Review", "In Preparation", "Awaiting Client Approval", "Ready to E-file", "Submitted", "Accepted", "Completed"];
+export const STATUS_PATH: ReturnStatus[] = ["Intake", "Awaiting Documents", "Ready for Review", "In Preparation", "Awaiting Client Approval", "Awaiting Final Approval", "Ready to E-file", "Submitted", "Accepted", "Completed"];
 
 export type StatusTone = "neutral" | "info" | "warning" | "danger" | "success";
 export const STATUS_META: Record<ReturnStatus, { tone: StatusTone; hint: string; waitingOn: "client" | "staff" | "irs" | "none" }> = {
@@ -33,6 +34,7 @@ export const STATUS_META: Record<ReturnStatus, { tone: StatusTone; hint: string;
   "Ready for Review": { tone: "info", hint: "Documents in — preparer reviews them before starting", waitingOn: "staff" },
   "In Preparation": { tone: "info", hint: "Return being prepared; needs reviewer sign-off before client approval", waitingOn: "staff" },
   "Awaiting Client Approval": { tone: "warning", hint: "Client reviewing the return and signing the e-file authorization", waitingOn: "client" },
+  "Awaiting Final Approval": { tone: "warning", hint: "Client signed — waiting for the Owner's final approval before e-filing", waitingOn: "staff" },
   "Ready to E-file": { tone: "info", hint: "Approved and signed — ready to transmit", waitingOn: "staff" },
   Submitted: { tone: "info", hint: "Transmitted — waiting for acknowledgement", waitingOn: "irs" },
   Accepted: { tone: "success", hint: "Accepted — close out billing and deliver copies", waitingOn: "staff" },
@@ -296,6 +298,39 @@ export type EfileAttempt = {
   reason?: string;
 };
 
+export type ExtensionFiling = { jurisdiction: string; submissionId?: string; result: "pending" | "accepted" | "rejected"; resultAt?: string; reason?: string };
+export type Extension = {
+  filedAt: string;
+  dueAt: string;
+  /** Federal and state filings (Form 4868 / 7004 and state forms). */
+  filings?: ExtensionFiling[];
+  estimatedTax?: number;
+  paymentsMade?: number;
+  payWithExtension?: number;
+  payMethod?: "efw" | "direct_pay" | "eftps" | "check" | "none";
+  clientNotifiedAt?: string;
+};
+export const PAY_METHODS: Record<NonNullable<Extension["payMethod"]>, string> = {
+  efw: "Bank debit with the extension (EFW)",
+  direct_pay: "Client pays on IRS Direct Pay",
+  eftps: "EFTPS (businesses)",
+  check: "Check or money order",
+  none: "No payment due",
+};
+
+export const DD_CREDITS = ["EITC", "CTC/ACTC/ODC", "AOTC", "Head of Household"] as const;
+export type DdCredit = (typeof DD_CREDITS)[number];
+export type DueDiligence = {
+  /** False = none of the due-diligence credits or HOH are claimed. */
+  applies: boolean;
+  credits: DdCredit[];
+  checks: Record<string, boolean>;
+  priorDisallowed?: "yes" | "no";
+  notes?: string;
+  completedBy?: string;
+  completedAt?: string;
+};
+
 export type PriceLine = { id: string; code?: string; description: string; qty: number; unit: number };
 
 export type TaxReturn = {
@@ -312,8 +347,16 @@ export type TaxReturn = {
   preparerId: string;
   reviewerId: string;
   dueAt?: string;
-  extension?: { filedAt: string; dueAt: string };
+  extension?: Extension;
   reviewSignoff?: { by: string; at: string; note?: string };
+  /** Owner's final approval before e-filing (required when the setting is on). */
+  ownerApproval?: { by: string; at: string; note?: string };
+  /** Paid-preparer due diligence (Form 8867) for EITC, CTC/ODC, AOTC and Head of Household. */
+  dueDiligence?: DueDiligence;
+  /** This return amends an earlier return (1040-X, or an amended business return). */
+  amendsReturnId?: string;
+  /** Only the extension is being filed for now; the full return comes later. */
+  extensionOnly?: boolean;
   approvalSignatureId?: string;
   clientApprovedAt?: string;
   organizer: OrganizerState;

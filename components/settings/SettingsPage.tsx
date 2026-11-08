@@ -35,11 +35,11 @@ export function SettingsPage() {
         <p className="mt-1 text-[14px] text-muted">Engagement letters, automatic client emails and your service fees.</p>
       </div>
       <div role="tablist" className="flex flex-wrap gap-2">
-        {([["letters", "Engagement letters", FileSignature], ["emails", "Client emails", Mail], ["fees", "Fees", DollarSign], ["designee", "IRS designee", ShieldCheck]] as const).map(([k, l, Icon]) => (
+        {([["letters", "Engagement letters", FileSignature], ["emails", "Client emails", Mail], ["fees", "Fees", DollarSign], ["designee", "Tax & IRS", ShieldCheck]] as const).map(([k, l, Icon]) => (
           <button key={k} role="tab" aria-selected={tab === k} onClick={() => { setTab(k); history.replaceState(null, "", `#${k}`); }} className={`inline-flex h-10 items-center gap-2 rounded-xl border px-4 text-[14px] font-semibold ${tab === k ? "border-accent bg-accent-soft text-accent-ink" : "border-line bg-surface text-ink-2 hover:bg-surface-hover"}`}><Icon size={16} />{l}</button>
         ))}
       </div>
-      {tab === "letters" ? <LettersEditor /> : tab === "emails" ? <EmailsEditor /> : tab === "fees" ? <FeesEditor /> : <DesigneeEditor />}
+      {tab === "letters" ? <LettersEditor /> : tab === "emails" ? <EmailsEditor /> : tab === "fees" ? <FeesEditor /> : <div className="space-y-5"><TaxRulesCard /><DesigneeEditor /></div>}
     </div>
   );
 }
@@ -382,6 +382,38 @@ function DesigneeEditor() {
           {F({ k: "fax", label: "Fax", hint: "(optional)" })}
         </div>
         {canEdit && <Button variant="primary" icon={Save} disabled={saving || JSON.stringify(d) === JSON.stringify(saved)} onClick={save}>{saving ? "Saving…" : "Save"}</Button>}
+      </div>
+    </Card>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+
+type TaxRules = { requireOwnerApproval: boolean; requireEngagement: boolean };
+function TaxRulesCard() {
+  const team = useTeam();
+  const toast = useToast();
+  const canEdit = team.can("settings", "settings");
+  const [r, setR] = useState<TaxRules | null>(BACKEND ? null : { requireOwnerApproval: true, requireEngagement: true });
+  useEffect(() => { if (BACKEND) call<{ rules: TaxRules }>("GET", "/api/settings/tax-rules").then((x) => setR(x.rules)).catch(() => {}); }, []);
+  if (!r) return <Card className="p-6 text-center text-muted">Loading…</Card>;
+  const set = async (patch: Partial<TaxRules>) => {
+    if (!BACKEND) return toast("Saving needs the live CRM (preview or production).", "info");
+    const next = { ...r, ...patch };
+    try { const x = await call<{ rules: TaxRules }>("PUT", "/api/settings/tax-rules", { rules: next }); setR(x.rules); toast("Saved — reload open returns to apply"); } catch (e) { toast(e instanceof Error ? e.message : "Couldn't save", "info"); }
+  };
+  const Row = ({ k, title, text }: { k: keyof TaxRules; title: string; text: string }) => (
+    <label className="flex items-start gap-3 rounded-xl border border-line p-3">
+      <input type="checkbox" disabled={!canEdit} checked={r[k]} onChange={() => set({ [k]: !r[k] })} className="mt-1 h-4 w-4 accent-[var(--accent)]" />
+      <span><span className="block text-[14px] font-semibold text-ink">{title}</span><span className="block text-[12.5px] text-muted">{text}</span></span>
+    </label>
+  );
+  return (
+    <Card>
+      <CardHeader icon={ShieldCheck} title="Tax workflow" subtitle="Checked on the server for every return, whoever is signed in." />
+      <div className="space-y-3 px-5 pb-5 sm:px-6">
+        <Row k="requireOwnerApproval" title="Owner's final approval before e-file" text="After the reviewer signs off and the client approves, the return waits for your approval. E-filing stays locked until you approve. You get a bell notification." />
+        <Row k="requireEngagement" title="Engagement letter before review" text="A return can't move to review until the client has accepted the engagement letter." />
       </div>
     </Card>
   );

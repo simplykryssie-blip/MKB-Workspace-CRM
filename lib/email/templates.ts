@@ -6,7 +6,7 @@
  * document contents in an email.
  */
 
-export type TemplateKey = "tax_intake_received" | "tax_document_reminder" | "tax_document_request";
+export type TemplateKey = "tax_intake_received" | "tax_document_reminder" | "tax_document_request" | "tax_extension_filed";
 
 export type EmailWording = {
   subject: string;
@@ -52,6 +52,20 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
     steps: "",
     button: "Upload in your portal",
     closing: "Prefer paper? Drop them off at our office. Please don't email tax documents.",
+  },
+  tax_extension_filed: {
+    key: "tax_extension_filed",
+    name: "Extension filed",
+    when: "Sent when staff record an extension (if they leave the email box ticked).",
+    placeholders: ["firstName", "taxYear", "dueDate", "payNote"],
+    subject: "We filed your {{taxYear}} tax extension",
+    heading: "Your extension is filed, {{firstName}}.",
+    intro: "We filed an extension for your {{taxYear}} tax return. Your new filing deadline is {{dueDate}}. {{payNote}}",
+    docsTitle: "Documents we still need",
+    docsNote: "Upload them in your portal, or drop them off at our office. Please don't email tax documents.",
+    steps: "An extension gives you more time to file, not more time to pay. Interest applies to any tax not paid by the original due date.\nWe'll keep working on your return as your documents come in.\nWe'll let you know when it's ready for your review and signature.",
+    button: "Open your client portal",
+    closing: "Questions? Reply through your portal or call us at 833-379-3320.",
   },
   tax_document_request: {
     key: "tax_document_request",

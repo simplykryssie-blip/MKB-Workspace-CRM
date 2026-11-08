@@ -10,7 +10,7 @@ import { useToast } from "@/components/ui/Toast";
 import { STAFF, SAMPLE_NOW, staffById, meId, staffList } from "@/lib/sample/clients";
 import { TAX_YEARS } from "@/lib/sample/tax";
 import { useClients } from "@/lib/store/clients-store";
-import { billing, useTax } from "@/lib/store/tax-store";
+import { billing, taxRules, useTax } from "@/lib/store/tax-store";
 import { FILING_STATUSES, FORM_LABEL, REJECTION_REASONS, RETURN_STATUSES, dueDates, formForEntity, formsFor, type EfileAttempt, type FilingStatus, type ReturnStatus, type TaxForm, type TaxReturn } from "@/lib/tax/config";
 import { US_STATES } from "@/lib/validation";
 import { fmtDate, usd } from "@/lib/format";
@@ -36,6 +36,7 @@ export function NewReturnDialog({ open, onClose, defaultYear, clientId: presetCl
   const [reviewer, setReviewer] = useState(meId());
   const [states, setStates] = useState<string[]>(["GA"]);
   const [extension, setExtension] = useState(false);
+  const [extOnly, setExtOnly] = useState(false);
   const client = clients.find((c) => c.id === clientId);
 
   useEffect(() => {
@@ -58,7 +59,7 @@ export function NewReturnDialog({ open, onClose, defaultYear, clientId: presetCl
 
   const create = () => {
     if (!valid) return;
-    const id = tax.createReturn({ clientId, taxYear: year, form, filingStatus: client!.type === "individual" ? filingStatus : undefined, preparerId: preparer, reviewerId: reviewer, states, extension });
+    const id = tax.createReturn({ clientId, taxYear: year, form, filingStatus: client!.type === "individual" ? filingStatus : undefined, preparerId: preparer, reviewerId: reviewer, states, extension, extensionOnly: extOnly });
     toast(`TY ${year} ${form} return created for ${client!.name}`);
     onCreated(id);
   };
@@ -97,7 +98,8 @@ export function NewReturnDialog({ open, onClose, defaultYear, clientId: presetCl
         <div className="rounded-xl bg-surface-2 px-3.5 py-2.5 text-[13px] text-ink-2 ring-1 ring-line">
           {due ? <>Due {fmtDate(due)}{extended && <> · extended deadline {fmtDate(extended)}</>}</> : "Amended returns have no fixed filing deadline."}
         </div>
-        {due && <Checkbox label="Extension already filed" checked={extension} onChange={() => setExtension((v) => !v)} />}
+        {due && <Checkbox label="Extension only — file the extension now, prepare the return later" checked={extOnly} onChange={() => { setExtOnly((v) => !v); setExtension(false); }} />}
+        {due && !extOnly && <Checkbox label="Extension already filed" checked={extension} onChange={() => setExtension((v) => !v)} />}
         {duplicate && (
           <p className="flex items-center gap-1.5 rounded-xl border border-danger/30 bg-danger-soft px-3 py-2 text-[13px] text-danger-ink">
             <AlertTriangle size={14} /> {client?.name} already has a TY {year} {form} return.{" "}
@@ -155,19 +157,23 @@ export function TransmitDialog({ r, open, onClose }: { r: TaxReturn; open: boole
   useEffect(() => {
     if (open) setSel(["Federal", ...r.states]);
   }, [open, r.states]);
-  const blockers = [!r.reviewSignoff && "Reviewer sign-off is missing", !r.clientApprovedAt && "Client approval (e-file authorization) is missing"].filter(Boolean) as string[];
+  const [ids, setIds] = useState<Record<string, string>>({});
+  const blockers = [!r.reviewSignoff && "Reviewer sign-off is missing", !r.clientApprovedAt && "Client approval (e-file authorization) is missing", taxRules().requireOwnerApproval && !r.ownerApproval && "The Owner's final approval is missing"].filter(Boolean) as string[];
   const send = () => {
-    tax.submitEfile(r.id, sel);
+    tax.submitEfile(r.id, sel, ids);
     toast(`Transmitted ${sel.join(" + ")} — awaiting acknowledgement`);
     onClose();
   };
   return (
-    <Modal open={open} onClose={onClose} title="Transmit e-file" description="Sample mode — nothing is sent to the IRS or any state." footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!sel.length || blockers.length > 0} onClick={send}>Transmit</Button></>}>
+    <Modal open={open} onClose={onClose} title="Record e-file" description="Transmit the return in your tax software, then record it here with the submission IDs." footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!sel.length || blockers.length > 0} onClick={send}>Record e-file</Button></>}>
       <div className="space-y-3">
         {blockers.map((b) => <p key={b} className="flex items-center gap-1.5 rounded-xl bg-danger-soft px-3 py-2 text-[13px] text-danger-ink"><AlertTriangle size={14} /> {b}</p>)}
         <Label>Jurisdictions</Label>
         {options.map((o) => (
-          <Checkbox key={o} label={o === "Federal" ? `Federal — Form ${r.form}` : `${o} state return`} checked={sel.includes(o)} onChange={() => setSel((x) => (x.includes(o) ? x.filter((y) => y !== o) : [...x, o]))} />
+          <div key={o} className="flex flex-wrap items-center gap-3">
+            <Checkbox label={o === "Federal" ? `Federal — Form ${r.form}` : `${o} state return`} checked={sel.includes(o)} onChange={() => setSel((x) => (x.includes(o) ? x.filter((y) => y !== o) : [...x, o]))} />
+            {sel.includes(o) && <input aria-label={`Submission ID — ${o}`} value={ids[o] ?? ""} onChange={(e) => setIds({ ...ids, [o]: e.target.value })} placeholder="Submission ID" className="h-9 max-w-[220px] flex-1 rounded-lg border border-line bg-surface px-2 text-[13px] text-ink" />}
+          </div>
         ))}
       </div>
     </Modal>

@@ -15,13 +15,15 @@ import { notify } from "./notifications";
 import { sendTemplate } from "./email";
 import { buildIntakePdf, buildLetterPdf } from "./intake-pdf";
 import { letterVersion } from "./engagement";
-import { loadFees } from "./settings";
+import { loadFees, loadTaxRules } from "./settings";
+import { ddComplete } from "@/lib/tax/due-diligence";
+import { roleOf } from "@/lib/team/policy";
 import { ensure8821 } from "./f8821";
 import { feeWords } from "@/lib/fees/config";
 import { fillLetter, taxLetterFor } from "@/lib/engagement/letters";
 import { randomId } from "./crypto";
 
-type Row = { id: string; client_id: string; enrollment_id: string | null; tax_year: number; kind: TaxReturn["kind"]; form: TaxReturn["form"]; filing_status: string | null; states: string; status: TaxReturn["status"]; preparer_id: string; reviewer_id: string; due_at: string | null; extension: string | null; review_signoff: string | null; approval_signature_id: string | null; client_approved_at: string | null; organizer: string; checklist: string; efile: string; pricing: string; status_history: string; notes: string; activity: string; created_at: string; completed_at: string | null; rev: number };
+type Row = { id: string; client_id: string; enrollment_id: string | null; tax_year: number; kind: TaxReturn["kind"]; form: TaxReturn["form"]; filing_status: string | null; states: string; status: TaxReturn["status"]; preparer_id: string; reviewer_id: string; due_at: string | null; extension: string | null; review_signoff: string | null; approval_signature_id: string | null; client_approved_at: string | null; organizer: string; checklist: string; efile: string; pricing: string; status_history: string; notes: string; activity: string; created_at: string; completed_at: string | null; rev: number; extra: string | null };
 export type ReturnSnapshot = TaxReturn & { rev?: number };
 type Staff = Extract<Actor, { kind: "staff" }>;
 const MAX_JSON = 300_000;
@@ -33,6 +35,7 @@ const toReturn = (r: Row): ReturnSnapshot => ({
   clientApprovedAt: r.client_approved_at ?? undefined, organizer: json(r.organizer, { status: "not_sent", answers: {} }), checklist: json(r.checklist, []), efile: json(r.efile, []),
   pricing: json(r.pricing, { lines: [], discount: 0 }), statusHistory: json(r.status_history, []), notes: json(r.notes, []), activity: json(r.activity, []),
   createdAt: r.created_at, completedAt: r.completed_at ?? undefined, rev: r.rev,
+  ...json<Pick<TaxReturn, "ownerApproval" | "dueDiligence" | "amendsReturnId" | "extensionOnly">>(r.extra, {}),
 });
 
 /** Clients this staff member may open, decided by the same rules as the client list. */
@@ -70,7 +73,7 @@ async function checkStaff(db: Db, ...ids: string[]) {
   for (const id of ids) if (!(await one(db, "SELECT 1 FROM members WHERE id = ? AND status = 'active'", id))) throw badRequest("Preparer and reviewer must be active team members.");
 }
 function fields(r: TaxReturn) {
-  return [r.clientId, r.enrollmentId ?? null, r.taxYear, r.kind, r.form, r.filingStatus ?? null, big(r.states ?? []), r.status, r.preparerId, r.reviewerId, r.dueAt ?? null, r.extension ? big(r.extension) : null, r.reviewSignoff ? big(r.reviewSignoff) : null, r.approvalSignatureId ?? null, r.clientApprovedAt ?? null, big(r.organizer), big(r.checklist ?? []), big(r.efile ?? []), big(r.pricing), big(r.statusHistory ?? []), big(r.notes ?? []), big(r.activity ?? []), r.completedAt ?? null];
+  return [r.clientId, r.enrollmentId ?? null, r.taxYear, r.kind, r.form, r.filingStatus ?? null, big(r.states ?? []), r.status, r.preparerId, r.reviewerId, r.dueAt ?? null, r.extension ? big(r.extension) : null, r.reviewSignoff ? big(r.reviewSignoff) : null, r.approvalSignatureId ?? null, r.clientApprovedAt ?? null, big(r.organizer), big(r.checklist ?? []), big(r.efile ?? []), big(r.pricing), big(r.statusHistory ?? []), big(r.notes ?? []), big(r.activity ?? []), r.completedAt ?? null, big({ ownerApproval: r.ownerApproval, dueDiligence: r.dueDiligence, amendsReturnId: r.amendsReturnId, extensionOnly: r.extensionOnly || undefined })];
 }
 
 export async function createReturn(env: AppEnv, a: Actor, r: ReturnSnapshot) {
@@ -82,9 +85,14 @@ export async function createReturn(env: AppEnv, a: Actor, r: ReturnSnapshot) {
   // Without "assign", you can only create returns you prepare yourself.
   if (r.preparerId !== a.member.id && !canDo(a.policy, a.member, "tax", "assign")) throw forbidden("Your role can't assign returns to someone else.");
   await checkStaff(env.DB, r.preparerId, r.reviewerId);
+  if (r.amendsReturnId) {
+    const orig = await one<{ client_id: string; tax_year: number; kind: string }>(env.DB, "SELECT client_id, tax_year, kind FROM tax_returns WHERE id = ?", r.amendsReturnId);
+    if (!orig || orig.client_id !== r.clientId || orig.tax_year !== r.taxYear || orig.kind !== r.kind) throw badRequest("An amended return must point at the same client's original return for that year.");
+  }
+  if (r.ownerApproval || r.reviewSignoff) throw badRequest("A new return can't start out approved.");
   const t = now();
   await env.DB.batch([
-    env.DB.prepare("INSERT INTO tax_returns (id, client_id, enrollment_id, tax_year, kind, form, filing_status, states, status, preparer_id, reviewer_id, due_at, extension, review_signoff, approval_signature_id, client_approved_at, organizer, checklist, efile, pricing, status_history, notes, activity, completed_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(r.id, ...fields(r), t, t),
+    env.DB.prepare("INSERT INTO tax_returns (id, client_id, enrollment_id, tax_year, kind, form, filing_status, states, status, preparer_id, reviewer_id, due_at, extension, review_signoff, approval_signature_id, client_approved_at, organizer, checklist, efile, pricing, status_history, notes, activity, completed_at, extra, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(r.id, ...fields(r), t, t),
     ...assignmentStmts(env.DB, r),
   ]);
   await audit(env.DB, a, { action: "Record update", resource: `Tax return ${r.id}`, department: "tax", meta: "Return created" });
@@ -119,7 +127,20 @@ export async function saveReturn(env: AppEnv, a: Actor, id: string, next: Return
   if (next.preparerId !== cur.preparerId || next.reviewerId !== cur.reviewerId) { need("assign", "change the preparer or reviewer"); await checkStaff(env.DB, next.preparerId, next.reviewerId); changed.push("assignment"); }
   if (!same("reviewSignoff")) { need("approve", "sign off returns"); changed.push("review sign-off"); }
   if (!same("efile")) { need("approve", "transmit or record e-file results"); changed.push("e-file"); }
-  const rest: (keyof TaxReturn)[] = ["form", "filingStatus", "states", "status", "dueAt", "extension", "approvalSignatureId", "clientApprovedAt", "organizer", "checklist", "pricing", "statusHistory", "notes", "completedAt", "enrollmentId"];
+  if (!same("ownerApproval")) {
+    if (!isOwner(a)) throw forbidden("Only the Owner can give final approval.");
+    if (next.ownerApproval && (!next.reviewSignoff || !next.clientApprovedAt)) throw badRequest("Final approval comes after the reviewer's sign-off and the client's approval.");
+    if (next.ownerApproval) next = { ...next, ownerApproval: { by: a.member.id, at: now(), note: typeof next.ownerApproval.note === "string" ? next.ownerApproval.note.slice(0, 500) : undefined } };
+    changed.push("final approval");
+  }
+  if (cur.kind === "individual" && next.reviewSignoff && !cur.reviewSignoff && !ddComplete(next.dueDiligence)) throw badRequest("Complete the due diligence checklist (or mark it not applicable) before signing off.");
+  if (!same("dueDiligence") && next.dueDiligence?.completedAt && next.dueDiligence.completedAt !== cur.dueDiligence?.completedAt) next = { ...next, dueDiligence: { ...next.dueDiligence, completedBy: a.member.id, completedAt: now() } };
+  if ((next.amendsReturnId ?? null) !== (cur.amendsReturnId ?? null)) throw badRequest("The amended-return link can't change.");
+  const rules = await loadTaxRules(env);
+  const efAt = STATUS_PATH.indexOf("Ready to E-file");
+  const fromI = STATUS_PATH.indexOf(cur.status), toI = STATUS_PATH.indexOf(next.status);
+  if (rules.requireOwnerApproval && !next.ownerApproval && ((toI >= efAt && fromI < efAt && fromI >= 0) || next.efile.length > cur.efile.length)) throw badRequest("This return needs the Owner's final approval before it can be e-filed.");
+  const rest: (keyof TaxReturn)[] = ["form", "filingStatus", "states", "status", "dueAt", "extension", "approvalSignatureId", "clientApprovedAt", "organizer", "checklist", "pricing", "statusHistory", "notes", "completedAt", "enrollmentId", "dueDiligence", "extensionOnly"];
   const other = rest.filter((k) => !same(k));
   if (other.length) { need("edit", "edit returns"); changed.push(...other.map(String)); }
   const newActivity = !same("activity");
@@ -128,7 +149,7 @@ export async function saveReturn(env: AppEnv, a: Actor, id: string, next: Return
   if (cur.activity.some((x) => !(next.activity ?? []).some((y) => y.id === x.id))) throw badRequest("History entries can't be removed.");
   const t = now();
   const res = await env.DB.batch([
-    env.DB.prepare("UPDATE tax_returns SET client_id = ?, enrollment_id = ?, tax_year = ?, kind = ?, form = ?, filing_status = ?, states = ?, status = ?, preparer_id = ?, reviewer_id = ?, due_at = ?, extension = ?, review_signoff = ?, approval_signature_id = ?, client_approved_at = ?, organizer = ?, checklist = ?, efile = ?, pricing = ?, status_history = ?, notes = ?, activity = ?, completed_at = ?, updated_at = ?, rev = rev + 1 WHERE id = ? AND rev = ?").bind(...fields(next), t, id, cur.rev!),
+    env.DB.prepare("UPDATE tax_returns SET client_id = ?, enrollment_id = ?, tax_year = ?, kind = ?, form = ?, filing_status = ?, states = ?, status = ?, preparer_id = ?, reviewer_id = ?, due_at = ?, extension = ?, review_signoff = ?, approval_signature_id = ?, client_approved_at = ?, organizer = ?, checklist = ?, efile = ?, pricing = ?, status_history = ?, notes = ?, activity = ?, completed_at = ?, extra = ?, updated_at = ?, rev = rev + 1 WHERE id = ? AND rev = ?").bind(...fields(next), t, id, cur.rev!),
     ...(changed.includes("assignment") ? assignmentStmts(env.DB, next) : []),
   ]);
   if (!res[0].meta.changes) throw new HttpError(409, "Someone else updated this return. Reloading the latest version.", "conflict");
@@ -160,7 +181,7 @@ async function checkEngagement(env: AppEnv, a: Actor, cur: TaxReturn, next: Retu
     throw badRequest("An accepted engagement letter can't be removed.");
   }
   const from = STATUS_PATH.indexOf(cur.status), to = STATUS_PATH.indexOf(next.status);
-  if (to >= REVIEW_AT && from < REVIEW_AT && from >= 0 && !next.organizer?.engagement) throw badRequest("The client needs to accept the engagement letter before this return can move to review.");
+  if ((await loadTaxRules(env)).requireEngagement && to >= REVIEW_AT && from < REVIEW_AT && from >= 0 && !next.organizer?.engagement) throw badRequest("The client needs to accept the engagement letter before this return can move to review.");
   return next;
 }
 
@@ -209,6 +230,26 @@ export async function engagementPdf(env: AppEnv, a: Actor, id: string) {
   return { docId: out.docId };
 }
 
+const isOwner = (a: Actor) => a.kind === "staff" && !!roleOf(a.policy.roles, a.member)?.isOwner;
+
+/** Emails the client that their extension was filed (new due date + payment reminder). */
+export async function emailExtension(env: AppEnv, a: Actor, id: string) {
+  requirePermission(a, "tax", "edit");
+  if (a.kind !== "staff") throw forbidden();
+  const r = await load(env, a, id);
+  if (!r.extension) throw badRequest("No extension is recorded on this return.");
+  const c = await one<{ name: string; contact_name: string | null; email: string | null }>(env.DB, "SELECT name, contact_name, email FROM clients WHERE id = ?", r.clientId);
+  if (!c?.email) throw badRequest("This client has no email address on file.");
+  if (!(await rateLimit(env.DB, `extmail:${id}`, 5, 60))) throw new HttpError(429, "Too many emails for this return in the last hour.", "rate_limited");
+  const pay = r.extension.payWithExtension;
+  const payNote = pay ? `A payment of $${pay.toLocaleString("en-US", { maximumFractionDigits: 2 })} was made with the extension.` : "If you expect to owe, pay by the original due date to limit interest and penalties.";
+  const docs = (r.checklist ?? []).filter((i) => i.required && !i.docId && !i.waivedReason && !i.archived).map((i) => i.name).slice(0, 40);
+  const out = await sendTemplate(env, "tax_extension_filed", { to: c.email, vars: { firstName: firstName(c), taxYear: String(r.taxYear), dueDate: longDate(r.extension.dueAt), payNote }, documents: docs });
+  await run(env.DB, "INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'message', ?, 'system', ?, ?)", randomId("x"), r.clientId, `Emailed: ${r.taxYear} extension filed — new due date ${longDate(r.extension.dueAt)}${out.sent ? "" : " (queued)"}`, a.member.id, now());
+  await audit(env.DB, a, { action: "Record update", resource: `Tax return ${id}`, department: "tax", meta: `Extension email ${out.sent ? "sent" : "queued"}` });
+  return { sent: out.sent };
+}
+
 /** Bell notifications for what just happened on a return (names only, never tax details). */
 async function returnNotices(env: AppEnv, a: Actor, cur: TaxReturn, next: TaxReturn) {
   const client = (await one<{ name: string }>(env.DB, "SELECT name FROM clients WHERE id = ?", cur.clientId))?.name ?? "A client";
@@ -221,6 +262,8 @@ async function returnNotices(env: AppEnv, a: Actor, cur: TaxReturn, next: TaxRet
   const nowAnswered = (next.organizer?.followUps ?? []).filter((f) => f.status === "answered" && !was.has(f.id));
   if (nowAnswered.length)
     await notify(env, { module: "tax", exceptId: except }, { kind: "followup", title: `${client} answered ${nowAnswered.length === 1 ? "a follow-up question" : `${nowAnswered.length} follow-up questions`}`, href: `${href}#organizer` });
+  if (cur.status !== "Awaiting Final Approval" && next.status === "Awaiting Final Approval")
+    await notify(env, { module: "tax", ownersOnly: true, exceptId: except }, { kind: "approval", title: `${client} approved their ${year} return`, body: "It's waiting for your final approval before e-filing.", href: `${href}#review` });
   if (!cur.reviewSignoff && next.reviewSignoff)
     await notify(env, { module: "tax", ownersOnly: true, exceptId: except }, { kind: "signoff", title: `${client}'s ${year} return was signed off by the reviewer`, body: "It's waiting for your final approval before e-filing.", href: `${href}#review` });
 }
