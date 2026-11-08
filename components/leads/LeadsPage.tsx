@@ -154,7 +154,8 @@ export function LeadsPage() {
   const kpis = [
     { label: "Open leads", value: String(open.length), icon: UserPlus, onClick: () => { reset(); } },
     { label: "Follow-ups due", value: String(due.length), icon: BellRing, tone: due.length ? "text-warning-ink" : "", onClick: () => { reset(); setFollow("due"); } },
-    { label: "New this week", value: String(newThisWeek), icon: Sparkles, onClick: () => { reset(); setSort("newest"); } },
+    // Intake tracker: every lead received in the last 7 days, whatever happened to it since.
+    { label: "Leads received (7 days)", value: String(newThisWeek), icon: Sparkles, onClick: () => { reset(); setStatus("all"); setSort("newest"); } },
     { label: "Conversion rate", value: `${convRate}%`, icon: Percent, onClick: () => { reset(); setStatus("converted"); } },
     { label: "Pipeline value", value: usd(pipeline), icon: CircleDollarSign, onClick: () => { reset(); setSort("value"); } },
   ];
@@ -232,7 +233,10 @@ export function LeadsPage() {
         </div>
         <div className="flex items-center justify-between border-t border-line px-4 py-2.5 text-[12.5px] text-muted sm:px-5">
           <span className="inline-flex items-center gap-1.5">
-            <Filter size={13} /> Showing <strong className="text-ink-2">{filtered.length}</strong> of {leads.length} leads
+            <Filter size={13} /> Showing <strong className="text-ink-2">{filtered.length}</strong> {status === "all" ? "" : `${status} `}lead{filtered.length === 1 ? "" : "s"}
+            {status !== "all" && leads.length - leads.filter((l) => l.status === status).length > 0 && (
+              <span>· {leads.length - leads.filter((l) => l.status === status).length} {status === "open" ? "converted or lost" : "other"} hidden by the Status filter</span>
+            )}
           </span>
           {view === "board" && <span className="hidden sm:inline">Drag cards between stages, or use a card&rsquo;s ⋯ menu</span>}
         </div>
