@@ -236,6 +236,19 @@ export type FollowUp = {
   resolvedAt?: string;
 };
 
+/** Which letter versions the client accepted, and how. The wording itself is kept on the server by version. */
+export type EngagementAcceptance = {
+  letterKey: "tax_individual" | "tax_business";
+  version: number;
+  termsVersion: number;
+  /** Shown in lists and the intake PDF. */
+  title: string;
+  acceptedName: string;
+  acceptedAt: string;
+  method: "online" | "in_office" | "paper";
+  recordedBy?: string;
+};
+
 export type OrganizerState = {
   status: "not_sent" | "sent" | "in_progress" | "submitted" | "reviewed";
   sentAt?: string;
@@ -255,7 +268,7 @@ export type OrganizerState = {
   /** Preparer questions sent back to the client in one request. */
   followUps?: FollowUp[];
   /** Engagement letter the client accepted with this interview. */
-  engagement?: { templateId: string; title: string; version: number; acceptedName: string; acceptedAt: string; docId?: string };
+  engagement?: EngagementAcceptance;
 };
 
 export type ChecklistItem = {

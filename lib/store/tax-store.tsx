@@ -10,7 +10,7 @@
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { BACKEND, RemoteError, call, debouncer, notify, pendingClientCreates } from "@/lib/sync/remote";
-import { DEFAULT_FEE_SCHEDULE, ORGANIZERS, RETURN_STATUSES, baseChecklist, defaultPricing, dueDates, priceTotal, type ChecklistItem, type FeeItem, type FilingStatus, type PriceLine, type ReturnStatus, type TaxForm, type TaxReturn } from "@/lib/tax/config";
+import { DEFAULT_FEE_SCHEDULE, ORGANIZERS, RETURN_STATUSES, STATUS_PATH, baseChecklist, defaultPricing, dueDates, priceTotal, type ChecklistItem, type FeeItem, type EngagementAcceptance, type FilingStatus, type PriceLine, type ReturnStatus, type TaxForm, type TaxReturn } from "@/lib/tax/config";
 import { TAX_RETURNS } from "@/lib/sample/tax";
 import { docsFor, type Answers } from "@/lib/tax/interview/engine";
 import { impliedFilingStatus, sectionsFor } from "@/lib/tax/interview/questions";
@@ -124,6 +124,12 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
   const moveTo = (id: string, status: ReturnStatus, text?: string, by = meId()) => {
     const r = R(id);
     if (r.status === status) return;
+    // Same rule the server enforces: no review until the engagement letter is accepted.
+    const at = STATUS_PATH.indexOf("Ready for Review"), from = STATUS_PATH.indexOf(r.status), to = STATUS_PATH.indexOf(status);
+    if (BACKEND && to >= at && from >= 0 && from < at && !r.organizer.engagement) {
+      notify("The client needs to accept the engagement letter first (Interview tab → Engagement letter).");
+      return;
+    }
     up(id, (x) =>
       log(
         { ...x, status, statusHistory: [...x.statusHistory, { status, at: nowIso(), by, note: text }], completedAt: status === "Completed" ? nowIso() : x.completedAt },
@@ -236,7 +242,11 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       }));
     },
     /** Submits the interview: documents it calls for join the checklist, and the filing status is set. */
-    submitInterview(id: string, answers: Answers, by: "client" | "staff", consentName: string, opts: { brought?: string[]; request?: boolean } = {}) {
+    /** Engagement letter accepted in the office or signed on paper (outside the interview). */
+    recordEngagement(id: string, e: EngagementAcceptance) {
+      up(id, (x) => log({ ...x, organizer: { ...x.organizer, engagement: e } }, "intake", `Engagement letter accepted by ${e.acceptedName} (${e.method === "paper" ? "signed on paper" : e.method === "in_office" ? "in the office" : "online"})`));
+    },
+    submitInterview(id: string, answers: Answers, by: "client" | "staff", consentName: string, opts: { brought?: string[]; request?: boolean; engagement?: EngagementAcceptance } = {}) {
       const r = R(id);
       const docs = docsFor(sectionsFor(r.form), { ...answers, __form: r.form, __year: String(r.taxYear) });
       const added: ChecklistItem[] = docs.filter((d) => !r.checklist.some((i) => i.name === d.name)).map((d) => ({ id: uid("ci"), ...d, required: true, source: "organizer" as const }));
@@ -258,7 +268,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
             ...x,
             filingStatus: fs ?? x.filingStatus,
             checklist: [...x.checklist.map((i) => existing.find((e) => e.id === i.id) ?? i), ...toAdd],
-            organizer: { ...x.organizer, status: "submitted", submittedAt: nowIso(), sentAt: x.organizer.sentAt ?? nowIso(), interview: { ...x.organizer.interview, answers, updatedAt: nowIso(), enteredBy: by, consentName } },
+            organizer: { ...x.organizer, status: "submitted", submittedAt: nowIso(), sentAt: x.organizer.sentAt ?? nowIso(), engagement: opts.engagement ?? x.organizer.engagement, interview: { ...x.organizer.interview, answers, updatedAt: nowIso(), enteredBy: by, consentName } },
           },
           "intake",
           `Tax interview submitted${by === "staff" ? " (entered by staff)" : " by client"} — ${toAdd.length} document${toAdd.length === 1 ? "" : "s"} added to the checklist`,
@@ -595,5 +605,22 @@ function useTaxSync(state: State, dispatch: React.Dispatch<Action>) {
     }
   }, [state.returns, state.fees, ready]);
 
+  // Lets screens wait until a return's latest changes have reached the server.
+  useEffect(() => {
+    saveWaiter = async (id: string) => {
+      for (let i = 0; i < 60; i++) {
+        const r = stateRef.current.returns.find((x) => x.id === id);
+        if (r && synced.current.get(id) === r && !inflight.current.has(id)) return true;
+        await new Promise((res) => setTimeout(res, 250));
+      }
+      return false;
+    };
+    return () => { saveWaiter = null; };
+  }, []);
+
   return { ready, access };
 }
+
+let saveWaiter: ((id: string) => Promise<boolean>) | null = null;
+/** Resolves once the return's latest changes are saved on the server (true), or after ~15 seconds (false). */
+export const waitForReturnSave = (id: string) => (saveWaiter ? saveWaiter(id) : Promise.resolve(true));

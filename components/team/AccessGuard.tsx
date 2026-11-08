@@ -109,7 +109,6 @@ const NOT_CONNECTED: [string, string][] = [
   ["/invoices", "Invoices & Payments"],
   ["/messages", "Messages"],
   ["/tasks", "Tasks"],
-  ["/settings", "Settings"],
   ["/portal", "The client portal"],
 ];
 

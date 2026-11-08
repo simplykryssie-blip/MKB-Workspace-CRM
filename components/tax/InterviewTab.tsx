@@ -2,12 +2,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { BACKEND, call } from "@/lib/sync/remote";
-import { UserCog, AlertTriangle, CheckCircle2, CircleDashed, ClipboardCheck, ExternalLink, FilePlus2, ListChecks, MessageSquarePlus, MinusCircle, NotebookPen, Send, Trash2 } from "lucide-react";
+import { UserCog, AlertTriangle, CheckCircle2, CircleDashed, ClipboardCheck, ExternalLink, FilePlus2, FileSignature, ListChecks, MessageSquarePlus, MinusCircle, NotebookPen, Send, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { useToast } from "@/components/ui/Toast";
-import { useTax } from "@/lib/store/tax-store";
+import { useTax, waitForReturnSave } from "@/lib/store/tax-store";
+import { fillLetter, taxLetterFor } from "@/lib/engagement/letters";
+import { useLetters } from "@/lib/engagement/use-letters";
+import { LetterView } from "@/components/engagement/LetterView";
 import { ORGANIZERS, type FollowUp, type TaxReturn } from "@/lib/tax/config";
 import { coverage, display, docsFor, progress, qVisible, rowsOf, sectionVisible, type Answers, type Q } from "@/lib/tax/interview/engine";
 import { INTERVIEW_VERSION, flagsFor, impliedFilingStatus, returnNeeds, sectionsFor, senior } from "@/lib/tax/interview/questions";
@@ -73,6 +76,7 @@ export function InterviewTab({ r }: { r: TaxReturn }) {
             </div>
           </div>
         </Card>
+        <EngagementCard r={r} can={can} />
 
         {started && flags.length > 0 && (
           <Card>
@@ -240,5 +244,66 @@ function RevealAnswer({ returnId, k, masked }: { returnId: string; k: string; ma
       <span className="font-mono tabular-nums">{v ?? masked}</span>
       <button className="text-[11.5px] font-semibold text-accent hover:underline" onClick={() => (v ? setV(null) : call<{ value: string }>("POST", `/api/tax/returns/${returnId}/secure`, { key: k }).then((r) => { setV(r.value); toast("Revealed for 30 seconds — recorded in the audit log", "info"); }).catch((e) => toast(e instanceof Error ? e.message : "Couldn't reveal", "info")))}>{v ? "Hide" : "Reveal"}</button>
     </span>
+  );
+}
+
+/** Engagement letter status, and recording one accepted in the office or signed on paper. */
+function EngagementCard({ r, can }: { r: TaxReturn; can: boolean }) {
+  const tax = useTax();
+  const toast = useToast();
+  const L = useLetters();
+  const e = r.organizer.engagement;
+  const key = taxLetterFor(r.kind);
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [method, setMethod] = useState<"in_office" | "paper">("in_office");
+  const [busy, setBusy] = useState(false);
+  const record = async () => {
+    if (!L.letters) return;
+    setBusy(true);
+    tax.recordEngagement(r.id, { letterKey: key, version: L.letters[key].version, termsVersion: L.letters.terms.version, title: fillLetter(L.letters[key].title, { taxYear: String(r.taxYear) }), acceptedName: name.trim(), acceptedAt: new Date().toISOString(), method });
+    let note = "";
+    if (BACKEND) {
+      const saved = await waitForReturnSave(r.id);
+      try {
+        if (!saved) throw new Error("the acceptance hasn't saved yet");
+        await call("POST", `/api/tax/returns/${r.id}/engagement-pdf`, {});
+        window.dispatchEvent(new CustomEvent("mkb:client-changed", { detail: r.clientId }));
+        note = " · signed copy saved to Documents";
+      } catch (err) { note = ` · couldn't save the PDF copy (${err instanceof Error ? err.message : "error"})`; }
+    }
+    setBusy(false);
+    setOpen(false);
+    toast(`Engagement letter recorded${note}`);
+  };
+  return (
+    <Card>
+      <CardHeader icon={FileSignature} title="Engagement letter" subtitle={e ? `${e.title} · version ${e.version}` : "Required before this return can move to review"} action={<Badge tone={e ? "success" : "warning"}>{e ? "Accepted" : "Not accepted"}</Badge>} />
+      <div className="space-y-3 px-5 pb-5 sm:px-6">
+        {e ? (
+          <p className="text-[13px] text-ink-2">Accepted by <b>{e.acceptedName}</b> on {fmtDate(e.acceptedAt)} — {e.method === "online" ? "online" : e.method === "in_office" ? "in the office" : "signed on paper"}. The signed copy is in the client&rsquo;s Documents.</p>
+        ) : (
+          <>
+            <p className="text-[13px] text-muted">The client accepts it at the end of the interview. If they signed in the office or on paper, record it here.</p>
+            {!open ? (
+              <Button size="sm" icon={FileSignature} disabled={!can || !L.letters} onClick={() => setOpen(true)}>Record acceptance</Button>
+            ) : (
+              <div className="space-y-3 rounded-xl border border-line p-3">
+                <div className="scrollbar-thin max-h-[260px] space-y-5 overflow-y-auto rounded-lg bg-bg p-3">
+                  {L.letters && <><LetterView title={L.letters[key].title} body={L.letters[key].body} version={L.letters[key].version} vars={{ clientName: name || "the client", taxYear: String(r.taxYear), date: new Date().toLocaleDateString("en-US", { dateStyle: "long" }) }} /><LetterView title={L.letters.terms.title} body={L.letters.terms.body} version={L.letters.terms.version} vars={{ clientName: name || "the client" }} /></>}
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  <label className="flex items-center gap-2 text-[13px]"><input type="radio" name={`em-${r.id}`} checked={method === "in_office"} onChange={() => setMethod("in_office")} className="accent-[var(--accent)]" />Accepted in the office</label>
+                  <label className="flex items-center gap-2 text-[13px]"><input type="radio" name={`em-${r.id}`} checked={method === "paper"} onChange={() => setMethod("paper")} className="accent-[var(--accent)]" />Signed on paper</label>
+                </div>
+                <div className="max-w-sm"><label htmlFor={`em-name-${r.id}`} className="mb-1 block text-[13px] font-medium text-ink-2">Client&rsquo;s full name as they signed</label><input id={`em-name-${r.id}`} value={name} onChange={(ev) => setName(ev.target.value)} className="h-10 w-full rounded-xl border border-line bg-surface px-3 text-[14px] text-ink" /></div>
+                {method === "paper" && <p className="text-[12px] text-muted">Upload the scanned paper copy to the client&rsquo;s Documents too.</p>}
+                <div className="flex gap-2"><Button size="sm" variant="primary" disabled={busy || name.trim().length < 2} onClick={record}>{busy ? "Saving…" : "Record acceptance"}</Button><Button size="sm" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button></div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </Card>
   );
 }

@@ -4,7 +4,7 @@
  * sign-off and e-file "approve"; everything else "edit". Sensitive interview
  * answers live in the encrypted vault (owner_type 'tax_return'). Server-only.
  */
-import type { FeeItem, TaxReturn } from "@/lib/tax/config";
+import { STATUS_PATH, type FeeItem, type TaxReturn } from "@/lib/tax/config";
 import { canDo, clientAccess } from "@/lib/team/policy";
 import type { ServiceKey } from "@/lib/types";
 import { all, badRequest, forbidden, HttpError, json, notFound, now, one, rateLimit, run, str, type AppEnv, type Db } from "./core";
@@ -13,7 +13,9 @@ import { audit, hasSensitivePerm, requirePermission, sendEmail, type Actor } fro
 import { assignmentSets, setIdentifier } from "./clients";
 import { notify } from "./notifications";
 import { sendTemplate } from "./email";
-import { buildIntakePdf } from "./intake-pdf";
+import { buildIntakePdf, buildLetterPdf } from "./intake-pdf";
+import { letterVersion } from "./engagement";
+import { fillLetter, taxLetterFor } from "@/lib/engagement/letters";
 import { randomId } from "./crypto";
 
 type Row = { id: string; client_id: string; enrollment_id: string | null; tax_year: number; kind: TaxReturn["kind"]; form: TaxReturn["form"]; filing_status: string | null; states: string; status: TaxReturn["status"]; preparer_id: string; reviewer_id: string; due_at: string | null; extension: string | null; review_signoff: string | null; approval_signature_id: string | null; client_approved_at: string | null; organizer: string; checklist: string; efile: string; pricing: string; status_history: string; notes: string; activity: string; created_at: string; completed_at: string | null; rev: number };
@@ -106,6 +108,7 @@ export async function saveReturn(env: AppEnv, a: Actor, id: string, next: Return
   // New notes and status steps are recorded as the signed-in person, whatever the browser says.
   next = { ...next, notes: stampNew(cur.notes, next.notes, (n) => ({ ...n, authorId: a.member.id })), statusHistory: stampNew(cur.statusHistory, next.statusHistory, (h) => (h.by === "client" || h.by === "system" ? h : { ...h, by: a.member.id })) };
   if (next.clientId !== cur.clientId || next.taxYear !== cur.taxYear || next.kind !== cur.kind) throw badRequest("A return's client, year and type can't change.");
+  next = await checkEngagement(env, a, cur, next);
   const same = (k: keyof TaxReturn) => JSON.stringify(next[k] ?? null) === JSON.stringify(cur[k] ?? null);
   const need = (action: "edit" | "assign" | "approve", what: string) => { if (!canDo(a.policy, a.member, "tax", action)) throw forbidden(`Your role can't ${what}.`); };
   const changed: string[] = [];
@@ -128,6 +131,78 @@ export async function saveReturn(env: AppEnv, a: Actor, id: string, next: Return
   if (changed.length) await audit(env.DB, a, { action: changed.includes("assignment") ? "Assignment change" : changed.includes("review sign-off") ? "Approval" : "Record update", resource: `Tax return ${id}`, department: "tax", meta: `Changed: ${[...new Set(changed)].join(", ")}` });
   await returnNotices(env, a, cur, next);
   return load(env, a, id);
+}
+
+const REVIEW_AT = STATUS_PATH.indexOf("Ready for Review");
+/**
+ * Engagement letter rules: an acceptance must point at letter versions that
+ * exist for this kind of return, and is stamped with the server's time and the
+ * staff member who recorded it. A return can't move into review without one.
+ */
+async function checkEngagement(env: AppEnv, a: Actor, cur: TaxReturn, next: ReturnSnapshot): Promise<ReturnSnapshot> {
+  const e = next.organizer?.engagement;
+  const was = cur.organizer?.engagement;
+  if (e && JSON.stringify(e) !== JSON.stringify(was)) {
+    if (was) throw badRequest("An accepted engagement letter can't be changed. Record a new acceptance on a new return if the terms changed.");
+    const name = typeof e.acceptedName === "string" ? e.acceptedName.trim() : "";
+    if (e.letterKey !== taxLetterFor(cur.kind)) throw badRequest("Wrong engagement letter for this return.");
+    if (!["online", "in_office", "paper"].includes(e.method)) throw badRequest("Unknown acceptance method.");
+    if (name.length < 2 || name.length > 120) throw badRequest("Enter the client's full name to accept the engagement letter.");
+    const [l, t] = await Promise.all([letterVersion(env, e.letterKey, Number(e.version)), letterVersion(env, "terms", Number(e.termsVersion))]);
+    if (!l || !t) throw badRequest("That version of the engagement letter doesn't exist.");
+    const stamped = { letterKey: e.letterKey, version: l.version, termsVersion: t.version, title: fillLetter(l.title, { taxYear: String(cur.taxYear) }), acceptedName: name, acceptedAt: now(), method: e.method, recordedBy: a.kind === "staff" && e.method !== "online" ? a.member.id : undefined };
+    next = { ...next, organizer: { ...next.organizer, engagement: stamped } };
+  } else if (!e && was) {
+    throw badRequest("An accepted engagement letter can't be removed.");
+  }
+  const from = STATUS_PATH.indexOf(cur.status), to = STATUS_PATH.indexOf(next.status);
+  if (to >= REVIEW_AT && from < REVIEW_AT && from >= 0 && !next.organizer?.engagement) throw badRequest("The client needs to accept the engagement letter before this return can move to review.");
+  return next;
+}
+
+/** Saves the signed engagement letter (service letter + standard terms) as a PDF in the client's Documents. */
+async function saveEngagementPdf(env: AppEnv, a: Actor, r: TaxReturn, clientName: string) {
+  const e = r.organizer?.engagement;
+  if (!e || a.kind !== "staff") return null;
+  const [l, t] = await Promise.all([letterVersion(env, e.letterKey, e.version), letterVersion(env, "terms", e.termsVersion)]);
+  if (!l || !t) return null;
+  const vars = { clientName, date: longDate(e.acceptedAt), taxYear: String(r.taxYear), service: "", fee: "" };
+  const recorder = e.recordedBy ? (await one<{ name: string }>(env.DB, "SELECT name FROM members WHERE id = ?", e.recordedBy))?.name : undefined;
+  const pdf = await buildLetterPdf({ clientName, parts: [{ title: fillLetter(l.title, vars), body: fillLetter(l.body, vars), version: l.version }, { title: fillLetter(t.title, vars), body: fillLetter(t.body, vars), version: t.version }], acceptedName: e.acceptedName, acceptedAt: e.acceptedAt, method: e.method, recordedBy: recorder });
+  const fileName = `MKB-Engagement-Letter-${r.taxYear}-${clientName.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "")}.pdf`;
+  const doc = await storeClientPdf(env, a, r.clientId, pdf, { name: `${r.taxYear} engagement letter (accepted ${longDate(e.acceptedAt)})`, fileName, category: "Engagement letter", taxYear: r.taxYear, activity: `Saved the signed ${r.taxYear} engagement letter to Documents` });
+  return { docId: doc, pdf, fileName };
+}
+
+/** Stores a generated PDF privately and lists it in the client's Documents. Returns the document id. */
+async function storeClientPdf(env: AppEnv, a: Actor, clientId: string, pdf: Uint8Array, d: { name: string; fileName: string; category: string; taxYear?: number; activity: string }) {
+  if (a.kind !== "staff") throw forbidden();
+  const docId = randomId("d");
+  const key = `clients/${clientId}/${docId}.pdf`;
+  const t = now();
+  await env.FILES.put(key, pdf, { httpMetadata: { contentType: "application/pdf" } });
+  const c = await one<{ module_data: string | null }>(env.DB, "SELECT module_data FROM clients WHERE id = ?", clientId);
+  const md = json<Record<string, unknown[]>>(c?.module_data, {});
+  md.documents = [{ id: docId, name: d.name, fileName: d.fileName, service: "tax", category: d.category, status: "received", sensitive: true, requestedAt: t, uploadedAt: t, sizeKb: Math.max(1, Math.round(pdf.length / 1024)), uploadedBy: "staff", taxYear: d.taxYear, hasFile: true, deliveredAt: t }, ...((md.documents as unknown[]) ?? [])];
+  await env.DB.batch([
+    env.DB.prepare("INSERT INTO client_files (id, client_id, r2_key, name, content_type, size_bytes, sensitive, created_at, created_by) VALUES (?, ?, ?, ?, 'application/pdf', ?, 1, ?, ?)").bind(docId, clientId, key, d.fileName, pdf.length, t, a.member.id),
+    env.DB.prepare("UPDATE clients SET module_data = ?, rev = rev + 1, updated_at = ? WHERE id = ?").bind(JSON.stringify(md), t, clientId),
+    env.DB.prepare("INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'upload', ?, 'system', ?, ?)").bind(randomId("x"), clientId, d.activity, a.member.id, t),
+  ]);
+  return docId;
+}
+
+/** Staff recorded an acceptance outside the interview: make the PDF copy. */
+export async function engagementPdf(env: AppEnv, a: Actor, id: string) {
+  requirePermission(a, "tax", "edit");
+  if (a.kind !== "staff") throw forbidden();
+  const r = await load(env, a, id);
+  if (!r.organizer?.engagement) throw badRequest("No engagement letter has been accepted on this return yet.");
+  const c = await one<{ name: string }>(env.DB, "SELECT name FROM clients WHERE id = ?", r.clientId);
+  const out = await saveEngagementPdf(env, a, r, c?.name ?? "Client");
+  if (!out) throw badRequest("Couldn't build the engagement letter.");
+  await audit(env.DB, a, { action: "Record update", resource: `Tax return ${id}`, department: "tax", meta: "Signed engagement letter saved to client documents" });
+  return { docId: out.docId };
 }
 
 /** Bell notifications for what just happened on a return (names only, never tax details). */
@@ -231,28 +306,18 @@ export async function completeIntake(env: AppEnv, a: Actor, id: string, b: { req
   if (!c) throw notFound("Client not found.");
   const docs = cleanNames(b.request);
   const pdf = await buildIntakePdf({ clientName: c.name, taxYear: r.taxYear, form: r.form, returnId: r.id, answers: iv.answers, submittedAt: r.organizer.submittedAt, enteredBy: iv.enteredBy ?? "client", consentName: iv.consentName, documents: docs, engagement: r.organizer.engagement });
-  const docId = randomId("d");
   const fileName = `MKB-Tax-Interview-${r.taxYear}-${c.name.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "")}.pdf`;
-  const key = `clients/${r.clientId}/${docId}.pdf`;
-  const t = now();
-  await env.FILES.put(key, pdf, { httpMetadata: { contentType: "application/pdf" } });
-  // The document's details on the client record (the storage key stays in client_files).
-  const md = json<Record<string, unknown[]>>(c.module_data, {});
-  const doc = { id: docId, name: `${r.taxYear} tax interview (submitted ${longDate(r.organizer.submittedAt)})`, fileName, service: "tax", category: "Intake", status: "received", sensitive: true, requestedAt: t, uploadedAt: t, sizeKb: Math.max(1, Math.round(pdf.length / 1024)), uploadedBy: "staff", taxYear: r.taxYear, hasFile: true, deliveredAt: t };
-  md.documents = [doc, ...((md.documents as unknown[]) ?? [])];
-  await env.DB.batch([
-    env.DB.prepare("INSERT INTO client_files (id, client_id, r2_key, name, content_type, size_bytes, sensitive, created_at, created_by) VALUES (?, ?, ?, ?, 'application/pdf', ?, 1, ?, ?)").bind(docId, r.clientId, key, fileName, pdf.length, t, a.member.id),
-    env.DB.prepare("UPDATE clients SET module_data = ?, rev = rev + 1, updated_at = ? WHERE id = ?").bind(JSON.stringify(md), t, r.clientId),
-    env.DB.prepare("INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'upload', ?, 'system', ?, ?)").bind(randomId("x"), r.clientId, `Saved a PDF copy of the ${r.taxYear} tax interview to Documents`, a.member.id, t),
-  ]);
+  const docId = await storeClientPdf(env, a, r.clientId, pdf, { name: `${r.taxYear} tax interview (submitted ${longDate(r.organizer.submittedAt)})`, fileName, category: "Intake", taxYear: r.taxYear, activity: `Saved a PDF copy of the ${r.taxYear} tax interview to Documents` });
+  // The signed engagement letter travels with the intake.
+  const letter = await saveEngagementPdf(env, a, r, c.name);
   let emailed = false;
   if (b.email !== false && c.email) {
-    const out = await sendTemplate(env, "tax_intake_received", { to: c.email, vars: { firstName: firstName(c), taxYear: String(r.taxYear), date: longDate(r.organizer.submittedAt) }, documents: docs, attachments: [{ filename: fileName, content: pdf }] });
+    const out = await sendTemplate(env, "tax_intake_received", { to: c.email, vars: { firstName: firstName(c), taxYear: String(r.taxYear), date: longDate(r.organizer.submittedAt) }, documents: docs, attachments: [{ filename: fileName, content: pdf }, ...(letter ? [{ filename: letter.fileName, content: letter.pdf }] : [])] });
     emailed = out.sent;
     await run(env.DB, "INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'message', ?, 'system', ?, ?)", randomId("x"), r.clientId, `Emailed “we received your ${r.taxYear} tax interview”${docs.length ? ` with ${docs.length} document${docs.length > 1 ? "s" : ""} still needed` : ""}${out.sent ? "" : " (queued)"}`, a.member.id, now());
   }
   await audit(env.DB, a, { action: "Record update", resource: `Tax return ${id}`, department: "tax", meta: `Intake PDF saved to client documents${b.email !== false ? (emailed ? "; emailed to client" : "; email queued") : ""}` });
-  return { docId, emailed, noEmail: !c.email };
+  return { docId, letterDocId: letter?.docId, emailed, noEmail: !c.email };
 }
 
 /**

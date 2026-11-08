@@ -2,16 +2,19 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Eye, EyeOff, ArrowLeft, ArrowRight, Check, CheckCircle2, Circle, FileUp, Lock, MessageSquareReply, Pencil, Plus, Save, Send, Trash2, Type, UserCog } from "lucide-react";
+import { AlertTriangle, Eye, EyeOff, ArrowLeft, ArrowRight, Check, CheckCircle2, Circle, FileSignature, FileUp, Lock, MessageSquareReply, Pencil, Plus, Save, Send, Trash2, Type, UserCog } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useToast } from "@/components/ui/Toast";
 import { useClientGate } from "@/components/team/AccessGuard";
 import { useClients } from "@/lib/store/clients-store";
-import { useTax } from "@/lib/store/tax-store";
+import { useTax, waitForReturnSave } from "@/lib/store/tax-store";
 import { useTeam } from "@/lib/store/team-store";
-import { FORM_LABEL, type TaxReturn } from "@/lib/tax/config";
+import { FORM_LABEL, type EngagementAcceptance, type TaxReturn } from "@/lib/tax/config";
+import { fillLetter, taxLetterFor } from "@/lib/engagement/letters";
+import { useLetters } from "@/lib/engagement/use-letters";
+import { LetterView } from "@/components/engagement/LetterView";
 import { display, docsFor, maskLast4, missingIn, progress, qVisible, rowsOf, sectionVisible, type Answers, type Q, type Row, type Section } from "@/lib/tax/interview/engine";
 import { INTERVIEW_VERSION, sectionsFor } from "@/lib/tax/interview/questions";
 import { applyPrefill, prefillFrom } from "@/lib/tax/interview/prefill";
@@ -310,6 +313,11 @@ function Review({ r, sections, a, answers, by, goTo }: { r: TaxReturn; sections:
   const toast = useToast();
   const [agree, setAgree] = useState(false);
   const [sig, setSig] = useState("");
+  const L = useLetters();
+  const letterKey = taxLetterFor(r.kind);
+  const already = r.organizer.engagement;
+  const [accepted, setAccepted] = useState(false);
+  const letterReady = !!L.letters;
   const missing = sections.flatMap((s) => missingIn(s, a).map((m) => ({ ...m, s })));
   const docs = docsFor(sections, a);
   // In the office: what the client brought today, and whether to request the rest by email.
@@ -319,12 +327,13 @@ function Review({ r, sections, a, answers, by, goTo }: { r: TaxReturn; sections:
   const [sending, setSending] = useState(false);
   const submit = async () => {
     setSending(true);
-    const out = tax.submitInterview(r.id, answers, by, sig.trim(), by === "staff" ? { brought, request: requestRest } : {});
+    const engagement: EngagementAcceptance | undefined = !already && L.letters ? { letterKey, version: L.letters[letterKey].version, termsVersion: L.letters.terms.version, title: fillLetter(L.letters[letterKey].title, { taxYear: String(r.taxYear) }), acceptedName: sig.trim(), acceptedAt: new Date().toISOString(), method: by === "staff" ? "in_office" : "online" } : undefined;
+    const out = tax.submitInterview(r.id, answers, by, sig.trim(), { ...(by === "staff" ? { brought, request: requestRest } : {}), engagement });
     let note = "";
     if (BACKEND) {
       // Copy what was confirmed (SSN/EIN, date of birth, contact details) onto the client's profile.
-      // Waits briefly so the submitted answers reach the server first.
-      await new Promise((res) => setTimeout(res, 1500));
+      // Waits until the submitted answers (and the letter acceptance) reach the server.
+      await waitForReturnSave(r.id);
       try {
         const res = await call<{ updated: string[]; skipped: string[] }>("POST", `/api/tax/returns/${r.id}/sync-profile`, {});
         if (res.updated.length) { note += ` · profile updated (${res.updated.join(", ")})`; window.dispatchEvent(new CustomEvent("mkb:client-changed", { detail: r.clientId })); }
@@ -395,11 +404,29 @@ function Review({ r, sections, a, answers, by, goTo }: { r: TaxReturn; sections:
           <ul className="mt-2 grid gap-1 sm:grid-cols-2">{docs.map((d) => <li key={d.name} className="text-[13px] text-ink-2">• {d.name}</li>)}</ul>
         </Card>
       )}
+      <Card className="p-5 sm:p-6">
+        <h3 className="flex items-center gap-2 text-[15px] font-semibold text-ink"><FileSignature size={16} className="text-accent" /> Engagement letter</h3>
+        {already ? (
+          <p className="mt-1 text-[13px] text-muted">Accepted by {already.acceptedName} on {fmtDate(already.acceptedAt)} ({already.title}).</p>
+        ) : !letterReady ? (
+          <p className="mt-1 text-[13px] text-muted">Loading the engagement letter…</p>
+        ) : (
+          <>
+            <p className="mt-0.5 text-[12.5px] text-muted">{by === "staff" ? "Go over the letter with the client. Their typed name below is their acceptance." : "Please read our engagement letter. Typing your name below accepts it."}</p>
+            <div tabIndex={0} aria-label="Engagement letter text" className="scrollbar-thin mt-3 max-h-[340px] space-y-6 overflow-y-auto rounded-xl border border-line bg-bg p-4">
+              <LetterView title={L.letters![letterKey].title} body={L.letters![letterKey].body} version={L.letters![letterKey].version} vars={{ clientName: sig.trim() || "you", date: new Date().toLocaleDateString("en-US", { dateStyle: "long" }), taxYear: String(r.taxYear) }} />
+              <LetterView title={L.letters!.terms.title} body={L.letters!.terms.body} version={L.letters!.terms.version} vars={{ clientName: sig.trim() || "you" }} />
+            </div>
+            <label className="mt-3 flex items-start gap-2 text-[13.5px] text-ink"><input type="checkbox" checked={accepted} onChange={() => setAccepted(!accepted)} className="mt-0.5 h-4 w-4 accent-[var(--accent)]" />{by === "staff" ? "The client read the engagement letter and standard terms and agreed to them." : "I have read and agree to the engagement letter and standard terms."}</label>
+          </>
+        )}
+      </Card>
       <Card className="space-y-3 p-5 sm:p-6">
         <label className="flex items-start gap-2 text-[13.5px] text-ink"><input type="checkbox" checked={agree} onChange={() => setAgree(!agree)} className="mt-0.5 h-4 w-4 accent-[var(--accent)]" />{by === "staff" ? "The client confirmed these answers are complete and accurate to the best of their knowledge." : "My answers are complete and accurate to the best of my knowledge. I'll tell MKB if anything changes."}</label>
         <div className="max-w-sm"><label htmlFor="iv-sig" className="mb-1 block text-[13px] font-medium text-ink-2">{by === "staff" ? "Client's name (confirmed verbally or in person)" : "Type your full name"}</label><input id="iv-sig" value={sig} onChange={(e) => setSig(e.target.value)} className={inputCls()} /></div>
-        <Button variant="primary" icon={Send} disabled={sending || !agree || sig.trim().length < 3 || missing.length > 0} onClick={submit}>{sending ? "Submitting…" : "Submit to MKB"}</Button>
+        <Button variant="primary" icon={Send} disabled={sending || !agree || sig.trim().length < 3 || missing.length > 0 || (!already && (!letterReady || !accepted))} onClick={submit}>{sending ? "Submitting…" : "Submit to MKB"}</Button>
         {missing.length > 0 && <p className="text-[12px] text-muted">Answer the remaining questions to submit.</p>}
+        {!already && letterReady && !accepted && missing.length === 0 && <p className="text-[12px] text-muted">Accept the engagement letter above to submit.</p>}
       </Card>
     </div>
   );
