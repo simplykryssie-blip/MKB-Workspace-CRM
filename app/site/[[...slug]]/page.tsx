@@ -19,6 +19,11 @@ async function load(slug: string): Promise<PublicSite | null> {
   if (!p) return null;
   return { settings: MKB_SETTINGS, page: p, sections: p.draft, nav: MKB_PAGES.filter((x) => x.nav && x.slug).map((x) => ({ slug: x.slug, title: x.title })) };
 }
+async function siteHosts(): Promise<string[]> {
+  let raw = process.env.WEBSITE_HOSTS ?? "";
+  if (!raw && BACKEND) raw = (await (await import("@/lib/server/core")).getEnv()).WEBSITE_HOSTS ?? "";
+  return raw.toLowerCase().split(",").map((x) => x.trim()).filter(Boolean);
+}
 const slugOf = (s?: string[]) => (s ?? []).join("/").toLowerCase();
 /** The website's own icon (MKB gold seal); the CRM keeps its app icon. */
 const SITE_ICONS: Metadata["icons"] = {
@@ -42,6 +47,10 @@ export default async function Page({ params }: { params: Promise<{ slug?: string
   const site = await load(slugOf((await params).slug));
   if (!site) notFound();
   // On the website's own domain pages live at "/"; inside the app at "/site".
-  const base = (await headers()).get("x-mkb-site") === "1" ? "" : "/site";
+  // Decided from the visitor's host (a header added by middleware isn't reliably
+  // passed on by every runtime).
+  const h = await headers();
+  const host = (h.get("host") ?? "").toLowerCase().split(":")[0];
+  const base = h.get("x-mkb-site") === "1" || (await siteHosts()).includes(host) ? "" : "/site";
   return <SiteRenderer settings={site.settings} page={site.page} sections={site.sections} nav={site.nav} base={base} />;
 }

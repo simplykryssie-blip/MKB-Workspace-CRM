@@ -25,6 +25,9 @@ export function middleware(req: NextRequest) {
     if (!host.startsWith("www.") && siteHosts.includes(`www.${host}`)) {
       return NextResponse.redirect(`https://www.${host}${path}${search}`, 301);
     }
+    // In-app website links (/site/...) opened on the website's own domain.
+    if (path === "/site" || (path.startsWith("/site/") && !path.startsWith("/site/media/")))
+      return NextResponse.redirect(`https://${host}${path.slice(5) || "/"}${search}`, 301);
     // Addresses from the old website.
     const moved = OLD_PATHS[path.replace(/\/+$/, "")];
     if (moved !== undefined) return NextResponse.redirect(`https://${host}${moved}${search}`, 301);
