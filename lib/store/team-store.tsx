@@ -419,7 +419,7 @@ function useTeamSync(local: Actions, dispatch: React.Dispatch<Action>, ref: Reac
     try {
       const s = await call<ServerState>("GET", "/api/team/state");
       // Real names for every module's "who did this" (instead of the sample directory).
-      setStaffDirectory(s.members.map((m) => ({ id: m.id, name: m.name, initials: m.initials, title: m.title })));
+      setStaffDirectory(s.members.map((m) => ({ id: m.id, name: m.name, initials: m.initials, title: m.title, active: m.status === "active" })));
       dispatch({ type: "fn", fn: (cur) => ({ ...cur, roles: s.roles, departments: s.departments, members: s.members, invitations: s.invitations, requests: s.requests, security: s.security ?? cur.security }) });
     } catch (e) {
       if (!(e instanceof RemoteError && e.status === 401)) notify("Couldn't load team information.");

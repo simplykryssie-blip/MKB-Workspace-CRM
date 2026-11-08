@@ -47,7 +47,7 @@ import { Breadcrumbs } from "@/components/ui/PageHeader";
 import { useToast } from "@/components/ui/Toast";
 import { Timeline } from "@/components/crm/ProfileTabs";
 import { PaymentDialog, downloadPlaceholder } from "@/components/crm/dialogs";
-import { STAFF, staffById } from "@/lib/sample/clients";
+import { staffList, staffById } from "@/lib/sample/clients";
 import { useClients } from "@/lib/store/clients-store";
 import { balanceDue, currentMonth, nextAction, openTasks, unresolved, useBooks, workspaceDocs, workspaceInvoices, workspaceMessages } from "@/lib/store/books-store";
 import { QBO_ACCESS, QBO_STATUS, REPORT_TYPES, REVIEW_KIND, STAGE_META, TASK_TYPE, closeTarget, periodLabel, type BooksMonth, type BooksWorkspace, type ClientTaskType, type ReportType } from "@/lib/books/config";
@@ -75,7 +75,7 @@ const QBO_URL = "https://qbo.intuit.com/";
 
 export function Workspace({ id }: { id: string }) {
   const books = useBooks();
-  const { clients } = useClients();
+  const { clients, ready: clientsReady } = useClients();
   const toast = useToast();
   const w = books.workspaces.find((x) => x.id === id);
   const client = clients.find((c) => c.id === w?.clientId);
@@ -96,6 +96,7 @@ export function Workspace({ id }: { id: string }) {
 
   const gate = useClientGate(w?.clientId, "this bookkeeping workspace");
   if (gate) return gate;
+  if (!books.ready || !clientsReady) return <div className="grid min-h-[50vh] place-items-center text-[14px] text-muted" role="status">Loading…</div>;
   if (!w || !client)
     return (
       <div className="grid min-h-[50vh] place-items-center text-center">
@@ -157,7 +158,7 @@ export function Workspace({ id }: { id: string }) {
             <label key={role} className="block">
               <span className="text-[12px] text-muted">{role === "bookkeeper" ? "Assigned bookkeeper" : "Final reviewer"}</span>
               <select aria-label={role === "bookkeeper" ? "Assigned bookkeeper" : "Final reviewer"} value={role === "bookkeeper" ? w.bookkeeperId : w.reviewerId} onChange={(e) => { books.assign(w.id, role, e.target.value); toast(`${role === "bookkeeper" ? "Bookkeeper" : "Reviewer"}: ${staffById(e.target.value).name}`); }} className="mt-1 h-9 w-full rounded-lg border border-line bg-surface px-2 text-[13.5px] font-medium text-ink">
-                {STAFF.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                {staffList().map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </label>
           ))}
@@ -350,7 +351,7 @@ function CloseTab({ w, m, go, open }: { w: BooksWorkspace; m: BooksMonth; go: (t
             <label className="block">
               <span className="text-[12px] text-muted">Assigned to</span>
               <select aria-label="Month assigned to" value={m.assignedTo} onChange={(e) => { books.assignMonth(w.id, m.id, e.target.value); toast(`Assigned to ${staffById(e.target.value).name}`); }} className="mt-1 h-9 w-full rounded-lg border border-line bg-surface px-2 text-[13.5px] font-medium text-ink">
-                {STAFF.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                {staffList().map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </label>
             <Mini label="Client tasks open" value={String(tasks.length)} onClick={() => go("tasks")} />

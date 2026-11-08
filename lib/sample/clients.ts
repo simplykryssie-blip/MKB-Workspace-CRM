@@ -42,6 +42,8 @@ let LIVE_STAFF: Staff[] = [];
 let ME = "s-mk";
 export function setStaffDirectory(list: Staff[]) { LIVE_STAFF = list; }
 export function setMeId(id: string) { ME = id; }
+/** People who can be picked (assigned, approver…): the real active team, or the sample staff in the design preview. */
+export const staffList = (): Staff[] => (LIVE_STAFF.length ? LIVE_STAFF.filter((s) => s.active !== false) : STAFF);
 /** The member the current action is recorded under (the signed-in person). */
 export const meId = () => ME;
 /** Resolves any staff identity — current or former — so historical attribution never breaks. */

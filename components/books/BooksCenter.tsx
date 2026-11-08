@@ -3,20 +3,23 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, BarChart3, Building2, CalendarCheck2, ClipboardCheck, FileBarChart2, Hourglass, Inbox, LayoutGrid, ListChecks, MessageCircleQuestion, RotateCcw, Scale, Search, Users, X, type LucideIcon } from "lucide-react";
+import { Plus, AlertTriangle, BarChart3, Building2, CalendarCheck2, ClipboardCheck, FileBarChart2, Hourglass, Inbox, LayoutGrid, ListChecks, MessageCircleQuestion, RotateCcw, Scale, Search, Users, X, type LucideIcon } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useToast } from "@/components/ui/Toast";
-import { STAFF, SAMPLE_NOW, staffById } from "@/lib/sample/clients";
+import { staffList, SAMPLE_NOW, staffById } from "@/lib/sample/clients";
 import { useClients } from "@/lib/store/clients-store";
 import { balanceDue, currentMonth, nextAction, openTasks, useBooks } from "@/lib/store/books-store";
 import { MONTH_STAGES, REVIEW_KIND, closeTarget, periodEnd, periodLabel, type BooksMonth, type BooksWorkspace } from "@/lib/books/config";
 import { fmtDate, usd } from "@/lib/format";
 import type { Client } from "@/lib/types";
 import { DELIVERY_META, OwnerBadge, QboBadge, RECON_META, REVIEW_META, StageBadge, money } from "./BooksBits";
+import { StartWorkspace } from "./StartWorkspace";
+import { useTeam } from "@/lib/store/team-store";
+import { BACKEND } from "@/lib/sync/remote";
 
 const TABS = [
   { key: "overview", label: "Overview", icon: LayoutGrid },
@@ -31,6 +34,10 @@ export function BooksCenter() {
   const books = useBooks();
   const clientStore = useClients();
   const toast = useToast();
+  const team = useTeam();
+  const router = useRouter();
+  const [starting, setStarting] = useState(false);
+  const canCreate = team.can("books", "create");
   const [tab, setTab] = useState<Tab>("overview");
   useEffect(() => {
     const h = window.location.hash.slice(1) as Tab;
@@ -48,7 +55,12 @@ export function BooksCenter() {
         title="Bookkeeping"
         subtitle="Clients keep their own QuickBooks. MKB reviews, reconciles, reports and closes each month."
         crumbs={[{ label: "Services" }, { label: "Bookkeeping" }]}
-        actions={<Button variant="ghost" icon={RotateCcw} aria-label="Reset sample data" title="Reset sample data" className="px-2.5" onClick={() => { if (confirm("Reset bookkeeping and client sample data?")) { books.reset(); clientStore.reset(); toast("Sample data reset"); } }} />}
+        actions={
+          <div className="flex gap-2">
+            {canCreate && <Button variant="primary" icon={Plus} onClick={() => setStarting(true)}>Start bookkeeping</Button>}
+            {!BACKEND && <Button variant="ghost" icon={RotateCcw} aria-label="Reset sample data" title="Reset sample data" className="px-2.5" onClick={() => { if (confirm("Reset bookkeeping and client sample data?")) { books.reset(); clientStore.reset(); toast("Sample data reset"); } }} />}
+          </div>
+        }
       />
       <div className="sticky top-16 z-20 -mx-4 mb-5 border-b border-line bg-bg/90 px-4 backdrop-blur-md sm:-mx-6 sm:px-6 lg:top-[72px] lg:-mx-8 lg:px-8">
         <div role="tablist" aria-label="Bookkeeping" className="scrollbar-thin -mb-px flex gap-1 overflow-x-auto">
@@ -59,10 +71,22 @@ export function BooksCenter() {
           ))}
         </div>
       </div>
+      {starting && <StartWorkspace open onClose={() => setStarting(false)} onCreated={(id) => { setStarting(false); router.push(`/services/bookkeeping/${id}`); }} />}
+      {!books.ready ? (
+        <div className="grid min-h-[30vh] place-items-center text-[14px] text-muted" role="status">Loading…</div>
+      ) : !books.workspaces.length ? (
+        <div className="mx-auto max-w-lg rounded-2xl border border-line bg-surface p-8 text-center shadow-soft">
+          <BarChart3 size={32} className="mx-auto text-accent" />
+          <h2 className="mt-3 text-[18px] font-bold text-ink">No bookkeeping clients yet</h2>
+          <p className="mt-2 text-[14px] text-muted">Start a workspace for a client business to track each month&rsquo;s review, reconciliations, reports and close.</p>
+          {canCreate && <Button variant="primary" className="mt-5" icon={Plus} onClick={() => setStarting(true)}>Start bookkeeping</Button>}
+        </div>
+      ) : (<>
       {tab === "overview" && <Overview byId={byId} go={go} />}
       {tab === "clients" && <ClientsTab byId={byId} />}
       {tab === "review" && <ReviewCenter byId={byId} />}
       {tab === "reports" && <ReportCenter byId={byId} />}
+      </>)}
     </>
   );
 }
@@ -132,7 +156,7 @@ function Overview({ byId, go }: { byId: Map<string, Client>; go: (t: Tab) => voi
           </div>
           <select aria-label="Bookkeeper" value={staff} onChange={(e) => setStaff(e.target.value)} className="h-9 rounded-xl border border-line bg-surface px-2.5 text-[13px] font-medium text-ink-2">
             <option value="all">All bookkeepers</option>
-            {STAFF.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            {staffList().map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
           <label className="inline-flex items-center gap-2 text-[12.5px] text-muted"><input type="checkbox" checked={includeCurrent} onChange={() => setIncludeCurrent((v) => !v)} className="accent-[var(--accent)]" /> Include current month in progress</label>
           <span className="ml-auto text-[12.5px] text-muted">{queue.length} item{queue.length === 1 ? "" : "s"}</span>
@@ -290,7 +314,7 @@ function ReviewCenter({ byId }: { byId: Map<string, Client> }) {
             <option value="active">All unresolved</option><option value="open">Open (MKB)</option><option value="sent_to_client">Sent to client</option><option value="client_responded">Client responded</option><option value="resolved">Resolved</option>
           </select>
           <select aria-label="Assigned to" value={assignee} onChange={(e) => setAssignee(e.target.value)} className="h-9 rounded-xl border border-line bg-surface px-2.5 text-[13px] font-medium text-ink-2">
-            <option value="all">Anyone</option>{STAFF.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            <option value="all">Anyone</option>{staffList().map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </div>
         <ul className="divide-y divide-line border-t border-line">
@@ -305,7 +329,7 @@ function ReviewCenter({ byId }: { byId: Map<string, Client> }) {
               </div>
               <Badge tone={statusTone[r.status]}>{statusLabel[r.status]}</Badge>
               <select aria-label={`Assign ${r.txnRef}`} value={r.assignedTo} onChange={(e) => { books.assignItem(w.id, m.id, r.id, e.target.value); toast(`Assigned to ${staffById(e.target.value).name}`); }} className="h-8 rounded-lg border border-line bg-surface px-2 text-[12.5px] text-ink-2">
-                {STAFF.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                {staffList().map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
               <Button size="sm" href={wsHref(w, m, "review")}>Open</Button>
             </li>

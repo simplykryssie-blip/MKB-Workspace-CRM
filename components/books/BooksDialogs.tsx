@@ -6,7 +6,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Checkbox, SelectField, TextArea, TextField } from "@/components/ui/Field";
 import { useToast } from "@/components/ui/Toast";
-import { STAFF, staffById } from "@/lib/sample/clients";
+import { staffList, staffById } from "@/lib/sample/clients";
 import { useBooks } from "@/lib/store/books-store";
 import { REVIEW_KIND, TASK_TYPE, periodEnd, periodLabel, type BooksMonth, type BooksWorkspace, type ClientTask, type MonthStage, type ReviewKind } from "@/lib/books/config";
 import { fileSize } from "@/lib/format";
@@ -37,7 +37,7 @@ export function AddReviewItemDialog({ w, m, open, onClose }: Base) {
         <TextField id="ri-ref" label="QuickBooks transaction" required value={txnRef} onChange={(e) => setTxnRef(e.target.value)} placeholder="e.g. Oct 12 · Business card ••1007 · SAMPLE VENDOR" />
         <div className="grid gap-4 sm:grid-cols-2">
           <TextField id="ri-amount" label="Amount ($)" type="number" min={0} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
-          <SelectField id="ri-assignee" label="Assigned to" value={assignee} onChange={(e) => setAssignee(e.target.value)} options={STAFF.map((s) => [s.id, s.name])} />
+          <SelectField id="ri-assignee" label="Assigned to" value={assignee} onChange={(e) => setAssignee(e.target.value)} options={staffList().map((s) => [s.id, s.name])} />
         </div>
         <TextArea id="ri-desc" label="What needs attention" required value={desc} onChange={(e) => setDesc(e.target.value)} />
       </div>
@@ -125,7 +125,7 @@ export function FinalApprovalDialog({ w, m, open, onClose }: Base) {
   return (
     <Modal open={open} onClose={onClose} title="Final review approval" description={`${w.businessName} · ${periodLabel(m.period)}`} footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" icon={ShieldCheck} disabled={!checks.every(Boolean)} onClick={() => { books.finalApprove(w.id, m.id, by, note.trim()); toast(`Approved by ${staffById(by).name} — Reports Ready`); onClose(); }}>Approve</Button></>}>
       <div className="space-y-3">
-        <SelectField id="fa-by" label="Approver" value={by} onChange={(e) => setBy(e.target.value)} options={STAFF.map((s) => [s.id, s.name])} />
+        <SelectField id="fa-by" label="Approver" value={by} onChange={(e) => setBy(e.target.value)} options={staffList().map((s) => [s.id, s.name])} />
         {by === m.assignedTo && <p className="rounded-xl bg-warning-soft px-3 py-2 text-[12.5px] text-warning-ink">The approver also did this month&rsquo;s bookkeeping — a second reviewer is recommended.</p>}
         {APPROVAL_CHECKS.map((c, i) => <Checkbox key={c} label={c} checked={checks[i]} onChange={() => setChecks((x) => x.map((v, j) => (j === i ? !v : v)))} />)}
         <TextArea id="fa-note" label="Notes (optional)" value={note} onChange={(e) => setNote(e.target.value)} />

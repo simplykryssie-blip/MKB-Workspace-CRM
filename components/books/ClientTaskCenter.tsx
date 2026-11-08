@@ -42,6 +42,7 @@ export function ClientTaskCenter({ id }: { id: string }) {
   const [msg, setMsg] = useState("");
   const gate = useClientGate(w?.clientId, "this client portal");
   if (gate) return gate;
+  if (!books.ready || !clientStore.ready) return <p className="py-20 text-center text-muted" role="status">Loading…</p>;
   if (!w || !c) return <p className="py-20 text-center text-muted">Workspace not found.</p>;
 
   // Only this client's businesses — never another client's data.

@@ -98,6 +98,10 @@ export async function seedDev(env: AppEnv) {
     add("INSERT INTO tax_returns (id, client_id, enrollment_id, tax_year, kind, form, filing_status, states, status, preparer_id, reviewer_id, due_at, extension, review_signoff, approval_signature_id, client_approved_at, organizer, checklist, efile, pricing, status_history, notes, activity, completed_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       r.id, r.clientId, r.enrollmentId ?? null, r.taxYear, r.kind, r.form, r.filingStatus ?? null, JSON.stringify(r.states), r.status, r.preparerId, r.reviewerId, r.dueAt ?? null, r.extension ? JSON.stringify(r.extension) : null, r.reviewSignoff ? JSON.stringify(r.reviewSignoff) : null, r.approvalSignatureId ?? null, r.clientApprovedAt ?? null, JSON.stringify(r.organizer), JSON.stringify(r.checklist), JSON.stringify(r.efile), JSON.stringify(r.pricing), JSON.stringify(r.statusHistory), JSON.stringify(r.notes), JSON.stringify(r.activity), r.completedAt ?? null, r.createdAt, t);
 
+  for (const w of BOOKS_WORKSPACES)
+    add("INSERT INTO books_workspaces (id, client_id, enrollment_id, business_name, entity_type, bookkeeper_id, reviewer_id, service, extras, qbo, accounts, months, tasks, notes, activity, started_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      w.id, w.clientId, w.enrollmentId ?? null, w.businessName, w.entityType, w.bookkeeperId, w.reviewerId, JSON.stringify(w.service), JSON.stringify(w.extras), JSON.stringify(w.qbo), JSON.stringify(w.accounts), JSON.stringify(w.months), JSON.stringify(w.tasks), JSON.stringify(w.notes), JSON.stringify(w.activity), w.startedAt, t, t);
+
   // D1 batches run as one transaction.
   for (let i = 0; i < S.length; i += 90) await db.batch(S.slice(i, i + 90));
   return { statements: S.length, members: MEMBERS.length, clients: CLIENTS.length };

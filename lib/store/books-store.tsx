@@ -12,7 +12,8 @@
  * QuickBooks remains the system of record; nothing here stores transactions.
  * No access tokens or credentials are ever held in the browser.
  */
-import { createContext, useContext, useMemo, useReducer, useRef } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { BACKEND, RemoteError, call, debouncer, notify, pendingClientCreates } from "@/lib/sync/remote";
 import { BOOKS_WORKSPACES } from "@/lib/sample/books";
 import { SAMPLE_NOW, staffById, meId } from "@/lib/sample/clients";
 import { nowIso, useClients } from "@/lib/store/clients-store";
@@ -38,10 +39,13 @@ const uid = (p: string) => `${p}-${Math.random().toString(36).slice(2, 9)}`;
 type ClientsApi = ReturnType<typeof useClients>;
 
 type State = { workspaces: BooksWorkspace[] };
-type Action = { type: "reset" } | { type: "add"; w: BooksWorkspace } | { type: "update"; id: string; fn: (w: BooksWorkspace) => BooksWorkspace };
-const init = (): State => ({ workspaces: structuredClone(BOOKS_WORKSPACES) });
+type Action = { type: "reset" } | { type: "add"; w: BooksWorkspace } | { type: "update"; id: string; fn: (w: BooksWorkspace) => BooksWorkspace } | { type: "hydrate"; workspaces: BooksWorkspace[] } | { type: "remove"; id: string };
+// With the backend on, workspaces load from the server after sign-in.
+const init = (): State => ({ workspaces: BACKEND ? [] : structuredClone(BOOKS_WORKSPACES) });
 function reducer(s: State, a: Action): State {
   if (a.type === "reset") return init();
+  if (a.type === "hydrate") return { workspaces: a.workspaces };
+  if (a.type === "remove") return { workspaces: s.workspaces.filter((w) => w.id !== a.id) };
   if (a.type === "add") return { workspaces: [...s.workspaces, a.w] };
   return { workspaces: s.workspaces.map((w) => (w.id === a.id ? a.fn(w) : w)) };
 }
@@ -150,6 +154,24 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
 
   const a = {
     reset: () => dispatch({ type: "reset" }),
+    /** Starts a bookkeeping workspace for a client business; its first month opens for client entry. */
+    createWorkspace(input: { clientId: string; enrollmentId?: string; businessName: string; entityType: string; plan: string; monthlyFee: number; reports: ReportType[]; includes: string[]; bookkeeperId: string; reviewerId: string; accounts: { name: string; kind: "bank" | "credit_card"; mask: string; institution: string }[]; firstPeriod: string; qboCompany: string }): string {
+      const id = uid("bw");
+      const at = nowIso();
+      const accounts = input.accounts.map((x) => ({ ...x, id: uid("acct"), mask: x.mask.replace(/\D/g, "").slice(-4) }));
+      const p = input.firstPeriod;
+      const month: BooksMonth = { id: `${id}-${p}`, period: p, stage: "Client Entry in Progress", assignedTo: input.bookkeeperId, reopenCount: 0, recons: accounts.map((x) => ({ accountId: x.id, status: "not_started" as const })), reviewItems: [], reports: input.reports.map((t) => ({ id: uid("rp"), type: t, period: p, review: "not_started" as const, delivery: "not_delivered" as const })), reviewNotes: [], history: [{ stage: "Client Entry in Progress", at, by: "system" }] };
+      const w: BooksWorkspace = {
+        id, clientId: input.clientId, enrollmentId: input.enrollmentId, businessName: input.businessName.trim(), entityType: input.entityType, bookkeeperId: input.bookkeeperId, reviewerId: input.reviewerId,
+        service: { plan: input.plan, monthlyFee: input.monthlyFee, reports: input.reports, includes: input.includes }, extras: [],
+        qbo: { status: "not_connected", companyName: input.qboCompany.trim() || input.businessName.trim(), access: "qboa" },
+        accounts, months: [month], tasks: standardTasks(p), notes: [],
+        activity: [{ id: uid("x"), kind: "status", text: `Bookkeeping started — ${input.plan} plan, first month ${periodLabel(p)}`, at, actor: "staff" }],
+        startedAt: at,
+      };
+      dispatch({ type: "add", w });
+      return id;
+    },
 
     /* ---------------- Assignment ---------------- */
     assign(wsId: string, role: "bookkeeper" | "reviewer", staffId: string) {
@@ -365,7 +387,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
   return a;
 }
 
-export type BooksStore = ReturnType<typeof makeActions> & State;
+export type BooksStore = ReturnType<typeof makeActions> & State & { ready: boolean };
 const Ctx = createContext<BooksStore | null>(null);
 
 export function BooksProvider({ children }: { children: React.ReactNode }) {
@@ -376,7 +398,8 @@ export function BooksProvider({ children }: { children: React.ReactNode }) {
   const cref = useRef(clients);
   cref.current = clients;
   const actions = useMemo(() => makeActions(dispatch, () => ref.current, () => cref.current), []);
-  const value = useMemo(() => ({ ...actions, ...state }), [actions, state]);
+  const sync = useBooksSync(state, dispatch);
+  const value = useMemo(() => ({ ...actions, ...state, ready: sync.ready }), [actions, state, sync.ready]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
@@ -384,4 +407,77 @@ export function useBooks() {
   const v = useContext(Ctx);
   if (!v) throw new Error("useBooks must be used inside <BooksProvider>");
   return v;
+}
+
+/* ------------------------------------------------------------------ */
+/* Backend sync (only when NEXT_PUBLIC_BACKEND=1)                      */
+/* ------------------------------------------------------------------ */
+
+type RevWorkspace = BooksWorkspace & { rev?: number };
+/**
+ * Loads the workspaces the person may open, then saves each change with the
+ * revision it started from (the server checks edit / assign / approve /
+ * settings per change). A refused change reloads the latest version.
+ */
+function useBooksSync(state: State, dispatch: React.Dispatch<Action>) {
+  const [ready, setReady] = useState(!BACKEND);
+  const synced = useRef(new Map<string, BooksWorkspace>());
+  const revs = useRef(new Map<string, number>());
+  const inflight = useRef(new Set<string>());
+  const later = useRef(debouncer(500)).current;
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  const reload = useCallback(async () => {
+    try {
+      const r = await call<{ workspaces: RevWorkspace[] }>("GET", "/api/books");
+      r.workspaces.forEach((x) => { revs.current.set(x.id, x.rev ?? 1); synced.current.set(x.id, x); });
+      dispatch({ type: "hydrate", workspaces: r.workspaces });
+    } catch (e) {
+      if (!(e instanceof RemoteError && (e.status === 401 || e.status === 403))) notify("Couldn't load bookkeeping workspaces.");
+    }
+  }, []);
+  useEffect(() => {
+    if (!BACKEND) return;
+    (async () => {
+      try {
+        const me = await call<{ perms?: Record<string, string[]> }>("GET", "/api/auth/session");
+        if ((me.perms?.books ?? []).includes("view")) await reload();
+      } catch { /* signed out */ }
+      setReady(true);
+    })();
+  }, []);
+
+  const save = useCallback(async (id: string) => {
+    if (inflight.current.has(id)) return later(id, () => save(id));
+    const w = stateRef.current.workspaces.find((x) => x.id === id);
+    if (!w || synced.current.get(id) === w) return;
+    inflight.current.add(id);
+    try {
+      if (!revs.current.has(id)) {
+        await pendingClientCreates.get(w.clientId); // a brand-new client must exist first
+        const res = await call<{ workspace: RevWorkspace }>("POST", "/api/books", { workspace: w });
+        revs.current.set(id, res.workspace.rev ?? 1);
+      } else {
+        const res = await call<{ workspace: RevWorkspace }>("PUT", `/api/books/workspaces/${id}`, { workspace: { ...w, rev: revs.current.get(id) } });
+        revs.current.set(id, res.workspace.rev ?? 1);
+      }
+      synced.current.set(id, w);
+    } catch (e) {
+      if (e instanceof RemoteError && e.status === 401) return;
+      notify(e instanceof RemoteError ? e.message : "Couldn't save the workspace — check your connection.");
+      if (!revs.current.has(id) && e instanceof RemoteError && e.status < 500) dispatch({ type: "remove", id });
+      await reload();
+    } finally {
+      inflight.current.delete(id);
+    }
+    if (stateRef.current.workspaces.find((x) => x.id === id) !== synced.current.get(id)) later(id, () => save(id));
+  }, []);
+
+  useEffect(() => {
+    if (!BACKEND || !ready) return;
+    state.workspaces.forEach((w) => { if (synced.current.get(w.id) !== w) later(w.id, () => save(w.id)); });
+  }, [state.workspaces, ready]);
+
+  return { ready };
 }

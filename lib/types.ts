@@ -13,6 +13,8 @@ export type Staff = {
   name: string;
   initials: string;
   title: string;
+  /** False for deactivated or invited members (kept for historical names, hidden from pickers). */
+  active?: boolean;
 };
 
 export type ClientType = "individual" | "business";

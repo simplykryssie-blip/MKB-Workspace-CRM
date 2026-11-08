@@ -84,10 +84,10 @@ export function checkSameOrigin(req: Request, env: AppEnv, rawBody = false) {
 /** https origins of the public website's domains (WEBSITE_HOSTS, comma-separated). */
 export const websiteOrigins = (env: AppEnv) => (env.WEBSITE_HOSTS ?? "").toLowerCase().split(",").map((h) => h.trim()).filter(Boolean).map((h) => `https://${h}`);
 
-/** Parses a JSON body (max 64 KB). */
-export async function body<T = Record<string, unknown>>(req: Request): Promise<T> {
+/** Parses a JSON body (max 64 KB unless a route allows more). */
+export async function body<T = Record<string, unknown>>(req: Request, maxBytes = 65_536): Promise<T> {
   const text = await req.text();
-  if (text.length > 65_536) throw new HttpError(413, "Request too large.");
+  if (text.length > maxBytes) throw new HttpError(413, "Request too large.");
   try { return (text ? JSON.parse(text) : {}) as T; } catch { throw badRequest("Invalid JSON."); }
 }
 export const str = (v: unknown, max = 500) => (typeof v === "string" ? v.trim().slice(0, max) : "");
