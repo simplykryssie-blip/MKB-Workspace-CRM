@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 /**
- * Builds and deploys the protected preview (Worker "mkb-crm-preview").
+ * Builds and deploys the CRM + website to an environment from wrangler.jsonc:
+ *   preview    — Worker "mkb-crm-preview" (preview.mkbfinancialgroup.com), for trying changes
+ *   production — Worker "mkb-crm-production" (app.mkbfinancialgroup.com + the website);
+ *                needs --confirm-production so it is never deployed by accident
  *
- *   node scripts/deploy-preview.mjs [--secrets-file path.json] [--skip-build]
+ *   node scripts/deploy.mjs [--env preview|production] [--confirm-production] [--secrets-file path.json] [--skip-build]
  *
  * The page files (scripts, styles, images) are put in their own R2 bucket and
  * served by a small wrapper around the OpenNext worker, instead of Workers
@@ -21,13 +24,16 @@ import { createHash } from "node:crypto";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 const ASSETS = join(ROOT, ".open-next/assets");
-const STATIC_BUCKET = "mkb-crm-static-preview";
 const args = process.argv.slice(2);
+const ENV = args.includes("--env") ? args[args.indexOf("--env") + 1] : "preview";
+if (!["preview", "production"].includes(ENV)) throw new Error("--env must be preview or production.");
+if (ENV === "production" && !args.includes("--confirm-production")) throw new Error("Production deploys need --confirm-production (only after the owner approves).");
+const STATIC_BUCKET = `mkb-crm-static-${ENV}`;
 const secretsFile = args.includes("--secrets-file") ? args[args.indexOf("--secrets-file") + 1] : null;
 
 const config = JSON.parse(readFileSync(join(ROOT, "wrangler.jsonc"), "utf8"));
-const preview = config.env?.preview;
-if (!preview?.d1_databases?.[0]?.database_id) throw new Error("env.preview is not configured — run scripts/provision-preview.sh first.");
+const preview = config.env?.[ENV];
+if (!preview?.d1_databases?.[0]?.database_id) throw new Error(`env.${ENV} is not configured in wrangler.jsonc.`);
 const accountId = process.env.CLOUDFLARE_ACCOUNT_ID ?? config.account_id ?? "d21efb365208814b254e302c87342096";
 const token = process.env.CLOUDFLARE_API_TOKEN;
 if (!token) throw new Error("Set CLOUDFLARE_API_TOKEN.");
@@ -79,7 +85,7 @@ console.log(`Uploaded ${files.length} page files to R2 bucket ${STATIC_BUCKET}.`
 
 // 3. Wrapper worker: serves those files, and stands in for the ASSETS binding.
 const keys = Object.fromEntries(files.map((f) => [f.key, "a/" + f.id]));
-writeFileSync(join(ROOT, ".open-next/preview-entry.mjs"), `import worker from "./worker.js";
+writeFileSync(join(ROOT, ".open-next/site-entry.mjs"), `import worker from "./worker.js";
 export * from "./worker.js";
 const KEYS = new Map(Object.entries(${JSON.stringify(keys)}));
 async function serve(env, url, method, internal = false) {
@@ -120,20 +126,21 @@ export default {
 };
 `);
 
-// 4. Deploy configuration for the preview only (no Static Assets, no rebuild step).
+// 4. Deploy configuration for this environment (no Static Assets, no rebuild step).
+// Production answers only on its own domains (no workers.dev address).
 const deployConfig = {
   name: preview.name,
-  main: "preview-entry.mjs",
+  main: "site-entry.mjs",
   account_id: accountId,
   compatibility_date: config.compatibility_date,
   compatibility_flags: config.compatibility_flags,
-  workers_dev: true,
+  workers_dev: ENV === "preview",
   preview_urls: false,
   d1_databases: preview.d1_databases.map(({ migrations_dir, ...d }) => d),
   r2_buckets: [...preview.r2_buckets, { binding: "STATIC", bucket_name: STATIC_BUCKET }],
   vars: preview.vars,
 };
-writeFileSync(join(ROOT, ".open-next/wrangler.preview.json"), JSON.stringify(deployConfig, null, 2));
-const deployArgs = ["wrangler", "deploy", "-c", ".open-next/wrangler.preview.json"];
+writeFileSync(join(ROOT, `.open-next/wrangler.${ENV}.json`), JSON.stringify(deployConfig, null, 2));
+const deployArgs = ["wrangler", "deploy", "-c", `.open-next/wrangler.${ENV}.json`];
 if (secretsFile) deployArgs.push("--secrets-file", secretsFile);
 execFileSync("npx", deployArgs, { cwd: ROOT, stdio: "inherit" });

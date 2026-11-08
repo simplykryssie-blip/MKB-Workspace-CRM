@@ -98,7 +98,7 @@ Run inside Cloudflare's actual runtime: `npx opennextjs-cloudflare build && npx 
 
 - Provision (once): `scripts/provision-preview.sh` — creates the D1 database and R2 bucket, writes
   `env.preview` in `wrangler.jsonc`, applies migrations remotely.
-- Deploy: `node scripts/deploy-preview.mjs --secrets-file <json>` — builds with the backend on, puts
+- Deploy: `node scripts/deploy.mjs --env preview --secrets-file <json> (production: --env production --confirm-production)` — builds with the backend on, puts
   page files in R2 bucket `mkb-crm-static-preview` (served by a small wrapper worker, because this
   development environment's proxy can't use Workers Static Assets uploads) and deploys. Secrets:
   `ENCRYPTION_KEY`, `ENCRYPTION_KEY_VERSION`, `OWNER_SETUP_TOKEN`, optionally `RESEND_API_KEY`.

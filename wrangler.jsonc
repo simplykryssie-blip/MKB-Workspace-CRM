@@ -56,6 +56,30 @@
         "WEBSITE_HOSTS": "mkbfinancialgroup.com,www.mkbfinancialgroup.com",
         "APP_ORIGINS": "https://mkb-crm-preview.krystal-21e.workers.dev"
       }
+    },
+    "production": {
+      "name": "mkb-crm-production",
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "mkb-crm-production",
+          "database_id": "271ff414-afa0-43d6-950b-1f0a0f65d1f6",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "FILES",
+          "bucket_name": "mkb-crm-files-production"
+        }
+      ],
+      "vars": {
+        "APP_ENV": "production",
+        "BACKEND_ENABLED": "true",
+        "APP_ORIGIN": "https://app.mkbfinancialgroup.com",
+        "EMAIL_FROM": "MKB Financial Group <no-reply@mkbfinancialgroup.com>",
+        "WEBSITE_HOSTS": "mkbfinancialgroup.com,www.mkbfinancialgroup.com"
+      }
     }
   }
 }
