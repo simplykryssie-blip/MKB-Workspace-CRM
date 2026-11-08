@@ -28,6 +28,12 @@ export function middleware(req: NextRequest) {
     // Addresses from the old website.
     const moved = OLD_PATHS[path.replace(/\/+$/, "")];
     if (moved !== undefined) return NextResponse.redirect(`https://${host}${moved}${search}`, 301);
+    // The website's icon (browsers also ask for /favicon.ico directly).
+    if (path === "/favicon.ico") {
+      const url = req.nextUrl.clone();
+      url.pathname = "/brand/mkb-seal.ico";
+      return NextResponse.rewrite(url);
+    }
     if (/^\/(_next|brand|favicon|icon|apple-icon|f\/|api\/public\/)/.test(path)) return NextResponse.next();
     if (path.startsWith("/api/")) return new NextResponse("Not found", { status: 404 });
     const url = req.nextUrl.clone();

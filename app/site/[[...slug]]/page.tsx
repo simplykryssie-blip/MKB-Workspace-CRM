@@ -20,12 +20,22 @@ async function load(slug: string): Promise<PublicSite | null> {
   return { settings: MKB_SETTINGS, page: p, sections: p.draft, nav: MKB_PAGES.filter((x) => x.nav && x.slug).map((x) => ({ slug: x.slug, title: x.title })) };
 }
 const slugOf = (s?: string[]) => (s ?? []).join("/").toLowerCase();
+/** The website's own icon (MKB gold seal); the CRM keeps its app icon. */
+const SITE_ICONS: Metadata["icons"] = {
+  icon: [
+    { url: "/brand/mkb-seal.ico", sizes: "any" },
+    { url: "/brand/mkb-seal-32.png", sizes: "32x32", type: "image/png" },
+    { url: "/brand/mkb-seal-192.png", sizes: "192x192", type: "image/png" },
+    { url: "/brand/mkb-seal-512.png", sizes: "512x512", type: "image/png" },
+  ],
+  apple: [{ url: "/brand/mkb-seal-apple-180.png", sizes: "180x180" }],
+};
 
 export async function generateMetadata({ params }: { params: Promise<{ slug?: string[] }> }): Promise<Metadata> {
   const site = await load(slugOf((await params).slug)).catch(() => null);
-  if (!site) return { title: "Page not found" };
+  if (!site) return { title: "Page not found", icons: SITE_ICONS };
   const name = site.settings.siteName;
-  return { title: { absolute: site.page.slug ? `${site.page.title} | ${name}` : `${name}${site.settings.tagline ? ` | ${site.settings.tagline}` : ""}` }, description: site.page.description || undefined, openGraph: { title: site.page.title, description: site.page.description, siteName: name } };
+  return { title: { absolute: site.page.slug ? `${site.page.title} | ${name}` : `${name}${site.settings.tagline ? ` | ${site.settings.tagline}` : ""}` }, description: site.page.description || undefined, openGraph: { title: site.page.title, description: site.page.description, siteName: name, images: [{ url: "/brand/mkb-seal-512.png", width: 512, height: 512 }] }, icons: SITE_ICONS };
 }
 
 export default async function Page({ params }: { params: Promise<{ slug?: string[] }> }) {
