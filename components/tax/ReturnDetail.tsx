@@ -141,7 +141,7 @@ export function ReturnDetail({ id }: { id: string }) {
         ? { text: `Reviewed by ${staffById(r.reviewSignoff.by).name}. Send the return and e-file authorization to the client.`, primary: { label: "Send for client approval", icon: Send, run: () => { tax.sendForApproval(r.id); toast("Sent for client approval — signature request on the client profile"); }, can: A.edit } }
         : { text: `Needs reviewer sign-off from ${staffById(r.reviewerId).name} before the client sees it.`, primary: { label: "Reviewer sign-off", icon: ShieldCheck, run: () => setDlg("signoff"), can: A.review } };
     if (s === "Awaiting Client Approval") return { text: `Waiting for the client to approve and sign ${sig?.document ?? "the e-file authorization"}.`, primary: { label: "Record client approval", icon: CheckCircle2, run: () => { tax.recordApproval(r.id); toast("Client approval recorded — Ready to E-file"); }, can: A.edit }, secondary: { label: "Open signatures", run: () => go("review"), can: true } };
-    if (s === "Ready to E-file") return { text: "Approved and signed. Transmit to the IRS and state.", primary: { label: "Transmit e-file", icon: Send, run: () => setDlg("transmit"), can: A.efile } };
+    if (s === "Ready to E-file") return { text: "Approved. Transmit the return in your tax software, then record it here with the submission IDs.", primary: { label: "Record e-file", icon: Send, run: () => setDlg("transmit"), can: A.efile } };
     if (s === "Submitted") {
       const pending = r.efile.filter((e) => e.result === "pending");
       return { text: `Waiting for acknowledgement (${pending.map((p) => p.jurisdiction).join(", ") || "none pending"}).`, primary: { label: "Record acknowledgement", icon: CheckCircle2, run: () => pending[0] && setAckId(pending[0].id), can: A.efile && pending.length > 0 } };
@@ -598,7 +598,7 @@ function EfileTab({ r, onTransmit, onAck, onResolve }: { r: TaxReturn; onTransmi
         subtitle={`${r.efile.length} submission${r.efile.length === 1 ? "" : "s"}`}
         action={
           <div className="flex gap-2">
-            {r.status === "Ready to E-file" && <Button size="sm" variant="primary" icon={Send} disabled={!tax.access.efile} onClick={onTransmit}>Transmit</Button>}
+            {r.status === "Ready to E-file" && <Button size="sm" variant="primary" icon={Send} disabled={!tax.access.efile} onClick={onTransmit}>Record e-file</Button>}
             {r.status === "Rejected" && <Button size="sm" variant="primary" icon={RotateCcw} disabled={!tax.access.efile} onClick={onResolve}>Resolve rejection</Button>}
           </div>
         }

@@ -161,7 +161,7 @@ export function TransmitDialog({ r, open, onClose }: { r: TaxReturn; open: boole
   const blockers = [!r.reviewSignoff && "Reviewer sign-off is missing", !r.clientApprovedAt && "Client approval (e-file authorization) is missing", taxRules().requireOwnerApproval && !r.ownerApproval && "The Owner's final approval is missing"].filter(Boolean) as string[];
   const send = () => {
     tax.submitEfile(r.id, sel, ids);
-    toast(`Transmitted ${sel.join(" + ")} — awaiting acknowledgement`);
+    toast(`E-file recorded: ${sel.join(" + ")} — awaiting acknowledgement`);
     onClose();
   };
   return (
