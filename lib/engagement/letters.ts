@@ -124,6 +124,9 @@ Thank you for choosing MKB Financial Group LLC. This letter explains the tax pre
 - File an extension (Form 4868 and any state extension) if you ask us to or if your documents are not ready in time. An extension gives more time to file, not more time to pay. Any tax you owe is still due by the original deadline.
 - Prepare an amended return (Form 1040-X) only if you ask. Amended returns are a separate service with their own fee.
 
+## IRS transcripts and notices (Form 8821)
+You agree to sign IRS Form 8821, Tax Information Authorization, so MKB can get your IRS transcripts and copies of IRS notices for the tax years on the form. This lets us confirm income and payments the IRS has on file and spot problems early. Form 8821 only lets us see information; it does not let us act for you with the IRS. You can revoke it at any time by writing to us or the IRS.
+
 ## What is not included
 Unless we agree in writing, this engagement does not include bookkeeping, tax planning beyond your return, prior-year returns, payroll or sales tax filings, complex IRS or state notices, or representation beyond what is described in the Standard Terms.
 
@@ -152,6 +155,9 @@ Thank you for choosing MKB Financial Group LLC. This letter explains the busines
 - E-file the returns once an authorized officer or partner has reviewed and signed them. Returns are prepared and transmitted through IRS-authorized third-party tax software and e-file providers, which receive the return information only as needed to process and file it.
 - File an extension (Form 7004 and any state extension) if you ask us to or if your books are not ready in time. An extension gives more time to file, not more time to pay.
 - Prepare an amended or superseding return only if you ask. That is a separate service with its own fee.
+
+## IRS transcripts and notices (Form 8821)
+An authorized officer or partner agrees to sign IRS Form 8821, Tax Information Authorization, so MKB can get the business's IRS transcripts and copies of IRS notices for the tax years on the form, including payroll tax accounts. Form 8821 only lets us see information; it does not let us act for the business with the IRS. It can be revoked at any time in writing.
 
 ## Your books and records
 We prepare the return from the books, bank statements and records you provide. Your books should be complete and reconciled through the end of the tax year. If they are not, we can provide bookkeeping as a separate service. We do not audit, review or compile your financial statements.
