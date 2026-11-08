@@ -321,6 +321,15 @@ function Review({ r, sections, a, answers, by, goTo }: { r: TaxReturn; sections:
     setSending(true);
     const out = tax.submitInterview(r.id, answers, by, sig.trim(), by === "staff" ? { brought, request: requestRest } : {});
     let note = "";
+    if (BACKEND) {
+      // Copy what was confirmed (SSN/EIN, date of birth, contact details) onto the client's profile.
+      // Waits briefly so the submitted answers reach the server first.
+      await new Promise((res) => setTimeout(res, 1500));
+      try {
+        const res = await call<{ updated: string[]; skipped: string[] }>("POST", `/api/tax/returns/${r.id}/sync-profile`, {});
+        if (res.updated.length) { note += ` · profile updated (${res.updated.join(", ")})`; window.dispatchEvent(new CustomEvent("mkb:client-changed", { detail: r.clientId })); }
+      } catch { /* the profile can still be updated from the client tab */ }
+    }
     if (by === "staff" && requestRest && out.requested.length && BACKEND) {
       try {
         const res = await call<{ sent: boolean }>("POST", `/api/tax/returns/${r.id}/request-docs`, { names: out.requested });

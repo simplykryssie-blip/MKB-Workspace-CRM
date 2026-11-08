@@ -561,6 +561,14 @@ function useClientSync(state: State, dispatch: React.Dispatch<Action>) {
     } catch { /* no longer accessible */ }
   }, []);
 
+  // Another module changed a client on the server (e.g. a tax intake updated the profile): reload it.
+  useEffect(() => {
+    if (!BACKEND) return;
+    const on = (e: Event) => { const id = (e as CustomEvent<string>).detail; if (id) void reload(id); };
+    window.addEventListener("mkb:client-changed", on);
+    return () => window.removeEventListener("mkb:client-changed", on);
+  }, [reload]);
+
   useEffect(() => {
     if (!BACKEND) return;
     call<{ clients: Rev[] }>("GET", "/api/clients?full=1")

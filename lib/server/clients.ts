@@ -75,7 +75,7 @@ function vaultKey(env: AppEnv) {
   if (!env.ENCRYPTION_KEY) throw new HttpError(500, "Server encryption key is not configured.");
   return { key: env.ENCRYPTION_KEY, version: Number(env.ENCRYPTION_KEY_VERSION ?? 1) };
 }
-const aad = (clientId: string, field: VaultField) => `client:${clientId}:${field}`;
+export const aad = (clientId: string, field: VaultField) => `client:${clientId}:${field}`;
 
 /** Reveals one full identifier. Needs record access AND the field's sensitive permission; always audited. */
 export async function revealIdentifier(env: AppEnv, a: Actor, id: string, field: VaultField) {

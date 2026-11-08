@@ -272,8 +272,30 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       return { added: toAdd.length, requested };
     },
     /** Preparer questions are collected as drafts, then sent to the client together in one request. */
-    addFollowUp(id: string, question: string, ref?: string) {
-      up(id, (x) => ({ ...x, organizer: { ...x.organizer, followUps: [...(x.organizer.followUps ?? []), { id: uid("fu"), question, ref, status: "draft" }] } }));
+    addFollowUp(id: string, question: string, ref?: string, qKey?: string) {
+      up(id, (x) => ({ ...x, organizer: { ...x.organizer, followUps: [...(x.organizer.followUps ?? []), { id: uid("fu"), question, ref, qKey, status: "draft" }] } }));
+    },
+    /** Staff closes a follow-up (the reply was used, or no change is needed). */
+    resolveFollowUp(id: string, fuId: string) {
+      up(id, (x) => log({ ...x, organizer: { ...x.organizer, followUps: (x.organizer.followUps ?? []).map((f) => (f.id === fuId ? { ...f, resolvedAt: nowIso() } : f)) } }, "intake", "Follow-up reviewed and closed"));
+    },
+    /**
+     * Staff updates one intake answer (e.g. from a follow-up reply). `key` is
+     * "section.question" or "section.row.question" for repeating sections.
+     */
+    updateAnswer(id: string, key: string, value: string, label: string, fuId?: string) {
+      up(id, (x) => {
+        const answers = { ...(x.organizer.interview?.answers ?? {}) } as Answers;
+        const parts = key.split(".");
+        if (parts.length === 3) {
+          const [sid, i, qid] = parts;
+          const rows = [...((answers[sid] as Record<string, string>[] | undefined) ?? [])];
+          rows[Number(i)] = { ...(rows[Number(i)] ?? {}), [qid]: value };
+          answers[sid] = rows;
+        } else answers[parts[parts.length - 1]] = value;
+        const followUps = (x.organizer.followUps ?? []).map((f) => (f.id === fuId ? { ...f, resolvedAt: nowIso() } : f));
+        return log({ ...x, organizer: { ...x.organizer, followUps, interview: { ...x.organizer.interview, answers, updatedAt: nowIso(), enteredBy: "staff" } } }, "intake", `Intake updated by staff — ${label}${fuId ? " (from the client's follow-up reply)" : ""}`);
+      });
     },
     removeFollowUp(id: string, fuId: string) {
       up(id, (x) => ({ ...x, organizer: { ...x.organizer, followUps: (x.organizer.followUps ?? []).filter((f) => f.id !== fuId) } }));

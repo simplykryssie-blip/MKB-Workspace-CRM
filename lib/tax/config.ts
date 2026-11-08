@@ -228,7 +228,13 @@ export const REJECTION_REASONS = [
 /* Return model                                                        */
 /* ------------------------------------------------------------------ */
 
-export type FollowUp = { id: string; question: string; ref?: string; status: "draft" | "sent" | "answered"; answer?: string; askedAt?: string; answeredAt?: string };
+export type FollowUp = {
+  id: string; question: string; ref?: string; status: "draft" | "sent" | "answered"; answer?: string; askedAt?: string; answeredAt?: string;
+  /** Which intake answer ("section.question" or "section.row.question") or flag ("flag:…") this is about. */
+  qKey?: string;
+  /** Staff applied the reply to the intake or closed it. */
+  resolvedAt?: string;
+};
 
 export type OrganizerState = {
   status: "not_sent" | "sent" | "in_progress" | "submitted" | "reviewed";

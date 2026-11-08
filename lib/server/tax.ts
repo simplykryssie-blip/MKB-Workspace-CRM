@@ -10,7 +10,7 @@ import type { ServiceKey } from "@/lib/types";
 import { all, badRequest, forbidden, HttpError, json, notFound, now, one, rateLimit, run, str, type AppEnv, type Db } from "./core";
 import { decryptField, encryptField } from "./crypto";
 import { audit, hasSensitivePerm, requirePermission, sendEmail, type Actor } from "./identity";
-import { assignmentSets } from "./clients";
+import { assignmentSets, setIdentifier } from "./clients";
 
 type Row = { id: string; client_id: string; enrollment_id: string | null; tax_year: number; kind: TaxReturn["kind"]; form: TaxReturn["form"]; filing_status: string | null; states: string; status: TaxReturn["status"]; preparer_id: string; reviewer_id: string; due_at: string | null; extension: string | null; review_signoff: string | null; approval_signature_id: string | null; client_approved_at: string | null; organizer: string; checklist: string; efile: string; pricing: string; status_history: string; notes: string; activity: string; created_at: string; completed_at: string | null; rev: number };
 export type ReturnSnapshot = TaxReturn & { rev?: number };
@@ -202,4 +202,51 @@ export async function emailDocumentRequest(env: AppEnv, a: Actor, id: string, na
   const out = await sendEmail(env, { to: c.email, template: "tax_document_request", subject: `Documents needed for your ${r.taxYear} tax return`, text });
   await audit(env.DB, a, { action: "Record update", resource: `Tax return ${id}`, department: "tax", meta: `Emailed document request (${list.length} item${list.length > 1 ? "s" : ""})${out.sent ? "" : " — queued, not sent"}` });
   return { sent: out.sent, count: list.length };
+}
+
+/**
+ * After an intake is submitted: copies what the client confirmed onto their
+ * profile — SSN/ITIN or EIN and date of birth (re-encrypted into the client's
+ * vault, through the same permission checks and audit as editing the profile)
+ * and, for individuals, phone, email and home address. Returns what changed.
+ */
+export async function syncProfileFromReturn(env: AppEnv, a: Actor, id: string) {
+  requirePermission(a, "tax", "edit");
+  if (a.kind !== "staff") throw forbidden();
+  const r = await load(env, a, id);
+  const ans = (r.organizer?.interview?.answers ?? {}) as Record<string, unknown>;
+  const val = (k: string) => (typeof ans[k] === "string" ? (ans[k] as string).trim() : "");
+  const updated: string[] = [];
+  const skipped: string[] = [];
+  const fromVault = async (key: string) => {
+    const v = await one<{ ciphertext: string; iv: string; kind: SecureKind }>(env.DB, "SELECT ciphertext, iv, kind FROM vault WHERE owner_type = 'tax_return' AND owner_id = ? AND field = ?", id, key);
+    return v ? decryptField(env.ENCRYPTION_KEY!, v, `tax_return:${id}:${key}`) : null;
+  };
+  const copy = async (label: string, run: () => Promise<unknown>) => {
+    try { await run(); updated.push(label); } catch (e) { skipped.push(`${label}: ${e instanceof Error ? e.message : "not saved"}`); }
+  };
+  if (r.kind === "individual") {
+    const ssn = await fromVault("you.ssn");
+    if (ssn) await copy("SSN/ITIN", () => setIdentifier(env, a, r.clientId, "tax_id", ssn, ssn.startsWith("9") ? "ITIN" : "SSN"));
+    if (/^\d{4}-\d{2}-\d{2}$/.test(val("dob"))) await copy("date of birth", () => setIdentifier(env, a, r.clientId, "dob", val("dob")));
+    // Contact details the client confirmed (only fields they actually answered).
+    const cur = await one<{ phone: string | null; email: string | null; address: string | null; rev: number }>(env.DB, "SELECT phone, email, address, rev FROM clients WHERE id = ?", r.clientId);
+    if (cur) {
+      const address = val("street") && val("city") && val("state") ? JSON.stringify({ line1: val("street"), city: val("city"), state: val("state"), zip: val("zip") }) : cur.address;
+      const phone = val("phone") || cur.phone;
+      const email = (val("email") || cur.email || "").toLowerCase();
+      if (phone !== cur.phone || email !== cur.email || address !== cur.address) {
+        if (!canDo(a.policy, a.member, "crm", "edit")) skipped.push("contact details: your role can't edit client details");
+        else {
+          await run(env.DB, "UPDATE clients SET phone = ?, email = ?, address = ?, rev = rev + 1, updated_at = ? WHERE id = ?", phone, email, address, now(), r.clientId);
+          updated.push("contact details");
+        }
+      }
+    }
+  } else {
+    const ein = await fromVault("entity.ein");
+    if (ein) await copy("EIN", () => setIdentifier(env, a, r.clientId, "ein", ein));
+  }
+  if (updated.length) await audit(env.DB, a, { action: "Record update", resource: `Client ${r.clientId}`, department: "tax", meta: `Profile updated from tax intake ${id}: ${updated.join(", ")}` });
+  return { updated, skipped };
 }

@@ -2,13 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { BACKEND, call } from "@/lib/sync/remote";
-import { AlertTriangle, CheckCircle2, CircleDashed, ClipboardCheck, ExternalLink, FilePlus2, ListChecks, MessageSquarePlus, MinusCircle, NotebookPen, Send, Trash2 } from "lucide-react";
+import { UserCog, AlertTriangle, CheckCircle2, CircleDashed, ClipboardCheck, ExternalLink, FilePlus2, ListChecks, MessageSquarePlus, MinusCircle, NotebookPen, Send, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { useToast } from "@/components/ui/Toast";
 import { useTax } from "@/lib/store/tax-store";
-import { ORGANIZERS, type TaxReturn } from "@/lib/tax/config";
+import { ORGANIZERS, type FollowUp, type TaxReturn } from "@/lib/tax/config";
 import { coverage, display, docsFor, progress, qVisible, rowsOf, sectionVisible, type Answers, type Q } from "@/lib/tax/interview/engine";
 import { INTERVIEW_VERSION, flagsFor, impliedFilingStatus, returnNeeds, sectionsFor, senior } from "@/lib/tax/interview/questions";
 import { fmtDate, relTime } from "@/lib/format";
@@ -41,7 +41,9 @@ export function InterviewTab({ r }: { r: TaxReturn }) {
   const fus = r.organizer.followUps ?? [];
   const drafts = fus.filter((f) => f.status === "draft");
   const [q, setQ] = useState("");
-  const ask = (text: string, ref?: string) => { tax.addFollowUp(r.id, text, ref); toast("Added to the follow-up request (not sent yet)"); };
+  const ask = (text: string, ref?: string, qKey?: string) => { tax.addFollowUp(r.id, text, ref, qKey); toast("Added to the follow-up request (not sent yet)"); };
+  /** The latest follow-up about one answer or flag. */
+  const fuFor = (qKey: string) => [...fus].reverse().find((f) => f.qKey === qKey);
   const [tone, label] = STATUS[r.organizer.status];
 
   if (r.form === "990") return <Card className="p-8 text-center text-muted">The nonprofit (990) interview isn&rsquo;t built yet.</Card>;
@@ -61,6 +63,13 @@ export function InterviewTab({ r }: { r: TaxReturn }) {
               {(r.organizer.status === "sent" || r.organizer.status === "in_progress") && <Button icon={Send} disabled={!can} onClick={() => { tax.remindAll(r.id); toast("Reminder sent"); }}>Remind client</Button>}
               <Button icon={ExternalLink} href={interviewHref(r.id)} disabled={!can}>{r.organizer.status === "submitted" || r.organizer.status === "reviewed" ? "View interview" : "Fill in with client"}</Button>
               {r.organizer.status === "submitted" && <Button variant="primary" icon={CheckCircle2} disabled={!can} onClick={() => { tax.reviewOrganizer(r.id); toast("Interview reviewed"); }}>Mark reviewed</Button>}
+              {BACKEND && started && <Button icon={UserCog} disabled={!can} onClick={async () => {
+                try {
+                  const res = await call<{ updated: string[]; skipped: string[] }>("POST", `/api/tax/returns/${r.id}/sync-profile`, {});
+                  if (res.updated.length) window.dispatchEvent(new CustomEvent("mkb:client-changed", { detail: r.clientId }));
+                  toast(res.updated.length ? `Client profile updated: ${res.updated.join(", ")}` : res.skipped.length ? res.skipped[0] : "The profile already matches the intake", "info");
+                } catch (e) { toast(e instanceof Error ? e.message : "Couldn't update the profile", "info"); }
+              }}>Update client profile</Button>}
             </div>
           </div>
         </Card>
@@ -69,7 +78,28 @@ export function InterviewTab({ r }: { r: TaxReturn }) {
           <Card>
             <CardHeader icon={AlertTriangle} title="Needs your attention" subtitle="Found automatically from the answers" />
             <ul className="space-y-2 px-5 pb-5 sm:px-6">
-              {flags.map((f) => <li key={f} className="flex items-start gap-2 rounded-xl bg-warning-soft/50 px-3 py-2 text-[13px] text-ink"><AlertTriangle size={14} className="mt-0.5 shrink-0 text-warning-ink" /><span className="flex-1">{f}</span>{can && <button onClick={() => ask(`Can you tell us more? ${f}`)} className="shrink-0 text-[12px] font-semibold text-accent hover:underline">Ask client</button>}</li>)}
+              {flags.map((f) => {
+                const fu = fuFor(`flag:${f}`);
+                const done = !!fu?.resolvedAt;
+                return (
+                  <li key={f} className={`rounded-xl px-3 py-2 text-[13px] text-ink ${done ? "bg-success-soft/40" : "bg-warning-soft/50"}`}>
+                    <div className="flex items-start gap-2">
+                      {done ? <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-success" /> : <AlertTriangle size={14} className="mt-0.5 shrink-0 text-warning-ink" />}
+                      <span className="flex-1">{f}</span>
+                      {can && !fu && <button onClick={() => ask(`Can you tell us more? ${f}`, "Needs attention", `flag:${f}`)} className="shrink-0 text-[12px] font-semibold text-accent hover:underline">Ask client</button>}
+                      {fu && !done && fu.status !== "answered" && <span className="shrink-0 text-[12px] font-semibold text-muted">{fu.status === "draft" ? "In the follow-up request" : "Asked — waiting for reply"}</span>}
+                      {done && <span className="shrink-0 text-[12px] font-semibold text-success-ink">Resolved</span>}
+                    </div>
+                    {fu?.status === "answered" && !done && (
+                      <div className="mt-2 rounded-lg bg-surface px-3 py-2 ring-1 ring-line">
+                        <p className="text-[12px] font-semibold text-muted">Client replied {fu.answeredAt ? fmtDate(fu.answeredAt) : ""}</p>
+                        <p className="text-[13px] text-ink">{fu.answer}</p>
+                        {can && <div className="mt-1.5 flex flex-wrap gap-2"><Button size="sm" variant="primary" onClick={() => { tax.resolveFollowUp(r.id, fu.id); toast("Marked resolved"); }}>Mark resolved</Button><span className="self-center text-[12px] text-muted">Update the related answer below if anything changed.</span></div>}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </Card>
         )}
@@ -83,9 +113,9 @@ export function InterviewTab({ r }: { r: TaxReturn }) {
                   <p className="mb-1.5 text-[12.5px] font-semibold uppercase tracking-wide text-muted">{s.title}</p>
                   {s.repeat ? (
                     rowsOf(a, s.id).length === 0 ? <p className="text-[13px] text-muted">None entered.</p> : rowsOf(a, s.id).map((row, i) => (
-                      <div key={i} className="mb-2 rounded-xl border border-line p-2.5"><p className="mb-1 text-[13px] font-semibold text-ink">{s.repeat!.rowTitle?.(row, i)}</p><AnswerRows qs={s.questions.filter((x) => qVisible(x, a, row))} get={(x) => row[x.id]} revealKey={(x) => `${s.id}.${i}.${x.id}`} returnId={r.id} onAsk={can ? (x) => ask(`About ${x.label.replace(/\?$/, "")} (${s.repeat!.rowTitle?.(row, i)}): `, s.title) : undefined} /></div>
+                      <div key={i} className="mb-2 rounded-xl border border-line p-2.5"><p className="mb-1 text-[13px] font-semibold text-ink">{s.repeat!.rowTitle?.(row, i)}</p><AnswerRows qs={s.questions.filter((x) => qVisible(x, a, row))} get={(x) => row[x.id]} revealKey={(x) => `${s.id}.${i}.${x.id}`} returnId={r.id} fuFor={fuFor} onUpdate={can ? (x, v, fuId) => { tax.updateAnswer(r.id, `${s.id}.${i}.${x.id}`, v, `${s.title}: ${x.label}`, fuId); toast("Intake updated"); } : undefined} onAsk={can ? (x) => ask(`About ${x.label.replace(/\?$/, "")} (${s.repeat!.rowTitle?.(row, i)}): `, s.title, `${s.id}.${i}.${x.id}`) : undefined} /></div>
                     ))
-                  ) : <AnswerRows qs={s.questions.filter((x) => qVisible(x, a))} get={(x) => a[x.id] as string} revealKey={(x) => `${s.id}.${x.id}`} returnId={r.id} onAsk={can ? (x) => ask(`About “${x.label}”: `, s.title) : undefined} />}
+                  ) : <AnswerRows qs={s.questions.filter((x) => qVisible(x, a))} get={(x) => a[x.id] as string} revealKey={(x) => `${s.id}.${x.id}`} returnId={r.id} fuFor={fuFor} onUpdate={can ? (x, v, fuId) => { tax.updateAnswer(r.id, `${s.id}.${x.id}`, v, `${s.title}: ${x.label}`, fuId); toast("Intake updated"); } : undefined} onAsk={can ? (x) => ask(`About “${x.label}”: `, s.title, `${s.id}.${x.id}`) : undefined} />}
                 </div>
               ))}
             </div>
@@ -150,16 +180,52 @@ export function InterviewTab({ r }: { r: TaxReturn }) {
   );
 }
 
-function AnswerRows({ qs, get, onAsk, revealKey, returnId }: { qs: Q[]; get: (q: Q) => string | undefined; onAsk?: (q: Q) => void; revealKey?: (q: Q) => string; returnId?: string }) {
+const SECURE_TYPES = ["ssn", "ein", "tin", "bank"];
+function AnswerRows({ qs, get, onAsk, onUpdate, fuFor, revealKey, returnId }: { qs: Q[]; get: (q: Q) => string | undefined; onAsk?: (q: Q) => void; onUpdate?: (q: Q, value: string, fuId?: string) => void; fuFor?: (key: string) => FollowUp | undefined; revealKey?: (q: Q) => string; returnId?: string }) {
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
   return (
     <dl className="divide-y divide-line rounded-xl border border-line">
-      {qs.map((q) => (
-        <div key={q.id} className="group flex flex-wrap items-baseline gap-x-3 px-3 py-1.5">
-          <dt className="min-w-[200px] flex-1 text-[12.5px] text-muted">{q.label}</dt>
-          <dd className="text-[13px] font-medium text-ink">{BACKEND && returnId && revealKey && ["ssn", "ein", "tin", "bank"].includes(q.type) && get(q) ? <RevealAnswer returnId={returnId} k={revealKey(q)} masked={display(q, get(q))} /> : display(q, get(q))}</dd>
-          {onAsk && <button onClick={() => onAsk(q)} className="text-[11.5px] font-semibold text-accent opacity-70 hover:underline group-hover:opacity-100">Ask</button>}
-        </div>
-      ))}
+      {qs.map((q) => {
+        const key = revealKey?.(q) ?? q.id;
+        const fu = fuFor?.(key);
+        const open = editing === key;
+        // Secure numbers are changed in the interview itself (they go to the vault).
+        const editable = onUpdate && !SECURE_TYPES.includes(q.type);
+        const start = () => { setDraft(get(q) ?? ""); setEditing(key); };
+        return (
+          <div key={q.id} className="group px-3 py-1.5">
+            <div className="flex flex-wrap items-baseline gap-x-3">
+              <dt className="min-w-[200px] flex-1 text-[12.5px] text-muted">{q.label}</dt>
+              <dd className="text-[13px] font-medium text-ink">{BACKEND && returnId && revealKey && SECURE_TYPES.includes(q.type) && get(q) ? <RevealAnswer returnId={returnId} k={revealKey(q)} masked={display(q, get(q))} /> : display(q, get(q))}</dd>
+              {editable && !open && <button onClick={start} className="text-[11.5px] font-semibold text-accent opacity-70 hover:underline group-hover:opacity-100">Edit</button>}
+              {onAsk && !fu && <button onClick={() => onAsk(q)} className="text-[11.5px] font-semibold text-accent opacity-70 hover:underline group-hover:opacity-100">Ask</button>}
+              {fu && !fu.resolvedAt && fu.status !== "answered" && <span className="text-[11.5px] font-semibold text-muted">{fu.status === "draft" ? "In follow-up" : "Asked"}</span>}
+            </div>
+            {fu?.status === "answered" && !fu.resolvedAt && (
+              <div className="mt-1.5 rounded-lg bg-info-soft/40 px-3 py-2 ring-1 ring-line">
+                <p className="text-[12px] font-semibold text-muted">Client replied {fu.answeredAt ? fmtDate(fu.answeredAt) : ""}</p>
+                <p className="text-[13px] text-ink">{fu.answer}</p>
+                {editable && !open && <button onClick={start} className="mt-1 text-[12px] font-semibold text-accent hover:underline">Update answer</button>}
+              </div>
+            )}
+            {open && (
+              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                {q.type === "yesno" || q.type === "choice" ? (
+                  <select aria-label={`New answer: ${q.label}`} value={draft} onChange={(e) => setDraft(e.target.value)} className="h-9 rounded-lg border border-line bg-surface px-2 text-[13px] text-ink">
+                    <option value="">—</option>{(q.type === "yesno" ? ["Yes", "No"] : q.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                ) : (
+                  <input aria-label={`New answer: ${q.label}`} value={draft} onChange={(e) => setDraft(e.target.value)} className="h-9 min-w-[220px] flex-1 rounded-lg border border-line bg-surface px-2 text-[13px] text-ink" />
+                )}
+                <Button size="sm" variant="primary" onClick={() => { onUpdate!(q, draft.trim(), fu?.status === "answered" && !fu.resolvedAt ? fu.id : undefined); setEditing(null); }}>Save</Button>
+                <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>
+                {q.type === "multi" && <span className="w-full text-[11.5px] text-muted">Separate choices with “|”.</span>}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </dl>
   );
 }
