@@ -12,6 +12,8 @@ import { useTeam } from "@/lib/store/team-store";
 import { useClients } from "@/lib/store/clients-store";
 import { relTime } from "@/lib/format";
 import { ThemeToggle } from "./ThemeToggle";
+import { BACKEND, call } from "@/lib/sync/remote";
+import type { Notice } from "@/lib/server/notifications";
 
 export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
   const router = useRouter();
@@ -204,6 +206,77 @@ function GlobalSearch() {
 /* ------------------------------------------------------------------ */
 
 function Notifications() {
+  return BACKEND ? <LiveNotifications /> : <SampleNotifications />;
+}
+
+/** Live bell: the server picks who gets each notification from their permissions. */
+function LiveNotifications() {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState<{ unread: number; items: Notice[] }>({ unread: 0, items: [] });
+  const ref = useRef<HTMLDivElement>(null);
+  const load = () => call<{ unread: number; items: Notice[] }>("GET", "/api/notifications").then(setData).catch(() => {});
+  useEffect(() => {
+    load();
+    const t = setInterval(() => document.visibilityState === "visible" && load(), 60_000);
+    return () => clearInterval(t);
+  }, []);
+  useEffect(() => {
+    if (!open) return;
+    load();
+    const off = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", off);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", off);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [open]);
+  const openOne = (n: Notice) => {
+    setOpen(false);
+    if (!n.readAt) call<{ unread: number; items: Notice[] }>("POST", "/api/notifications", { ids: [n.id] }).then(setData).catch(() => {});
+    if (n.href) router.push(n.href);
+  };
+  return (
+    <div ref={ref} className="relative">
+      <IconBtn label={`Notifications${data.unread ? ` (${data.unread} unread)` : ""}`} onClick={() => setOpen((o) => !o)}>
+        <Bell size={20} />
+        {data.unread > 0 && <span className="absolute right-1 top-1 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-danger px-1 text-[10.5px] font-bold text-white ring-2 ring-surface">{data.unread > 9 ? "9+" : data.unread}</span>}
+      </IconBtn>
+      {open && (
+        <div className="absolute right-0 z-50 mt-1.5 w-[min(92vw,380px)] rounded-xl border border-line bg-surface shadow-pop">
+          <div className="flex items-center justify-between border-b border-line px-4 py-3">
+            <span className="text-[14px] font-semibold text-ink">Notifications</span>
+            <button onClick={() => call<{ unread: number; items: Notice[] }>("POST", "/api/notifications", { all: true }).then(setData).catch(() => {})} disabled={!data.unread} className="text-[12.5px] font-semibold text-accent disabled:text-faint">
+              Mark all read
+            </button>
+          </div>
+          {data.items.length ? (
+            <ul className="scrollbar-thin max-h-[60vh] overflow-y-auto p-1.5">
+              {data.items.map((n) => (
+                <li key={n.id}>
+                  <button onClick={() => openOne(n)} className="flex w-full gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-surface-hover">
+                    <span className="min-w-0 flex-1">
+                      <span className={`block text-[13px] ${n.readAt ? "text-ink-2" : "font-semibold text-ink"}`}>{n.title}</span>
+                      {n.body && <span className="block text-[12px] text-muted">{n.body}</span>}
+                      <span className="block text-[11.5px] text-muted">{relTime(n.createdAt)}</span>
+                    </span>
+                    {!n.readAt && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent" aria-label="Unread" />}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="px-4 py-6 text-center text-[13px] text-muted">You&rsquo;re all caught up.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SampleNotifications() {
   const { clients } = useClients();
   const [open, setOpen] = useState(false);
   const [seen, setSeen] = useState<string[]>([]);

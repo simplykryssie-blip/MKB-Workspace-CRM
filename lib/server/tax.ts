@@ -11,6 +11,7 @@ import { all, badRequest, forbidden, HttpError, json, notFound, now, one, rateLi
 import { decryptField, encryptField } from "./crypto";
 import { audit, hasSensitivePerm, requirePermission, sendEmail, type Actor } from "./identity";
 import { assignmentSets, setIdentifier } from "./clients";
+import { notify } from "./notifications";
 
 type Row = { id: string; client_id: string; enrollment_id: string | null; tax_year: number; kind: TaxReturn["kind"]; form: TaxReturn["form"]; filing_status: string | null; states: string; status: TaxReturn["status"]; preparer_id: string; reviewer_id: string; due_at: string | null; extension: string | null; review_signoff: string | null; approval_signature_id: string | null; client_approved_at: string | null; organizer: string; checklist: string; efile: string; pricing: string; status_history: string; notes: string; activity: string; created_at: string; completed_at: string | null; rev: number };
 export type ReturnSnapshot = TaxReturn & { rev?: number };
@@ -122,7 +123,24 @@ export async function saveReturn(env: AppEnv, a: Actor, id: string, next: Return
   ]);
   if (!res[0].meta.changes) throw new HttpError(409, "Someone else updated this return. Reloading the latest version.", "conflict");
   if (changed.length) await audit(env.DB, a, { action: changed.includes("assignment") ? "Assignment change" : changed.includes("review sign-off") ? "Approval" : "Record update", resource: `Tax return ${id}`, department: "tax", meta: `Changed: ${[...new Set(changed)].join(", ")}` });
+  await returnNotices(env, a, cur, next);
   return load(env, a, id);
+}
+
+/** Bell notifications for what just happened on a return (names only, never tax details). */
+async function returnNotices(env: AppEnv, a: Actor, cur: TaxReturn, next: TaxReturn) {
+  const client = (await one<{ name: string }>(env.DB, "SELECT name FROM clients WHERE id = ?", cur.clientId))?.name ?? "A client";
+  const href = `/services/tax-preparation/returns/${cur.id}`;
+  const except = a.kind === "staff" ? a.member.id : undefined;
+  const year = cur.taxYear;
+  if (!cur.organizer?.submittedAt && next.organizer?.submittedAt && next.organizer.interview?.enteredBy !== "staff")
+    await notify(env, { module: "tax", exceptId: except }, { kind: "intake", title: `${client} submitted their ${year} tax interview`, href: `${href}#organizer` });
+  const was = new Set((cur.organizer?.followUps ?? []).filter((f) => f.status === "answered").map((f) => f.id));
+  const nowAnswered = (next.organizer?.followUps ?? []).filter((f) => f.status === "answered" && !was.has(f.id));
+  if (nowAnswered.length)
+    await notify(env, { module: "tax", exceptId: except }, { kind: "followup", title: `${client} answered ${nowAnswered.length === 1 ? "a follow-up question" : `${nowAnswered.length} follow-up questions`}`, href: `${href}#organizer` });
+  if (!cur.reviewSignoff && next.reviewSignoff)
+    await notify(env, { module: "tax", ownersOnly: true, exceptId: except }, { kind: "signoff", title: `${client}'s ${year} return was signed off by the reviewer`, body: "It's waiting for your final approval before e-filing.", href: `${href}#review` });
 }
 
 export async function saveFees(env: AppEnv, a: Actor, fees: FeeItem[]) {

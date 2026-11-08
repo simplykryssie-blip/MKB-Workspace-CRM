@@ -76,8 +76,14 @@ export function ReturnDetail({ id }: { id: string }) {
   const [waiveId, setWaiveId] = useState<string | null>(null);
 
   useEffect(() => {
-    const h = window.location.hash.slice(1) as Tab;
-    if (TABS.some((t) => t.key === h)) setTab(h);
+    const read = () => {
+      const h = window.location.hash.slice(1) as Tab;
+      if (TABS.some((t) => t.key === h)) setTab(h);
+    };
+    read();
+    // A bell link to another tab of this same return.
+    window.addEventListener("hashchange", read);
+    return () => window.removeEventListener("hashchange", read);
   }, []);
   const go = (t: Tab) => {
     setTab(t);

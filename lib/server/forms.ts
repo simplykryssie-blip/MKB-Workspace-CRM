@@ -8,6 +8,7 @@ import { FIELD_TYPES, MAP_TARGETS, slugify, type FormField, type LeadForm, type 
 import { digits, extractLead, publishIssues, validateSubmission, visibleFields } from "@/lib/forms/logic";
 import { all, badRequest, HttpError, json, notFound, now, one, rateLimit, run, str, addMinutes, type AppEnv } from "./core";
 import { randomId } from "./crypto";
+import { notify } from "./notifications";
 import { audit, requirePermission, type Actor } from "./identity";
 
 type FormRow = { id: string; name: string; slug: string; title: string; intro: string | null; status: LeadForm["status"]; fields: string; services: string; routing: string; thank_you: string; created_at: string; updated_at: string; published_at: string | null };
@@ -117,6 +118,7 @@ async function process(env: AppEnv, f: LeadForm, raw: Record<string, unknown>, c
   const client = await one<{ id: string }>(db, `SELECT id FROM clients WHERE (? != '' AND email = ?) OR (length(?) = 10 AND ${norm} = ?) LIMIT 1`, L.email, L.email, phoneDigits, phoneDigits);
   if (client) {
     await db.batch([save("existing_client", undefined, client.id), db.prepare("INSERT INTO client_activity (id, client_id, kind, text, actor, at) VALUES (?, ?, 'message', ?, 'client', ?)").bind(randomId("x"), client.id, `Submitted the “${f.name}” form`, t)]);
+    if (channel !== "Staff test") await notify(env, { module: "crm" }, { kind: "form", title: `A client submitted the “${f.name}” form`, href: `/clients/${client.id}#activity` });
     return { id: subId, outcome: "existing_client" as const, clientId: client.id };
   }
   const lead = await one<{ id: string; interests: string; owner_id: string }>(db, `SELECT id, interests, owner_id FROM leads WHERE status = 'open' AND ((? != '' AND email = ?) OR (length(?) = 10 AND ${norm} = ?)) LIMIT 1`, L.email, L.email, phoneDigits, phoneDigits);
@@ -128,6 +130,7 @@ async function process(env: AppEnv, f: LeadForm, raw: Record<string, unknown>, c
       db.prepare("INSERT INTO lead_activity (id, lead_id, kind, text, actor, at) VALUES (?, ?, 'lead', ?, 'client', ?)").bind(randomId("x"), lead.id, `Submitted the “${f.name}” form again`, t),
       db.prepare("UPDATE leads SET interests = ?, rev = rev + 1, last_activity_at = ? WHERE id = ?").bind(JSON.stringify(interests), t, lead.id),
     ]);
+    if (channel !== "Staff test") await notify(env, { module: "leads" }, { kind: "form", title: `An open lead submitted the “${f.name}” form again`, href: `/leads/${lead.id}` });
     return { id: subId, outcome: "existing_lead" as const, leadId: lead.id };
   }
   // New lead, routed by the form's settings (falling back safely if the owner or stage changed).
@@ -144,6 +147,7 @@ async function process(env: AppEnv, f: LeadForm, raw: Record<string, unknown>, c
     save("new_lead", leadId),
   ]);
   await audit(db, { kind: "anonymous", ip }, { action: "Record update", resource: `Lead ${leadId}`, meta: `Created from the “${f.name}” form (${channel})` });
+  if (channel !== "Staff test") await notify(env, { module: "leads" }, { kind: "lead", title: `New lead: ${(L.bizName || L.name || "Website visitor").slice(0, 80)}`, body: `From the “${f.name}” form`, href: `/leads/${leadId}` });
   return { id: subId, outcome: "new_lead" as const, leadId };
 }
 
