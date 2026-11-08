@@ -173,7 +173,9 @@ function EmailsEditor() {
   };
   useEffect(load, []);
   const cur = list?.find((t) => t.key === key);
-  useEffect(() => { if (cur) setW({ ...cur.wording }); }, [cur]);
+  // Reset the form only when switching emails or after a save — not when the list reloads.
+  const curStamp = cur ? `${cur.key}|${cur.updatedAt ?? ""}|${cur.custom}` : "";
+  useEffect(() => { if (cur) setW({ ...cur.wording }); }, [curStamp]); // eslint-disable-line react-hooks/exhaustive-deps
   const html = useMemo(() => (w ? renderEmail({ wording: w, docsTitle: EMAIL_TEMPLATES[key].docsTitle, vars: SAMPLE, documents: ["Forms W-2 from each employer", "Year-end inventory count or report"], buttonUrl: "#", logoUrl: "/brand/mkb-seal-192.png" }) : null), [w, key]);
   const dirty = !!cur && !!w && JSON.stringify(w) !== JSON.stringify(cur.wording);
 
