@@ -30,7 +30,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { ServiceTag } from "@/components/ui/ServiceTag";
 import { useToast } from "@/components/ui/Toast";
 import { SERVICES, SERVICE_ORDER } from "@/lib/sample-data";
-import { SAMPLE_NOW, STAFF, staffById } from "@/lib/sample/clients";
+import { SAMPLE_NOW, STAFF, staffById, staffList } from "@/lib/sample/clients";
 import { PRIORITY_ORDER, followUpBucket, nextFollowUp, type FollowUpBucket } from "@/lib/sample/leads";
 import { useClients } from "@/lib/store/clients-store";
 import { useLeads } from "@/lib/store/leads-store";
@@ -218,7 +218,7 @@ export function LeadsPage() {
             <Sel label="Status" value={status} onChange={(v) => setStatus(v as LeadStatus | "all")} options={[["open", "Open"], ["converted", "Converted"], ["lost", "Lost"], ["all", "All statuses"]]} />
             {view === "list" && <Sel label="Stage" value={stage} onChange={setStage} options={[["all", "All stages"], ...stages.map((s) => [s.id, s.name] as [string, string])]} />}
             <Sel label="Source" value={source} onChange={setSource} options={[["all", "All sources"], ...[...new Set([...sources, ...leads.map((l) => l.source)])].map((s) => [s, s] as [string, string])]} />
-            <Sel label="Assigned to" value={owner} onChange={setOwner} options={[["all", "All staff"], ...STAFF.map((s) => [s.id, s.name] as [string, string])]} />
+            <Sel label="Assigned to" value={owner} onChange={setOwner} options={[["all", "All staff"], ...staffList().map((s) => [s.id, s.name] as [string, string])]} />
             <Sel label="Priority" value={priority} onChange={(v) => setPriority(v as LeadPriority | "all")} options={[["all", "Any priority"], ["urgent", "Urgent"], ["high", "High"], ["medium", "Medium"], ["low", "Low"]]} />
             <Sel label="Follow-up" value={follow} onChange={(v) => setFollow(v as typeof follow)} options={[["all", "Any follow-up"], ["due", "Due (overdue + today)"], ["overdue", "Overdue"], ["today", "Today"], ["week", "Next 7 days"], ["none", "None scheduled"]]} />
             <Sel label="Type" value={type} onChange={(v) => setType(v as typeof type)} options={[["all", "All types"], ["individual", "Individuals"], ["business", "Businesses"]]} />
@@ -283,7 +283,7 @@ export function LeadsPage() {
           {selected.length > 0 && (
             <div className="sticky top-16 z-10 flex flex-wrap items-center gap-2 rounded-t-2xl border-b border-line bg-accent-soft px-4 py-2.5 lg:top-[72px]">
               <span className="text-[13px] font-semibold text-accent-ink">{selected.length} selected</span>
-              <BulkSelect label="Assign to…" options={STAFF.map((s) => [s.id, s.name])} onPick={(v) => { store.setOwner(selected, v); toast(`Assigned ${selected.length} lead(s) to ${staffById(v).name}`); }} />
+              <BulkSelect label="Assign to…" options={staffList().map((s) => [s.id, s.name])} onPick={(v) => { store.setOwner(selected, v); toast(`Assigned ${selected.length} lead(s) to ${staffById(v).name}`); }} />
               <BulkSelect label="Move to stage…" options={stages.map((s) => [s.id, s.name])} onPick={(v) => moveTo(selected, v)} />
               <BulkSelect label="Set priority…" options={[["urgent", "Urgent"], ["high", "High"], ["medium", "Medium"], ["low", "Low"]]} onPick={(v) => { store.setPriority(selected, v as LeadPriority); toast(`Priority updated on ${selected.length} lead(s)`); }} />
               <Button size="sm" onClick={() => setLostIds(selected.filter((id) => leads.find((l) => l.id === id)?.status === "open"))}>Mark lost</Button>

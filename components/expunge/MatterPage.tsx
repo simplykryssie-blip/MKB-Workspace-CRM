@@ -14,7 +14,7 @@ import { useToast } from "@/components/ui/Toast";
 import { PaymentDialog } from "@/components/crm/dialogs";
 import { FeeBreakdown } from "@/components/biz/BizBits";
 import { FilePicker } from "@/components/biz/BizDialogs";
-import { STAFF, staffById } from "@/lib/sample/clients";
+import { STAFF, staffById, staffList } from "@/lib/sample/clients";
 import { useClients } from "@/lib/store/clients-store";
 import { matterCases, useExp } from "@/lib/store/exp-store";
 import { ACKNOWLEDGMENTS, ASSIGNMENT_ROLES, COMPLEXITY, FEE_KIND, INTAKE_META, chargeCount, type Complexity, type ExpMatter, type FeeKind, type InfoRequest, type Tri } from "@/lib/expunge/config";
@@ -390,7 +390,7 @@ function TeamTab({ m }: { m: ExpMatter }) {
       <Card>
         <CardHeader icon={Users} title="Staff assignments" subtitle="Owner-controlled" />
         <div className="grid gap-3 px-5 pb-5 sm:grid-cols-2 sm:px-6">
-          {ASSIGNMENT_ROLES.map((r) => <SelectField key={r} id={`as-${r}`} label={r} value={m.assignments[r]} disabled={!exp.can.admin} onChange={(e) => { exp.assign(m.id, r, e.target.value); toast(`${r}: ${staffById(e.target.value).name}`); }} options={STAFF.map((s) => [s.id, s.name] as [string, string])} />)}
+          {ASSIGNMENT_ROLES.map((r) => <SelectField key={r} id={`as-${r}`} label={r} value={m.assignments[r]} disabled={!exp.can.admin} onChange={(e) => { exp.assign(m.id, r, e.target.value); toast(`${r}: ${staffById(e.target.value).name}`); }} options={staffList().map((s) => [s.id, s.name] as [string, string])} />)}
         </div>
       </Card>
       <Card>

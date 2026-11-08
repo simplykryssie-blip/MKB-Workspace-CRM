@@ -8,7 +8,7 @@ import { Checkbox, Label, SelectField, TextArea, TextField } from "@/components/
 import { AddressFields, DOBInput, EINInput, EmailInput, PhoneInput, ResponsiblePartyFields, TaxIdInput } from "@/components/ui/FormattedInputs";
 import { useToast } from "@/components/ui/Toast";
 import { SERVICES, SERVICE_ORDER } from "@/lib/sample-data";
-import { SAMPLE_NOW, STAFF, meId } from "@/lib/sample/clients";
+import { SAMPLE_NOW, STAFF, meId, staffList } from "@/lib/sample/clients";
 import { LOST_REASONS } from "@/lib/sample/leads";
 import { defaultTitleFor, useClients } from "@/lib/store/clients-store";
 import { useLeads, type NewLeadInput } from "@/lib/store/leads-store";
@@ -170,7 +170,7 @@ export function LeadFormFields({ f, set, mode, submitted }: { f: LeadFormValue; 
           <SelectField id="lead-source" label="Lead source" value={f.source} onChange={(ev) => set({ source: ev.target.value })} options={[...new Set([...sources, f.source])].map((s) => [s, s])} />
           <TextField id="lead-source-detail" label="Source detail" hint="Referrer, campaign…" value={f.sourceDetail} onChange={(ev) => set({ sourceDetail: ev.target.value })} placeholder="e.g. Referred by a current client" />
           {mode === "new" && <SelectField id="lead-stage" label="Stage" value={f.stageId} onChange={(ev) => set({ stageId: ev.target.value })} options={stages.map((s) => [s.id, s.name])} />}
-          <SelectField id="lead-owner" label="Assigned to" value={f.ownerId} onChange={(ev) => set({ ownerId: ev.target.value })} options={STAFF.map((s) => [s.id, s.name])} />
+          <SelectField id="lead-owner" label="Assigned to" value={f.ownerId} onChange={(ev) => set({ ownerId: ev.target.value })} options={staffList().map((s) => [s.id, s.name])} />
           <SelectField id="lead-priority" label="Priority" value={f.priority} onChange={(ev) => set({ priority: ev.target.value as LeadPriority })} options={[["urgent", "Urgent"], ["high", "High"], ["medium", "Medium"], ["low", "Low"]]} />
           <div>
             <TextField id="lead-value" label="Estimated value ($)" type="number" min={0} inputMode="decimal" value={f.estValue} onChange={(ev) => set({ estValue: ev.target.value })} />
@@ -287,7 +287,7 @@ export function ReminderDialog({ lead, open, onClose }: { lead: Lead; open: bool
           <TextField id="rem-time" label="Time" type="time" step={900} value={time} onChange={(e) => setTime(e.target.value)} />
         </div>
         <TextField id="rem-note" label="What's the follow-up?" required value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Send quote, confirm consultation" />
-        <SelectField label="Remind" value={owner} onChange={(e) => setOwner(e.target.value)} options={STAFF.map((s) => [s.id, s.name])} />
+        <SelectField label="Remind" value={owner} onChange={(e) => setOwner(e.target.value)} options={staffList().map((s) => [s.id, s.name])} />
       </div>
     </Modal>
   );
@@ -703,7 +703,7 @@ export function ConvertDialog({ lead, open, onClose, onConverted }: { lead: Lead
         <section className="space-y-3">
           <h3 className="text-[13px] font-semibold uppercase tracking-wide text-muted">Assignment</h3>
           <div className="flex flex-wrap gap-2">
-            {STAFF.map((s) => {
+            {staffList().map((s) => {
               const on = f.staffIds.includes(s.id);
               return (
                 <button key={s.id} type="button" aria-pressed={on} onClick={() => set({ staffIds: toggle(f.staffIds, s.id) })} className={`rounded-full border px-3 py-1.5 text-[13px] font-medium ${on ? "border-accent bg-accent-soft text-accent-ink" : "border-line text-ink-2 hover:bg-surface-hover"}`}>

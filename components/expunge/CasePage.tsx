@@ -14,7 +14,7 @@ import { Breadcrumbs } from "@/components/ui/PageHeader";
 import { useToast } from "@/components/ui/Toast";
 import { downloadPlaceholder } from "@/components/crm/dialogs";
 import { FilePicker } from "@/components/biz/BizDialogs";
-import { STAFF, SAMPLE_NOW, staffById, meId } from "@/lib/sample/clients";
+import { STAFF, SAMPLE_NOW, staffById, meId, staffList } from "@/lib/sample/clients";
 import { useClients } from "@/lib/store/clients-store";
 import { useExp } from "@/lib/store/exp-store";
 import { CASE_FLOW, CASE_STATUSES, PREP_META, RECORD_METHODS, RECORD_META, SCREENING_OUTCOMES, chargeCount, verifiedLabel, type CaseStatus, type ExpCase, type ExpMatter, type Jurisdiction, type ScreeningOutcome } from "@/lib/expunge/config";
@@ -34,7 +34,8 @@ const TABS = [
 type Tab = (typeof TABS)[number]["key"];
 const toFiles = (fs: File[]) => fs.map((f) => ({ name: f.name.replace(/\.[^.]+$/, ""), sizeKb: Math.max(1, Math.round(f.size / 1024)) }));
 const today = () => SAMPLE_NOW.toISOString().slice(0, 10);
-const staffOpts = STAFF.map((s) => [s.id, s.name] as [string, string]);
+/** Read at render time, so it lists the real team once it has loaded. */
+const staffOptsNow = () => staffList().map((s) => [s.id, s.name] as [string, string]);
 
 export function CasePage({ id }: { id: string }) {
   const exp = useExp();
@@ -78,7 +79,7 @@ export function CasePage({ id }: { id: string }) {
           <div className="flex flex-wrap items-start gap-2 lg:justify-end">
             <RoleSwitcher />
             {c.draft && <Button size="sm" variant="primary" icon={ShieldCheck} disabled={!exp.can.edit || !c.remedyId} title={!c.remedyId ? "Choose the workflow on Case & charges first" : undefined} onClick={() => { exp.reviewIntake(m.id, "s-jp"); toast("Client entry reviewed — case opened"); }}>Review client entry & open case</Button>}
-            <label className="block"><span className="sr-only">Assigned staff</span><select aria-label="Assigned staff" disabled={!exp.can.edit} value={c.assignedTo} onChange={(e) => { exp.assignCase(c.id, e.target.value); toast(`Assigned to ${staffById(e.target.value).name}`); }} className="h-8 rounded-xl border border-line bg-surface px-2 text-[13px] text-ink">{STAFF.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+            <label className="block"><span className="sr-only">Assigned staff</span><select aria-label="Assigned staff" disabled={!exp.can.edit} value={c.assignedTo} onChange={(e) => { exp.assignCase(c.id, e.target.value); toast(`Assigned to ${staffById(e.target.value).name}`); }} className="h-8 rounded-xl border border-line bg-surface px-2 text-[13px] text-ink">{staffList().map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
             <Menu label="Case actions" trigger={({ toggle }) => <Button size="sm" icon={MoreHorizontal} onClick={toggle} aria-label="Case actions">More</Button>} items={[
               c.status === "On Hold" ? { label: "Resume", icon: Play, onSelect: () => { exp.resume(c.id); toast("Resumed"); } } : { label: "Put on hold…", icon: Pause, onSelect: () => setDlg("hold"), disabled: closed || !exp.can.edit },
               { label: "Change status (override)…", icon: RotateCcw, onSelect: () => setDlg("override"), disabled: !exp.can.edit },
@@ -373,7 +374,7 @@ function ScreeningTab({ c, j }: { c: ExpCase; j?: Jurisdiction }) {
         <div className="space-y-4">
           <SelectField id="rv-outcome" label="Outcome" value={r.outcome} onChange={(e) => { setR({ ...r, outcome: e.target.value as ScreeningOutcome }); setBlockers([]); }} options={SCREENING_OUTCOMES.map((x) => [x, x])} />
           <div className="grid gap-4 sm:grid-cols-2">
-            <SelectField id="rv-by" label="Recorded by" value={r.byId} onChange={(e) => setR({ ...r, byId: e.target.value })} options={staffOpts} />
+            <SelectField id="rv-by" label="Recorded by" value={r.byId} onChange={(e) => setR({ ...r, byId: e.target.value })} options={staffOptsNow()} />
             <TextField id="rv-name" label="Qualified legal reviewer (if any)" value={r.reviewerName} onChange={(e) => setR({ ...r, reviewerName: e.target.value })} placeholder="Attorney or qualified reviewer name" />
           </div>
           <Checkbox label="This review was performed by an attorney or qualified legal reviewer" checked={r.legal} onChange={() => setR({ ...r, legal: !r.legal })} />
@@ -432,8 +433,8 @@ function DocsTab({ c }: { c: ExpCase }) {
             <CardHeader icon={ShieldCheck} title="Workflow" />
             <div className="space-y-3 px-5 pb-5 sm:px-6">
               <div className="grid grid-cols-2 gap-3">
-                <SelectField id="pp-prep" label="Assigned preparer" value={p.preparerId} onChange={(e) => exp.updatePrep(c.id, { preparerId: e.target.value })} options={staffOpts} />
-                <SelectField id="pp-rev" label="Quality reviewer" value={p.reviewerId} onChange={(e) => exp.updatePrep(c.id, { reviewerId: e.target.value })} options={staffOpts} />
+                <SelectField id="pp-prep" label="Assigned preparer" value={p.preparerId} onChange={(e) => exp.updatePrep(c.id, { preparerId: e.target.value })} options={staffOptsNow()} />
+                <SelectField id="pp-rev" label="Quality reviewer" value={p.reviewerId} onChange={(e) => exp.updatePrep(c.id, { reviewerId: e.target.value })} options={staffOptsNow()} />
               </div>
               {p.reviewerId === p.preparerId && <p className="rounded-xl bg-warning-soft px-3 py-2 text-[12.5px] text-warning-ink">The reviewer also prepared the documents — a second reviewer is recommended.</p>}
               <dl className="space-y-1 text-[13px]">

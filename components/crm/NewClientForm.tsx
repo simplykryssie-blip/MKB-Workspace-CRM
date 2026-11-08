@@ -11,7 +11,7 @@ import { AddressFields, DOBInput, EINInput, EmailInput, PhoneInput, ResponsibleP
 import { ServiceTag } from "@/components/ui/ServiceTag";
 import { useToast } from "@/components/ui/Toast";
 import { SERVICES, SERVICE_ORDER } from "@/lib/sample-data";
-import { STAFF } from "@/lib/sample/clients";
+import { STAFF, staffList } from "@/lib/sample/clients";
 import { useClients } from "@/lib/store/clients-store";
 import {
   digits,
@@ -284,7 +284,7 @@ export function NewClientForm() {
             <fieldset>
               <legend className="mb-2 text-[13px] font-medium text-ink-2">Assigned staff</legend>
               <div className="flex flex-wrap gap-2">
-                {STAFF.map((s) => {
+                {staffList().map((s) => {
                   const on = staff.includes(s.id);
                   return (
                     <button key={s.id} type="button" aria-pressed={on} onClick={() => setStaff((x) => toggle(x, s.id))} className={`rounded-full border px-3 py-1.5 text-[13px] font-medium ${on ? "border-accent bg-accent-soft text-accent-ink" : "border-line text-ink-2 hover:bg-surface-hover"}`}>

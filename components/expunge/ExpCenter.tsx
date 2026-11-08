@@ -12,7 +12,7 @@ import { Modal } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useToast } from "@/components/ui/Toast";
 import { Kpi } from "@/components/biz/BizBits";
-import { STAFF, SAMPLE_NOW, staffById, meId } from "@/lib/sample/clients";
+import { STAFF, SAMPLE_NOW, staffById, meId, staffList } from "@/lib/sample/clients";
 import { useClients } from "@/lib/store/clients-store";
 import { matterCases, useExp } from "@/lib/store/exp-store";
 import { ASSIGNMENT_ROLES, CASE_STATUSES, COMPLEXITY, EXP_ROLES, RELEASE_STATES, PHASES, RECORD_META, SCREENING_OUTCOMES, chargeCount, verifiedLabel, type Complexity, type ExpMatter, type Jurisdiction, type Phase } from "@/lib/expunge/config";
@@ -98,7 +98,7 @@ function NewInquiryDialog({ open, onClose }: { open: boolean; onClose: () => voi
   const router = useRouter();
   const [clientId, setClientId] = useState("");
   const [source, setSource] = useState<ExpMatter["source"]>("phone");
-  const [staff, setStaff] = useState("s-jp");
+  const [staff, setStaff] = useState(meId());
   const [note, setNote] = useState("");
   const [tried, setTried] = useState(false);
   useEffect(() => {
@@ -114,7 +114,7 @@ function NewInquiryDialog({ open, onClose }: { open: boolean; onClose: () => voi
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <SelectField id="ni-source" label="Source" value={source} onChange={(e) => setSource(e.target.value as ExpMatter["source"])} options={[["phone", "Phone"], ["website", "Website"], ["referral", "Referral"], ["staff", "Walk-in / staff"]]} />
-          <SelectField id="ni-staff" label="Intake reviewer" value={staff} onChange={(e) => setStaff(e.target.value)} options={STAFF.map((s) => [s.id, s.name] as [string, string])} />
+          <SelectField id="ni-staff" label="Intake reviewer" value={staff} onChange={(e) => setStaff(e.target.value)} options={staffList().map((s) => [s.id, s.name] as [string, string])} />
         </div>
         <TextArea id="ni-note" label="Internal note (MKB only)" value={note} onChange={(e) => setNote(e.target.value)} placeholder="What did the client ask about? Don't record charge details here." />
         <NotLegalAdvice compact />
@@ -159,7 +159,7 @@ function Overview({ byId }: { byId: Map<string, Client> }) {
         <CardHeader icon={ClipboardList} title="Work queue" subtitle={`${phase === "all" ? "All matters" : phase} · ${rows.length} · soonest deadline first`} action={
           <div className="flex flex-wrap items-center gap-2">
             {phase !== "all" && <button onClick={() => setPhase("all")} className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-[12.5px] font-semibold text-accent hover:bg-accent-soft"><X size={13} /> {phase}</button>}
-            <select aria-label="Assigned staff" value={staff} onChange={(e) => setStaff(e.target.value)} className="h-8 rounded-lg border border-line bg-surface px-2 text-[13px] text-ink-2"><option value="all">All staff</option>{STAFF.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+            <select aria-label="Assigned staff" value={staff} onChange={(e) => setStaff(e.target.value)} className="h-8 rounded-lg border border-line bg-surface px-2 text-[13px] text-ink-2"><option value="all">All staff</option>{staffList().map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
           </div>
         } />
         <div className="overflow-x-auto border-t border-line">
@@ -240,7 +240,7 @@ function CasesTab({ byId }: { byId: Map<string, Client> }) {
         <select aria-label="Workflow" value={remedy} onChange={(e) => setRemedy(e.target.value)} className={sel}><option value="all">All workflows</option>{exp.jurisdictions.flatMap((j) => j.remedies).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}<option value="none">Workflow not set</option></select>
         <select aria-label="Filing status" value={status} onChange={(e) => setStatus(e.target.value)} className={sel}><option value="all">All filing statuses</option>{CASE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select>
         <select aria-label="Screening outcome" value={outcome} onChange={(e) => setOutcome(e.target.value)} className={sel}><option value="all">All screening outcomes</option>{SCREENING_OUTCOMES.map((s) => <option key={s} value={s}>{s}</option>)}</select>
-        <select aria-label="Assigned staff" value={staff} onChange={(e) => setStaff(e.target.value)} className={sel}><option value="all">All staff</option>{STAFF.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+        <select aria-label="Assigned staff" value={staff} onChange={(e) => setStaff(e.target.value)} className={sel}><option value="all">All staff</option>{staffList().map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
       </div>
       <p className="px-4 pb-2 text-[12.5px] text-muted sm:px-6">Showing {rows.length} of {exp.cases.length} cases · each arrest or court case has its own record</p>
       <div className="overflow-x-auto border-t border-line">
@@ -587,7 +587,7 @@ function TeamTab({ byId }: { byId: Map<string, Client> }) {
               {exp.matters.map((m) => (
                 <tr key={m.id} className="border-b border-line last:border-0">
                   <td className="px-5 py-2.5"><Link href={matterHref(m)} className="font-medium text-ink hover:text-accent">{byId.get(m.clientId)?.name}</Link><div className="text-[11.5px] text-muted">{m.number}</div></td>
-                  {ASSIGNMENT_ROLES.map((r) => <td key={r} className="px-2 py-2.5"><select aria-label={`${m.number} ${r}`} disabled={!exp.can.admin} value={m.assignments[r]} onChange={(e) => { exp.assign(m.id, r, e.target.value); toast(`${r}: ${staffById(e.target.value).name}`); }} className="h-8 w-full rounded-lg border border-line bg-surface px-1.5 text-[12.5px] text-ink">{STAFF.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></td>)}
+                  {ASSIGNMENT_ROLES.map((r) => <td key={r} className="px-2 py-2.5"><select aria-label={`${m.number} ${r}`} disabled={!exp.can.admin} value={m.assignments[r]} onChange={(e) => { exp.assign(m.id, r, e.target.value); toast(`${r}: ${staffById(e.target.value).name}`); }} className="h-8 w-full rounded-lg border border-line bg-surface px-1.5 text-[12.5px] text-ink">{staffList().map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></td>)}
                 </tr>
               ))}
             </tbody>

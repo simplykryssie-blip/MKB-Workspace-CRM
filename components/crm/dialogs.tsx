@@ -10,7 +10,7 @@ import { Checkbox, SelectField, TextArea, TextField, Label } from "@/components/
 import { useToast } from "@/components/ui/Toast";
 import { DEFAULT_FEES, DEFAULT_TITLES, useClients, nowIso } from "@/lib/store/clients-store";
 import { SERVICES, SERVICE_ORDER } from "@/lib/sample-data";
-import { STAFF, SAMPLE_NOW } from "@/lib/sample/clients";
+import { STAFF, SAMPLE_NOW, staffList } from "@/lib/sample/clients";
 import { fileSize, fmtDate, usd } from "@/lib/format";
 import type { Client, ClientDocument, ServiceKey } from "@/lib/types";
 
@@ -170,7 +170,7 @@ export function EditClientDialog({ client: c, open, onClose }: DialogProps) {
           <fieldset>
             <Label required>Assigned staff</Label>
             <div className="flex flex-wrap gap-2">
-              {STAFF.map((s) => {
+              {staffList().map((s) => {
                 const on = f.staffIds.includes(s.id);
                 return (
                   <button key={s.id} type="button" aria-pressed={on} onClick={() => toggleStaff(s.id)} className={`rounded-full border px-3 py-1.5 text-[13px] font-medium ${on ? "border-accent bg-accent-soft text-accent-ink" : "border-line text-ink-2 hover:bg-surface-hover"}`}>
@@ -248,7 +248,7 @@ export function EnrollDialog({ client: c, open, onClose, initial }: DialogProps 
         </div>
         <TextField label="Engagement title" required value={title} onChange={(e) => setTitle(e.target.value)} />
         <div className="grid gap-4 sm:grid-cols-3">
-          <SelectField label="Assigned to" value={staffId} onChange={(e) => setStaffId(e.target.value)} options={STAFF.map((s) => [s.id, s.name])} />
+          <SelectField label="Assigned to" value={staffId} onChange={(e) => setStaffId(e.target.value)} options={staffList().map((s) => [s.id, s.name])} />
           <TextField label="Fee ($)" type="number" min={0} value={fee} onChange={(e) => setFee(e.target.value)} />
           <TextField label="Due date" type="date" value={due} onChange={(e) => setDue(e.target.value)} />
         </div>
@@ -445,7 +445,7 @@ export function ScheduleDialog({ client: c, open, onClose }: DialogProps) {
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2"><TextField label="Title" required value={title} onChange={(e) => setTitle(e.target.value)} /></div>
         <SelectField label="Service" value={service} onChange={(e) => setService(e.target.value as ServiceKey)} options={svcOptions(svcs)} />
-        <SelectField label="With" value={staffId} onChange={(e) => setStaffId(e.target.value)} options={STAFF.map((s) => [s.id, s.name])} />
+        <SelectField label="With" value={staffId} onChange={(e) => setStaffId(e.target.value)} options={staffList().map((s) => [s.id, s.name])} />
         <TextField label="Date" type="date" required value={date} onChange={(e) => setDate(e.target.value)} />
         <TextField label="Time" type="time" required value={time} onChange={(e) => setTime(e.target.value)} step={900} />
         <SelectField label="Duration" value={duration} onChange={(e) => setDuration(e.target.value)} options={[["15", "15 min"], ["30", "30 min"], ["45", "45 min"], ["60", "1 hour"], ["90", "1.5 hours"]]} />

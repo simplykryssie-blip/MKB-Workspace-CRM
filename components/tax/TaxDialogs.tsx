@@ -7,7 +7,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Checkbox, Label, SelectField, TextArea, TextField } from "@/components/ui/Field";
 import { useToast } from "@/components/ui/Toast";
-import { STAFF, SAMPLE_NOW, staffById, meId } from "@/lib/sample/clients";
+import { STAFF, SAMPLE_NOW, staffById, meId, staffList } from "@/lib/sample/clients";
 import { TAX_YEARS } from "@/lib/sample/tax";
 import { useClients } from "@/lib/store/clients-store";
 import { billing, useTax } from "@/lib/store/tax-store";
@@ -32,7 +32,7 @@ export function NewReturnDialog({ open, onClose, defaultYear, clientId: presetCl
   const [year, setYear] = useState(defaultYear);
   const [form, setForm] = useState<TaxForm>("1040");
   const [filingStatus, setFilingStatus] = useState<FilingStatus>("Single");
-  const [preparer, setPreparer] = useState("s-al");
+  const [preparer, setPreparer] = useState(meId());
   const [reviewer, setReviewer] = useState(meId());
   const [states, setStates] = useState<string[]>(["GA"]);
   const [extension, setExtension] = useState(false);
@@ -76,8 +76,8 @@ export function NewReturnDialog({ open, onClose, defaultYear, clientId: presetCl
           <SelectField id="nr-year" label="Tax year" value={String(year)} onChange={(e) => setYear(Number(e.target.value))} options={TAX_YEARS.map((y) => [String(y), String(y)])} />
           <SelectField id="nr-form" label="Return" value={form} onChange={(e) => setForm(e.target.value as TaxForm)} options={(client ? formsFor(client.type) : formsFor("individual")).map((f) => [f, FORM_LABEL[f]])} />
           {client?.type !== "business" && <SelectField id="nr-fs" label="Filing status" value={filingStatus} onChange={(e) => setFilingStatus(e.target.value as FilingStatus)} options={FILING_STATUSES.map((f) => [f, f])} />}
-          <SelectField id="nr-preparer" label="Preparer" value={preparer} onChange={(e) => setPreparer(e.target.value)} options={STAFF.map((s) => [s.id, s.name])} />
-          <SelectField id="nr-reviewer" label="Reviewer" value={reviewer} onChange={(e) => setReviewer(e.target.value)} options={STAFF.map((s) => [s.id, s.name])} />
+          <SelectField id="nr-preparer" label="Preparer" value={preparer} onChange={(e) => setPreparer(e.target.value)} options={staffList().map((s) => [s.id, s.name])} />
+          <SelectField id="nr-reviewer" label="Reviewer" value={reviewer} onChange={(e) => setReviewer(e.target.value)} options={staffList().map((s) => [s.id, s.name])} />
           <div>
             <Label>State returns</Label>
             <div className="flex flex-wrap gap-1.5">
@@ -134,7 +134,7 @@ export function SignOffDialog({ r, open, onClose }: { r: TaxReturn; open: boolea
   return (
     <Modal open={open} onClose={onClose} title="Reviewer sign-off" description={`TY ${r.taxYear} ${r.form}`} footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" icon={ShieldCheck} disabled={!checks.every(Boolean)} onClick={save}>Sign off</Button></>}>
       <div className="space-y-3">
-        <SelectField id="so-by" label="Reviewer" value={by} onChange={(e) => setBy(e.target.value)} options={STAFF.map((s) => [s.id, s.name])} />
+        <SelectField id="so-by" label="Reviewer" value={by} onChange={(e) => setBy(e.target.value)} options={staffList().map((s) => [s.id, s.name])} />
         {by === r.preparerId && <p className="rounded-xl bg-warning-soft px-3 py-2 text-[12.5px] text-warning-ink">The reviewer is also the preparer on this return.</p>}
         {SIGNOFF_CHECKS.map((c, i) => (
           <Checkbox key={c} label={c} checked={checks[i]} onChange={() => setChecks((x) => x.map((v, j) => (j === i ? !v : v)))} />

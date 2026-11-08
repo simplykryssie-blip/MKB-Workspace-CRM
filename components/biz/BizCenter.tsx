@@ -38,7 +38,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useToast } from "@/components/ui/Toast";
 import { downloadPlaceholder } from "@/components/crm/dialogs";
-import { STAFF, SAMPLE_NOW, staffById } from "@/lib/sample/clients";
+import { STAFF, SAMPLE_NOW, staffById, staffList } from "@/lib/sample/clients";
 import { useClients } from "@/lib/store/clients-store";
 import { PAY_META, STANDING_META, deadlineSummary, dueState, entityStates, isClosed, nextReminder, nextStep, openInfo, payState, pendingReminders, useBiz, type PayState } from "@/lib/store/biz-store";
 import { CATEGORIES, COMPLIANCE_KIND, DOC_CATEGORIES, ENTITY_TYPES, FREQ_MONTHS, FREQUENCY, NATURE, REQUEST_STATUSES, STATES, daysBetween, dueLabel, ruleVerified, stateName, type CatalogService, type ComplianceRule, type RequestStatus, type ServiceRequest, type StateChecklist } from "@/lib/biz/config";
@@ -165,7 +165,7 @@ function Overview({ byId, bucket, setBucket, go }: { byId: Map<string, Client>; 
                 {bucket !== "all" && <button onClick={() => setBucket("all")} className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-[12.5px] font-semibold text-accent hover:bg-accent-soft"><X size={13} /> {BUCKETS[bucket].label}</button>}
                 <select aria-label="Assigned staff" value={staff} onChange={(e) => setStaff(e.target.value)} className="h-8 rounded-lg border border-line bg-surface px-2 text-[13px] text-ink-2">
                   <option value="all">All staff</option>
-                  {STAFF.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  {staffList().map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </div>
             }
@@ -256,7 +256,7 @@ function RequestsTab({ byId, onNew }: { byId: Map<string, Client>; onNew: () => 
         </select>
         <select aria-label="Staff" value={staff} onChange={(e) => setStaff(e.target.value)} className="h-10 rounded-xl border border-line bg-surface px-2.5 text-[13.5px] text-ink-2">
           <option value="all">All staff</option>
-          {STAFF.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          {staffList().map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
         <select aria-label="Payment status" value={pay} onChange={(e) => setPay(e.target.value as typeof pay)} className="h-10 rounded-xl border border-line bg-surface px-2.5 text-[13.5px] text-ink-2">
           <option value="all">Any payment status</option>
@@ -399,7 +399,7 @@ function CalendarTab({ byId }: { byId: Map<string, Client> }) {
           </select>
           <select aria-label="Entity type" value={etype} onChange={(e) => setEtype(e.target.value)} className={sel}><option value="all">All entity types</option>{ENTITY_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}</select>
           {view === "agenda" && <select aria-label="Deadline" value={win} onChange={(e) => setWin(e.target.value)} className={sel}><option value="overdue">Overdue</option><option value="30">Next 30 days</option><option value="60">Next 60 days</option><option value="90">Next 90 days</option><option value="180">Next 6 months</option><option value="365">Next 12 months</option><option value="all">All upcoming</option></select>}
-          <select aria-label="Assigned staff" value={staff} onChange={(e) => setStaff(e.target.value)} className={sel}><option value="all">All staff</option>{STAFF.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+          <select aria-label="Assigned staff" value={staff} onChange={(e) => setStaff(e.target.value)} className={sel}><option value="all">All staff</option>{staffList().map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
           <select aria-label="Requirement type" value={kind} onChange={(e) => setKind(e.target.value)} className={sel}><option value="all">All requirement types</option>{Object.entries(COMPLIANCE_KIND).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
           {filtered && <button onClick={() => { setState("all"); setEtype("all"); setWin("90"); setStaff("all"); setKind("all"); }} className="inline-flex h-9 items-center gap-1 px-2 text-[12.5px] font-semibold text-accent"><X size={13} /> Clear</button>}
         </div>
@@ -524,7 +524,7 @@ function ComplianceTab({ byId }: { byId: Map<string, Client> }) {
             <select aria-label="Window" value={win} onChange={(e) => setWin(e.target.value)} className={sel}><option value="overdue">Overdue</option><option value="30">Next 30 days</option><option value="60">Next 60 days</option><option value="90">Next 90 days</option><option value="all">All upcoming</option></select>
             <select aria-label="State filter" value={state} onChange={(e) => setState(e.target.value)} className={sel}><option value="all">All states</option>{STATES.map(([c, n]) => <option key={c} value={c}>{c} — {n}</option>)}<option value="LOCAL">Local / provider</option></select>
             <select aria-label="Requirement type" value={kind} onChange={(e) => setKind(e.target.value)} className={sel}><option value="all">All types</option>{Object.entries(COMPLIANCE_KIND).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
-            <select aria-label="Responsible staff" value={staff} onChange={(e) => setStaff(e.target.value)} className={sel}><option value="all">All staff</option>{STAFF.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+            <select aria-label="Responsible staff" value={staff} onChange={(e) => setStaff(e.target.value)} className={sel}><option value="all">All staff</option>{staffList().map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
           </div>
         } />
         <div className="overflow-x-auto border-t border-line">

@@ -35,7 +35,7 @@ import { Breadcrumbs } from "@/components/ui/PageHeader";
 import { ServiceTag } from "@/components/ui/ServiceTag";
 import { useToast } from "@/components/ui/Toast";
 import { Timeline, kindMeta } from "@/components/crm/ProfileTabs";
-import { SAMPLE_NOW, STAFF, staffById } from "@/lib/sample/clients";
+import { SAMPLE_NOW, STAFF, staffById, staffList } from "@/lib/sample/clients";
 import { useClients } from "@/lib/store/clients-store";
 import { useLead, useLeads } from "@/lib/store/leads-store";
 import { fmtDate, fmtDateTime, relTime, usd } from "@/lib/format";
@@ -208,7 +208,7 @@ export function LeadDetail({ id }: { id: string }) {
             <dt className="text-[12px] text-muted">Assigned to</dt>
             <dd className="mt-1">
               <select aria-label="Assigned to" disabled={!open} value={l.ownerId} onChange={(e) => { store.setOwner(l.id, e.target.value); toast(`Assigned to ${staffById(e.target.value).name}`); }} className="h-9 w-full rounded-lg border border-line bg-surface px-2 text-[13.5px] font-medium text-ink disabled:opacity-70">
-                {STAFF.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                {staffList().map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </dd>
           </div>

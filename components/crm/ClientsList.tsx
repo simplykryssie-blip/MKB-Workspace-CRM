@@ -8,7 +8,7 @@ import { Avatar, AvatarStack } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { ServiceTag } from "@/components/ui/ServiceTag";
 import { SERVICES, SERVICE_ORDER } from "@/lib/sample-data";
-import { STAFF, balanceDue, openRequirements, staffById } from "@/lib/sample/clients";
+import { STAFF, balanceDue, openRequirements, staffById, staffList } from "@/lib/sample/clients";
 import { useClients } from "@/lib/store/clients-store";
 import { useTeam } from "@/lib/store/team-store";
 import { useToast } from "@/components/ui/Toast";
@@ -133,7 +133,7 @@ export function ClientsList() {
             </label>
             <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap">
             <Select label="Status" value={status} onChange={(v) => setStatus(v as typeof status)} options={[["all", "All statuses"], ["active", "Active"], ["onboarding", "Onboarding"], ["inactive", "Inactive"]]} />
-            <Select label="Assigned staff" value={staff} onChange={setStaff} options={[["all", "All staff"], ...STAFF.map((s) => [s.id, s.name] as [string, string])]} />
+            <Select label="Assigned staff" value={staff} onChange={setStaff} options={[["all", "All staff"], ...staffList().map((s) => [s.id, s.name] as [string, string])]} />
             <Select label="Client type" value={type} onChange={(v) => setType(v as typeof type)} options={[["all", "All types"], ["individual", "Individuals"], ["business", "Businesses"]]} />
             <Select label="Sort" icon value={sort} onChange={(v) => setSort(v as SortKey)} options={[["recent", "Recent"], ["name", "Name A–Z"], ["balance", "Balance due"]]} />
             </div>

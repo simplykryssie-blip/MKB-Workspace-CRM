@@ -44,7 +44,7 @@ import { Menu } from "@/components/ui/Menu";
 import { Breadcrumbs } from "@/components/ui/PageHeader";
 import { useToast } from "@/components/ui/Toast";
 import { PaymentDialog, downloadPlaceholder } from "@/components/crm/dialogs";
-import { STAFF, SAMPLE_NOW, staffById } from "@/lib/sample/clients";
+import { STAFF, SAMPLE_NOW, staffById, staffList } from "@/lib/sample/clients";
 import { useClients } from "@/lib/store/clients-store";
 import { isClosed, nextStep, openInfo, payState, paymentCleared, requestDocs, requestInvoices, requestMessages, useBiz } from "@/lib/store/biz-store";
 import { AGENCY_KIND, AGENT_TYPE, DELIVERABLE_META, DOC_CATEGORIES, EIN_STATUS, ENTITY_TYPES, NATURE, STATE_FILING, stateName, stateOptions, type DocCategory, type EinStatus, type EntityType, type FormationDetails, type InfoRequest, type ServiceRequest } from "@/lib/biz/config";
@@ -142,7 +142,7 @@ export function RequestWorkspace({ id }: { id: string }) {
             <label key={role} className="block">
               <span className="text-[12px] text-muted">{role === "assignedTo" ? "Assigned staff" : "Reviewer / approver"}</span>
               <select aria-label={role === "assignedTo" ? "Assigned staff" : "Reviewer"} value={r[role]} onChange={(e) => { biz.assign(r.id, role, e.target.value); toast(`${role === "assignedTo" ? "Assigned to" : "Reviewer:"} ${staffById(e.target.value).name}`); }} className="mt-1 h-9 w-full rounded-lg border border-line bg-surface px-2 text-[13.5px] font-medium text-ink">
-                {STAFF.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                {staffList().map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </label>
           ))}
@@ -519,7 +519,7 @@ function WorkTab({ r }: { r: ServiceRequest }) {
         <form className="grid gap-2 border-t border-line p-4 sm:grid-cols-[1fr_150px_150px_auto] sm:px-6" onSubmit={(e) => { e.preventDefault(); if (!title.trim()) return; biz.addTask(r.id, { title: title.trim(), dueAt: due ? new Date(`${due}T17:00`).toISOString() : undefined, assigneeId: who }); setTitle(""); setDue(""); toast("Task added"); }}>
           <input aria-label="New task" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="New task…" className="h-10 rounded-xl border border-line bg-surface px-3 text-[14px] text-ink" />
           <input aria-label="Task due date" type="date" value={due} onChange={(e) => setDue(e.target.value)} className="h-10 rounded-xl border border-line bg-surface px-2 text-[13.5px] text-ink" />
-          <select aria-label="Task assignee" value={who} onChange={(e) => setWho(e.target.value)} className="h-10 rounded-xl border border-line bg-surface px-2 text-[13.5px] text-ink">{STAFF.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+          <select aria-label="Task assignee" value={who} onChange={(e) => setWho(e.target.value)} className="h-10 rounded-xl border border-line bg-surface px-2 text-[13.5px] text-ink">{staffList().map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
           <Button type="submit" icon={Plus} disabled={!title.trim()}>Add</Button>
         </form>
       </Card>

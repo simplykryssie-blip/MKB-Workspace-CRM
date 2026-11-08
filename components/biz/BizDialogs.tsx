@@ -7,7 +7,7 @@ import { Checkbox, Label, SelectField, TextArea, TextField } from "@/components/
 import { EmailInput, PhoneInput } from "@/components/ui/FormattedInputs";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
-import { STAFF, SAMPLE_NOW, staffById, meId } from "@/lib/sample/clients";
+import { STAFF, SAMPLE_NOW, staffById, meId, staffList } from "@/lib/sample/clients";
 import { useClients } from "@/lib/store/clients-store";
 import { checklistFor, entityStates, requestDocs, requestInvoices, useBiz, type NewRequestInput } from "@/lib/store/biz-store";
 import {
@@ -52,7 +52,8 @@ import { FeeBreakdown, NotLegalAdvice } from "./BizBits";
 const uid = (p: string) => `${p}-${Math.random().toString(36).slice(2, 8)}`;
 const today = () => SAMPLE_NOW.toISOString().slice(0, 10);
 const toIso = (date: string, h = 17) => new Date(`${date}T${String(h).padStart(2, "0")}:00`).toISOString();
-const staffOpts = STAFF.map((s) => [s.id, s.name] as [string, string]);
+/** Read at render time, so it lists the real team once it has loaded. */
+const staffOptsNow = () => staffList().map((s) => [s.id, s.name] as [string, string]);
 const toFiles = (fs: File[]) => fs.map((f) => ({ name: f.name.replace(/\.[^.]+$/, ""), sizeKb: Math.max(1, Math.round(f.size / 1024)) }));
 
 /** File picker that keeps files in the browser only. */
@@ -228,7 +229,7 @@ export function NewRequestDialog({ open, onClose, onCreated, preset }: { open: b
             <TextField id="nr-date" label="Preferred completion" type="date" min={today()} value={preferredDate} onChange={(e) => setPreferredDate(e.target.value)} />
             <Err show={tried} msg={errors.date} />
           </div>
-          <SelectField id="nr-staff" label="Assigned staff" value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)} options={staffOpts} />
+          <SelectField id="nr-staff" label="Assigned staff" value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)} options={staffOptsNow()} />
           <div>
             <TextField id="nr-price" label="Quoted MKB fee ($)" type="number" min={0} step="0.01" required value={price} onChange={(e) => setPrice(e.target.value)} hint={svc?.filingFeeEstimate ? `+ ${usd(svc.filingFeeEstimate)} filing est.` : undefined} />
             <Err show={tried} msg={errors.price} />
@@ -429,7 +430,7 @@ export function AgencyDialog({ r, open, onClose, initialKind }: { r: ServiceRequ
           <SelectField id="ag-kind" label="What happened" value={kind} onChange={(e) => setKind(e.target.value as AgencyEvent["kind"])} options={Object.entries(AGENCY_KIND).map(([k, v]) => [k, v] as [string, string])} />
           <TextField id="ag-agency" label="Agency" required value={agency} onChange={(e) => setAgency(e.target.value)} placeholder="e.g. Secretary of State, IRS, county clerk" />
           <TextField id="ag-date" label={kind === "approved" ? "Approval date" : kind === "submitted" ? "Submission date" : "Date"} type="date" max={today()} value={date} onChange={(e) => setDate(e.target.value)} />
-          <SelectField id="ag-by" label="Recorded by" value={by} onChange={(e) => setBy(e.target.value)} options={staffOpts} />
+          <SelectField id="ag-by" label="Recorded by" value={by} onChange={(e) => setBy(e.target.value)} options={staffOptsNow()} />
         </div>
         <TextField id="ag-ref" label={isApproval ? "Confirmation / filing number" : "Reference or submission number (optional)"} required={isApproval} value={reference} onChange={(e) => setReference(e.target.value)} />
         <TextArea id="ag-note" label="Notes" required={kind === "rejected" || kind === "info_requested"} value={note} onChange={(e) => setNote(e.target.value)} />
@@ -514,7 +515,7 @@ export function CompletionDialog({ r, open, onClose }: { r: ServiceRequest; open
   return (
     <Modal open={open} onClose={onClose} title="Approve completion" description={`${r.number} · ${r.serviceName}`} footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" icon={ShieldCheck} disabled={!ok.every(Boolean)} onClick={() => { biz.approveCompletion(r.id, by, Number(follow)); toast(`Completed — approved by ${staffById(by).name}`); onClose(); }}>Approve completion</Button></>}>
       <div className="space-y-3">
-        <SelectField id="cp-by" label="Approver" value={by} onChange={(e) => setBy(e.target.value)} options={staffOpts} />
+        <SelectField id="cp-by" label="Approver" value={by} onChange={(e) => setBy(e.target.value)} options={staffOptsNow()} />
         {by === r.assignedTo && <p className="rounded-xl bg-warning-soft px-3 py-2 text-[12.5px] text-warning-ink">The approver also did the work — a second reviewer is recommended.</p>}
         {due > 0 && <p className="flex items-center gap-2 rounded-xl bg-warning-soft px-3 py-2 text-[12.5px] text-warning-ink"><AlertTriangle size={14} /> {usd(due, 2)} is still unpaid on this request.</p>}
         {checks.map((t, i) => <Checkbox key={t} label={t} checked={ok[i]} onChange={() => setOk(ok.map((v, j) => (j === i ? !v : v)))} />)}
@@ -747,7 +748,7 @@ export function ComplianceItemDialog({ entity, item, open, onClose }: { entity: 
             <TextField id="ci-source" label="Source" required value={v.source} onChange={(e) => setV({ ...v, source: e.target.value })} placeholder="Where this requirement and date come from" />
           </>
         )}
-        <SelectField id="ci-owner" label="Responsible MKB staff" value={ownerId} onChange={(e) => setOwnerId(e.target.value)} options={staffOpts} />
+        <SelectField id="ci-owner" label="Responsible MKB staff" value={ownerId} onChange={(e) => setOwnerId(e.target.value)} options={staffOptsNow()} />
         <ReminderChips days={days} setDays={setDays} />
         {(item || mode === "manual") && <TextArea id="ci-notes" label="Renewal notes" value={v.notes} onChange={(e) => setV({ ...v, notes: e.target.value })} />}
       </div>
@@ -771,7 +772,7 @@ export function VerifyDialog({ title, current, onVerify, open, onClose }: { titl
     <Modal open={open} onClose={onClose} title="Record verification" description={title} footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" icon={ShieldCheck} disabled={!ok || !source.trim()} onClick={() => { onVerify(by, source.trim()); toast("Verification recorded"); onClose(); }}>Mark verified</Button></>}>
       <div className="space-y-4">
         <TextField id="vf-source" label="Official source checked" required value={source} onChange={(e) => setSource(e.target.value)} placeholder="Agency website page, notice or letter" />
-        <SelectField id="vf-by" label="Verified by" value={by} onChange={(e) => setBy(e.target.value)} options={staffOpts} />
+        <SelectField id="vf-by" label="Verified by" value={by} onChange={(e) => setBy(e.target.value)} options={staffOptsNow()} />
         <Checkbox label="I confirmed the requirement, due date and fee against the official source" checked={ok} onChange={() => setOk((x) => !x)} />
       </div>
     </Modal>
@@ -829,7 +830,7 @@ export function StandingDialog({ entity, open, onClose }: { entity: BizEntity; o
           <>
             <SelectField id="st-state" label="State checked" value={state} onChange={(e) => setState(e.target.value)} options={entityStates(entity).map((s) => [s, stateName(s)] as [string, string])} />
             <TextField id="st-source" label="Where you checked" required value={source} onChange={(e) => setSource(e.target.value)} placeholder="e.g. state business entity search" />
-            <SelectField id="st-by" label="Checked by" value={by} onChange={(e) => setBy(e.target.value)} options={staffOpts} />
+            <SelectField id="st-by" label="Checked by" value={by} onChange={(e) => setBy(e.target.value)} options={staffOptsNow()} />
             <TextArea id="st-note" label="Notes" value={note} onChange={(e) => setNote(e.target.value)} />
           </>
         )}
@@ -1050,7 +1051,7 @@ export function EntityDialog({ entity, clientId, open, onClose, onSaved }: { ent
             <Err show={tried} msg={errs.date} />
           </div>
           <SelectField id="en-ein" label="EIN status" value={v.einStatus} onChange={(e) => setV({ ...v, einStatus: e.target.value as BizEntity["einStatus"] })} options={Object.entries(EIN_STATUS).map(([k, x]) => [k, x] as [string, string])} />
-          <SelectField id="en-owner" label="Responsible MKB staff" value={v.ownerId} onChange={(e) => setV({ ...v, ownerId: e.target.value })} options={staffOpts} />
+          <SelectField id="en-owner" label="Responsible MKB staff" value={v.ownerId} onChange={(e) => setV({ ...v, ownerId: e.target.value })} options={staffOptsNow()} />
         </div>
         <TextField id="en-addr" label="Principal business address" value={v.principalAddress} onChange={(e) => setV({ ...v, principalAddress: e.target.value })} />
         <div className="grid gap-4 rounded-xl border border-line p-3 sm:grid-cols-3">

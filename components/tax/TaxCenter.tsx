@@ -37,7 +37,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useToast } from "@/components/ui/Toast";
 import { PaymentDialog } from "@/components/crm/dialogs";
-import { STAFF, staffById } from "@/lib/sample/clients";
+import { STAFF, staffById, staffList } from "@/lib/sample/clients";
 import { TAX_YEARS } from "@/lib/sample/tax";
 import { useClients } from "@/lib/store/clients-store";
 import { billing, effectiveDue, isPastDue, itemStatus, outstandingItems, useTax } from "@/lib/store/tax-store";
@@ -233,7 +233,7 @@ function Overview({ returns, byId, openFiltered, unlinked, onCreateFor, year }: 
               <tr><th className="px-5 py-2 text-left">Staff</th><th className="px-2 py-2 text-right">Preparing</th><th className="px-5 py-2 text-right">To review</th></tr>
             </thead>
             <tbody>
-              {STAFF.map((s) => {
+              {staffList().map((s) => {
                 const prep = returns.filter((r) => r.preparerId === s.id && !["Accepted", "Completed"].includes(r.status)).length;
                 const rev = returns.filter((r) => r.reviewerId === s.id && r.status === "In Preparation" && !r.reviewSignoff).length;
                 return (
@@ -354,8 +354,8 @@ function ReturnsTab({ returns, byId, filters, setFilters }: { returns: TaxReturn
           <Sel label="Return status" value={filters.status} onChange={(v) => set({ status: v as Filters["status"] })} options={[["all", "All statuses"], ["attention", "Needs attention"], ...RETURN_STATUSES.map((s) => [s, s] as [string, string])]} />
           <Sel label="Return type" value={filters.kind} onChange={(v) => set({ kind: v as Filters["kind"], form: "all" })} options={[["all", "Individual & business"], ["individual", "Individual"], ["business", "Business"]]} />
           <Sel label="Form" value={filters.form} onChange={(v) => set({ form: v })} options={[["all", "All forms"], ...[...(filters.kind !== "business" ? INDIVIDUAL_FORMS : []), ...(filters.kind !== "individual" ? BUSINESS_FORMS : [])].map((f) => [f, f] as [string, string])]} />
-          <Sel label="Preparer" value={filters.preparer} onChange={(v) => set({ preparer: v })} options={[["all", "Any preparer"], ...STAFF.map((s) => [s.id, s.name] as [string, string])]} />
-          <Sel label="Reviewer" value={filters.reviewer} onChange={(v) => set({ reviewer: v })} options={[["all", "Any reviewer"], ...STAFF.map((s) => [s.id, s.name] as [string, string])]} />
+          <Sel label="Preparer" value={filters.preparer} onChange={(v) => set({ preparer: v })} options={[["all", "Any preparer"], ...staffList().map((s) => [s.id, s.name] as [string, string])]} />
+          <Sel label="Reviewer" value={filters.reviewer} onChange={(v) => set({ reviewer: v })} options={[["all", "Any reviewer"], ...staffList().map((s) => [s.id, s.name] as [string, string])]} />
           {on && <button onClick={() => setFilters(EMPTY)} className="inline-flex h-10 items-center gap-1 rounded-lg px-2 text-[12.5px] font-semibold text-accent hover:bg-accent-soft"><X size={13} /> Clear filters</button>}
         </div>
         <p className="text-[12.5px] text-muted">

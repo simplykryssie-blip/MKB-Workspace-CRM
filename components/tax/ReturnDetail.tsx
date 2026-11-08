@@ -41,7 +41,7 @@ import { Breadcrumbs } from "@/components/ui/PageHeader";
 import { useToast } from "@/components/ui/Toast";
 import { Sensitive, Timeline } from "@/components/crm/ProfileTabs";
 import { PaymentDialog, downloadPlaceholder } from "@/components/crm/dialogs";
-import { STAFF, staffById } from "@/lib/sample/clients";
+import { STAFF, staffById, staffList } from "@/lib/sample/clients";
 import { useClients } from "@/lib/store/clients-store";
 import { billing, effectiveDue, isPastDue, itemStatus, outstandingItems, useTax, type ItemStatus } from "@/lib/store/tax-store";
 import { FILING_STATUSES, FORM_LABEL, ORGANIZERS, STATUS_META, STATUS_PATH, dueDates, priceTotal, type FilingStatus, type TaxReturn } from "@/lib/tax/config";
@@ -213,7 +213,7 @@ export function ReturnDetail({ id }: { id: string }) {
               <dt className="text-[12px] capitalize text-muted">{role}</dt>
               <dd className="mt-1">
                 <select aria-label={role === "preparer" ? "Preparer" : "Reviewer"} disabled={!A.edit} value={role === "preparer" ? r.preparerId : r.reviewerId} onChange={(e) => { tax.assign(r.id, role, e.target.value); toast(`${role === "preparer" ? "Preparer" : "Reviewer"}: ${staffById(e.target.value).name}`); }} className="h-9 w-full rounded-lg border border-line bg-surface px-2 text-[13.5px] font-medium text-ink disabled:opacity-70">
-                  {STAFF.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  {staffList().map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </dd>
             </div>
