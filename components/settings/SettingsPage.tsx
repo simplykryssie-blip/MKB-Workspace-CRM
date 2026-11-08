@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { DollarSign, ExternalLink, FileSignature, History, Mail, Plus, RotateCcw, Save, Trash2 } from "lucide-react";
+import { DollarSign, ExternalLink, FileSignature, History, Mail, Plus, RotateCcw, Save, ShieldCheck, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -15,14 +15,15 @@ import { EMAIL_TEMPLATES, WORDING_FIELDS, renderEmail, type EmailWording, type T
 import { fmtDate } from "@/lib/format";
 import { checkFees, expungeFee, feeWords, money, type ServiceFees } from "@/lib/fees/config";
 import { useServiceFees } from "@/lib/fees/use-fees";
+import { EMPTY_DESIGNEE, designeeReady, type Designee } from "@/lib/irs/f8821";
 
 const SAMPLE = { clientName: "Jordan Sample", date: "November 8, 2026", taxYear: "2025", service: "Foundation", fee: "$399", firstName: "Jordan", count: "2 documents" };
 const input = "w-full rounded-xl border border-line bg-surface px-3 text-[14px] text-ink disabled:opacity-60";
 
 export function SettingsPage() {
-  const [tab, setTab] = useState<"letters" | "emails" | "fees">("letters");
+  const [tab, setTab] = useState<"letters" | "emails" | "fees" | "designee">("letters");
   useEffect(() => {
-    const read = () => { const h = window.location.hash.slice(1); setTab(h === "emails" || h === "fees" ? h : "letters"); };
+    const read = () => { const h = window.location.hash.slice(1); setTab(h === "emails" || h === "fees" || h === "designee" ? h : "letters"); };
     read();
     window.addEventListener("hashchange", read);
     return () => window.removeEventListener("hashchange", read);
@@ -34,11 +35,11 @@ export function SettingsPage() {
         <p className="mt-1 text-[14px] text-muted">Engagement letters, automatic client emails and your service fees.</p>
       </div>
       <div role="tablist" className="flex flex-wrap gap-2">
-        {([["letters", "Engagement letters", FileSignature], ["emails", "Client emails", Mail], ["fees", "Fees", DollarSign]] as const).map(([k, l, Icon]) => (
+        {([["letters", "Engagement letters", FileSignature], ["emails", "Client emails", Mail], ["fees", "Fees", DollarSign], ["designee", "IRS designee", ShieldCheck]] as const).map(([k, l, Icon]) => (
           <button key={k} role="tab" aria-selected={tab === k} onClick={() => { setTab(k); history.replaceState(null, "", `#${k}`); }} className={`inline-flex h-10 items-center gap-2 rounded-xl border px-4 text-[14px] font-semibold ${tab === k ? "border-accent bg-accent-soft text-accent-ink" : "border-line bg-surface text-ink-2 hover:bg-surface-hover"}`}><Icon size={16} />{l}</button>
         ))}
       </div>
-      {tab === "letters" ? <LettersEditor /> : tab === "emails" ? <EmailsEditor /> : <FeesEditor />}
+      {tab === "letters" ? <LettersEditor /> : tab === "emails" ? <EmailsEditor /> : tab === "fees" ? <FeesEditor /> : <DesigneeEditor />}
     </div>
   );
 }
@@ -342,5 +343,46 @@ function FeesEditor() {
         </div>
       )}
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+
+function DesigneeEditor() {
+  const team = useTeam();
+  const toast = useToast();
+  const canEdit = team.can("settings", "settings");
+  const [d, setD] = useState<Designee | null>(BACKEND ? null : EMPTY_DESIGNEE);
+  const [saved, setSaved] = useState<Designee | null>(null);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { if (BACKEND) call<{ designee: Designee }>("GET", "/api/settings/designee").then((r) => { setD(r.designee); setSaved(r.designee); }).catch((e) => toast(e instanceof Error ? e.message : "Couldn't load", "info")); }, []);
+  if (!d) return <Card className="p-8 text-center text-muted">Loading…</Card>;
+  const save = async () => {
+    if (!BACKEND) return toast("Saving needs the live CRM (preview or production).", "info");
+    setSaving(true);
+    try { const r = await call<{ designee: Designee }>("PUT", "/api/settings/designee", { designee: d }); setD(r.designee); setSaved(r.designee); toast("Designee saved"); } catch (e) { toast(e instanceof Error ? e.message : "Couldn't save", "info"); }
+    setSaving(false);
+  };
+  const F = ({ k, label, hint, className = "" }: { k: keyof Designee; label: string; hint?: string; className?: string }) => (
+    <div className={className}><label htmlFor={`dg-${k}`} className="mb-1 block text-[13px] font-medium text-ink-2">{label}{hint && <span className="font-normal text-muted"> {hint}</span>}</label><input id={`dg-${k}`} disabled={!canEdit} value={d[k]} onChange={(e) => setD({ ...d, [k]: e.target.value })} className={`${input} h-10`} /></div>
+  );
+  return (
+    <Card>
+      <CardHeader icon={ShieldCheck} title="IRS designee (Form 8821)" subtitle="Who the IRS sends transcripts and notice copies to. Staff only — never shown to clients." action={<Badge tone={designeeReady(d) ? "success" : "warning"}>{designeeReady(d) ? "Ready" : "Incomplete"}</Badge>} />
+      <div className="space-y-4 px-5 pb-5 sm:px-6">
+        <p className="text-[13px] text-muted">Enter your details exactly as the IRS has them on your CAF record. They fill line 2 of every Form 8821.</p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {F({ k: "name", label: "Designee name" })}
+          {F({ k: "caf", label: "CAF number" })}
+          {F({ k: "address", label: "Street address", className: "sm:col-span-2" })}
+          {F({ k: "city", label: "City" })}
+          <div className="grid grid-cols-2 gap-4">{F({ k: "state", label: "State" })}{F({ k: "zip", label: "ZIP" })}</div>
+          {F({ k: "ptin", label: "PTIN", hint: "(optional)" })}
+          {F({ k: "phone", label: "Telephone" })}
+          {F({ k: "fax", label: "Fax", hint: "(optional)" })}
+        </div>
+        {canEdit && <Button variant="primary" icon={Save} disabled={saving || JSON.stringify(d) === JSON.stringify(saved)} onClick={save}>{saving ? "Saving…" : "Save"}</Button>}
+      </div>
+    </Card>
   );
 }

@@ -71,7 +71,7 @@ export async function getClient(env: AppEnv, a: Actor, id: string) {
   return toClient(row, l4.get(id) ?? {});
 }
 
-function vaultKey(env: AppEnv) {
+export function vaultKey(env: AppEnv) {
   if (!env.ENCRYPTION_KEY) throw new HttpError(500, "Server encryption key is not configured.");
   return { key: env.ENCRYPTION_KEY, version: Number(env.ENCRYPTION_KEY_VERSION ?? 1) };
 }

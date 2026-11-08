@@ -16,6 +16,7 @@ import { sendTemplate } from "./email";
 import { buildIntakePdf, buildLetterPdf } from "./intake-pdf";
 import { letterVersion } from "./engagement";
 import { loadFees } from "./settings";
+import { ensure8821 } from "./f8821";
 import { feeWords } from "@/lib/fees/config";
 import { fillLetter, taxLetterFor } from "@/lib/engagement/letters";
 import { randomId } from "./crypto";
@@ -87,6 +88,7 @@ export async function createReturn(env: AppEnv, a: Actor, r: ReturnSnapshot) {
     ...assignmentStmts(env.DB, r),
   ]);
   await audit(env.DB, a, { action: "Record update", resource: `Tax return ${r.id}`, department: "tax", meta: "Return created" });
+  await ensure8821(env, a, r.clientId);
   return load(env, a, r.id);
 }
 

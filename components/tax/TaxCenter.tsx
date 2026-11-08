@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Form8821Tab } from "./Form8821Tab";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -29,6 +30,7 @@ import {
   X,
   XCircle,
   type LucideIcon,
+  FileSignature,
 } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
@@ -52,6 +54,7 @@ const TABS = [
   { key: "returns", label: "Returns", icon: List },
   { key: "documents", label: "Missing documents", icon: FileWarning },
   { key: "efile", label: "E-file", icon: Send },
+  { key: "f8821", label: "Form 8821", icon: FileSignature },
   { key: "billing", label: "Billing", icon: CircleDollarSign },
   { key: "fees", label: "Fee schedule", icon: Tags },
 ] as const;
@@ -130,6 +133,7 @@ export function TaxCenter() {
       {tab === "efile" && <EfileTab returns={inYear} byId={byId} />}
       {tab === "billing" && (tax.access.billing ? <BillingTab returns={inYear} byId={byId} /> : <NoAccess what="Tax billing" />)}
       {tab === "fees" && <FeeSchedule />}
+      {tab === "f8821" && <Form8821Tab />}
 
       <NewReturnDialog open={!!newOpen} onClose={() => setNewOpen(null)} defaultYear={year === "all" ? 2026 : year} clientId={newOpen?.clientId} onCreated={(id) => { setNewOpen(null); router.push(`/services/tax-preparation/returns/${id}`); }} />
     </>
