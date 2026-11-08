@@ -313,13 +313,14 @@ function FeesEditor() {
       <Card>
         <CardHeader icon={DollarSign} title="Late payments (all services)" subtitle="Used in the Standard terms of every engagement letter." />
         <div className="space-y-3 px-5 pb-5 sm:px-6">
-          <div className="grid gap-4 sm:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-3">
             <Num id="lt-grace" label="Late after" suffix="days" value={f.late.graceDays} disabled={ro} onChange={(n) => setF({ ...f, late: { ...f.late, graceDays: n } })} />
             <Num id="lt-admin" label="Late admin fee" prefix="$" value={f.late.adminFee} disabled={ro} onChange={(n) => setF({ ...f, late: { ...f.late, adminFee: n } })} />
             <Num id="lt-rate" label="Interest" suffix="% per month" step={0.1} value={f.late.monthlyRatePct} disabled={ro} onChange={(n) => setF({ ...f, late: { ...f.late, monthlyRatePct: n } })} />
             <Num id="lt-court" label="Court after" suffix="days late" value={f.late.courtAfterDays} disabled={ro} onChange={(n) => setF({ ...f, late: { ...f.late, courtAfterDays: n } })} />
+            <Num id="lt-claim" label="Admin fee if we file a claim" prefix="$" value={f.late.courtAdminFee} disabled={ro} onChange={(n) => setF({ ...f, late: { ...f.late, courtAdminFee: n } })} />
           </div>
-          <p className="text-[12.5px] text-muted">Louisiana generally caps agreed interest at 12% a year (1% per month), so this can&rsquo;t be set higher. Have your attorney confirm the admin fee and rate.</p>
+          <p className="text-[12.5px] text-muted">Louisiana generally caps agreed interest at 12% a year (1% per month), so this can&rsquo;t be set higher. If MKB files a claim, the claim admin fee plus all court costs are added. Have your attorney confirm these fees and the rate.</p>
         </div>
       </Card>
 

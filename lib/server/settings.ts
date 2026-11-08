@@ -30,7 +30,7 @@ export async function saveFees(env: AppEnv, a: Actor, b: { fees?: ServiceFees })
       upgradeAfterMonths: Math.round(Number(f.books?.upgradeAfterMonths)),
     },
     expunge: { baseFee: Number(f.expunge?.baseFee), chargesIncluded: Math.round(Number(f.expunge?.chargesIncluded)), extraChargeFee: Number(f.expunge?.extraChargeFee) },
-    late: { graceDays: Math.round(Number(f.late?.graceDays)), adminFee: Number(f.late?.adminFee), monthlyRatePct: Number(f.late?.monthlyRatePct), courtAfterDays: Math.round(Number(f.late?.courtAfterDays)) },
+    late: { graceDays: Math.round(Number(f.late?.graceDays)), adminFee: Number(f.late?.adminFee), monthlyRatePct: Number(f.late?.monthlyRatePct), courtAfterDays: Math.round(Number(f.late?.courtAfterDays)), courtAdminFee: Number(f.late?.courtAdminFee) },
   };
   const err = checkFees(clean);
   if (err) throw badRequest(err);

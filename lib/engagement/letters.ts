@@ -33,6 +33,7 @@ export const PLACEHOLDERS: { key: string; label: string }[] = [
   { key: "lateAdmin", label: "Late admin fee (Settings → Fees)" },
   { key: "lateRate", label: "Late interest rate (Settings → Fees)" },
   { key: "courtDays", label: "Days late before court action (Settings → Fees)" },
+  { key: "courtAdmin", label: "Admin fee if MKB files a claim (Settings → Fees)" },
   { key: "booksOverage", label: "Bookkeeping overage rates (Settings → Fees)" },
   { key: "upgradeMonths", label: "Months over the limit before a plan change (Settings → Fees)" },
   { key: "expungeFee", label: "Expungement fee wording (Settings → Fees)" },
@@ -75,7 +76,8 @@ Fees are non-refundable once work has started. We may hold work we prepared unti
 ## Late payments
 - If fees are not paid within {{lateGrace}} days of the due date, a {{lateAdmin}} late administrative fee is added.
 - After that, the unpaid balance accrues interest at {{lateRate}} until paid.
-- If fees remain unpaid {{courtDays}} days after the due date, MKB may pursue collection, including filing suit in court, and you agree to pay reasonable collection costs and attorney fees allowed by law.
+- If fees remain unpaid {{courtDays}} days after the due date, MKB may pursue collection, including filing a claim in court.
+- If MKB has to file a claim, you agree to pay an additional {{courtAdmin}} administrative fee plus any and all court costs incurred, along with reasonable collection costs and attorney fees allowed by law.
 
 ## IRS and state notices
 If you receive a notice about a return we prepared, send it to us right away.
@@ -88,7 +90,7 @@ We may share information about LegalShield, a separate company that offers prepa
 Someone connected to MKB may earn a commission if you enroll.
 
 ## Privacy and your tax information
-We protect your information with secure systems and limit access to the people working on your file. Federal law (Internal Revenue Code section 7216) limits how tax preparers may use and share tax return information. We will not use or share your tax return information for any purpose other than preparing your return and providing the services you engaged us for without your separate written consent.
+We protect your information with secure systems and limit access to the people working on your file. Federal law (Internal Revenue Code section 7216) limits how tax preparers may use and share tax return information. We will not use or share your tax return information for any purpose other than preparing and filing your return and providing the services you engaged us for without your separate written consent. Sharing with the tax software, e-file providers and banks that process your return or refund is part of filing it.
 
 Please never email Social Security numbers or tax documents. Use your secure client portal, or bring them to our office.
 
@@ -118,7 +120,7 @@ Thank you for choosing MKB Financial Group LLC. This letter explains the tax pre
 
 ## What we will do
 - Prepare your {{taxYear}} federal individual income tax return (Form 1040) with the schedules and forms it needs, and the state returns you ask us to prepare.
-- E-file your returns once you have reviewed and signed them (including IRS Form 8879, the e-file signature authorization).
+- E-file your returns once you have reviewed and signed them (including IRS Form 8879, the e-file signature authorization). Returns are prepared and transmitted through IRS-authorized third-party tax software and e-file providers, which receive your return information only as needed to process and file it.
 - File an extension (Form 4868 and any state extension) if you ask us to or if your documents are not ready in time. An extension gives more time to file, not more time to pay. Any tax you owe is still due by the original deadline.
 - Prepare an amended return (Form 1040-X) only if you ask. Amended returns are a separate service with their own fee.
 
@@ -147,7 +149,7 @@ Thank you for choosing MKB Financial Group LLC. This letter explains the busines
 
 ## What we will do
 - Prepare the business's {{taxYear}} federal income tax return (Form 1065, 1120-S, 1120 or 990, as applicable), the Schedules K-1 for owners, and the state returns you ask us to prepare.
-- E-file the returns once an authorized officer or partner has reviewed and signed them.
+- E-file the returns once an authorized officer or partner has reviewed and signed them. Returns are prepared and transmitted through IRS-authorized third-party tax software and e-file providers, which receive the return information only as needed to process and file it.
 - File an extension (Form 7004 and any state extension) if you ask us to or if your books are not ready in time. An extension gives more time to file, not more time to pay.
 - Prepare an amended or superseding return only if you ask. That is a separate service with its own fee.
 

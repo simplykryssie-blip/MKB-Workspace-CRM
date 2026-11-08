@@ -23,7 +23,7 @@ export type ServiceFees = {
     extraChargeFee: number;
   };
   /** Late payment terms (all services). */
-  late: { graceDays: number; adminFee: number; monthlyRatePct: number; courtAfterDays: number };
+  late: { graceDays: number; adminFee: number; monthlyRatePct: number; courtAfterDays: number; /** Added if MKB has to file a claim in court (plus court costs). */ courtAdminFee: number };
 };
 
 export const DEFAULT_SERVICE_FEES: ServiceFees = {
@@ -39,7 +39,7 @@ export const DEFAULT_SERVICE_FEES: ServiceFees = {
     upgradeAfterMonths: 2,
   },
   expunge: { baseFee: 550, chargesIncluded: 2, extraChargeFee: 550 },
-  late: { graceDays: 7, adminFee: 50, monthlyRatePct: 1, courtAfterDays: 39 },
+  late: { graceDays: 7, adminFee: 75, monthlyRatePct: 1, courtAfterDays: 39, courtAdminFee: 250 },
 };
 
 export const money = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })}`;
@@ -58,6 +58,7 @@ export function feeWords(f: ServiceFees): Record<string, string> {
     lateAdmin: money(f.late.adminFee),
     lateRate: `${f.late.monthlyRatePct}% per month (${+(f.late.monthlyRatePct * 12).toFixed(2)}% per year)`,
     courtDays: String(f.late.courtAfterDays),
+    courtAdmin: money(f.late.courtAdminFee),
   };
 }
 
@@ -67,7 +68,7 @@ export function checkFees(f: ServiceFees): string | null {
   if (!Array.isArray(f.books?.plans) || !f.books.plans.length || f.books.plans.length > 12) return "Add between 1 and 12 bookkeeping plans.";
   if (f.books.plans.some((p) => !p.key?.trim() || !n(p.fee) || !n(p.transactions) || !n(p.accounts))) return "Every bookkeeping plan needs a name, price and limits.";
   if (new Set(f.books.plans.map((p) => p.key.trim().toLowerCase())).size !== f.books.plans.length) return "Bookkeeping plan names must be different.";
-  if (![f.books.overagePerTransaction, f.books.overagePerAccount, f.expunge.baseFee, f.expunge.extraChargeFee, f.late.adminFee, f.late.monthlyRatePct].every(n)) return "Prices can't be negative.";
+  if (![f.books.overagePerTransaction, f.books.overagePerAccount, f.expunge.baseFee, f.expunge.extraChargeFee, f.late.adminFee, f.late.monthlyRatePct, f.late.courtAdminFee].every(n)) return "Prices can't be negative.";
   if (!(f.books.upgradeAfterMonths >= 1 && f.books.upgradeAfterMonths <= 12)) return "Choose 1–12 months before moving to a bigger plan.";
   if (!(f.expunge.chargesIncluded >= 1 && f.expunge.chargesIncluded <= 20)) return "The expungement fee must cover 1–20 charges.";
   if (f.late.monthlyRatePct > 1) return "Louisiana generally caps agreed interest at 12% a year (1% per month).";
