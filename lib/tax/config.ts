@@ -254,6 +254,8 @@ export type OrganizerState = {
   };
   /** Preparer questions sent back to the client in one request. */
   followUps?: FollowUp[];
+  /** Engagement letter the client accepted with this interview. */
+  engagement?: { templateId: string; title: string; version: number; acceptedName: string; acceptedAt: string; docId?: string };
 };
 
 export type ChecklistItem = {

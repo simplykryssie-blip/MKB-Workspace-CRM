@@ -67,6 +67,9 @@ export type ClientDocument = {
   /** Expungement: the client's expungement matter and the specific case the file belongs to. */
   expMatterId?: string;
   expCaseId?: string;
+  /** A real file is stored on the server (download through /api/clients/{id}/files/{docId}). */
+  hasFile?: boolean;
+  fileName?: string;
 };
 
 export type Message = {

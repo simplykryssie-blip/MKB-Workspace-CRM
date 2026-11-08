@@ -12,6 +12,9 @@ import { decryptField, encryptField } from "./crypto";
 import { audit, hasSensitivePerm, requirePermission, sendEmail, type Actor } from "./identity";
 import { assignmentSets, setIdentifier } from "./clients";
 import { notify } from "./notifications";
+import { sendTemplate } from "./email";
+import { buildIntakePdf } from "./intake-pdf";
+import { randomId } from "./crypto";
 
 type Row = { id: string; client_id: string; enrollment_id: string | null; tax_year: number; kind: TaxReturn["kind"]; form: TaxReturn["form"]; filing_status: string | null; states: string; status: TaxReturn["status"]; preparer_id: string; reviewer_id: string; due_at: string | null; extension: string | null; review_signoff: string | null; approval_signature_id: string | null; client_approved_at: string | null; organizer: string; checklist: string; efile: string; pricing: string; status_history: string; notes: string; activity: string; created_at: string; completed_at: string | null; rev: number };
 export type ReturnSnapshot = TaxReturn & { rev?: number };
@@ -193,33 +196,63 @@ export async function revealSecureAnswer(env: AppEnv, a: Actor, id: string, key:
  * Only document names are sent (never answers or numbers), and clients are
  * told not to email tax documents back.
  */
-export async function emailDocumentRequest(env: AppEnv, a: Actor, id: string, names: unknown) {
+export async function emailDocumentRequest(env: AppEnv, a: Actor, id: string, names: unknown, reminder = false) {
   requirePermission(a, "tax", "edit");
   if (a.kind !== "staff") throw forbidden();
   const r = await load(env, a, id);
   // Document names only (the interview's list can arrive before the checklist finishes saving).
-  const list = [...new Set((Array.isArray(names) ? names : []).map((x) => str(x, 200).replace(/[\r\n]+/g, " ")).filter(Boolean))].slice(0, 40);
+  const list = cleanNames(names);
   if (!list.length) throw badRequest("Choose at least one document.");
   const c = await one<{ name: string; contact_name: string | null; email: string | null }>(env.DB, "SELECT name, contact_name, email FROM clients WHERE id = ?", r.clientId);
   if (!c?.email) throw badRequest("This client has no email address on file.");
   if (!(await rateLimit(env.DB, `docreq:${id}`, 10, 60))) throw new HttpError(429, "Too many requests for this return in the last hour.", "rate_limited");
-  const first = (c.contact_name || c.name).split(" ")[0];
-  const text = [
-    `Hi ${first},`,
-    "",
-    `Thank you for completing your ${r.taxYear} tax interview with MKB Financial Group. To finish your return, we still need:`,
-    "",
-    ...list.map((n) => `  • ${n}`),
-    "",
-    "Please drop them off at our office, or wait for your secure upload link. For your security, please do not email tax documents.",
-    "",
-    "Questions? Call us at 833-379-3320.",
-    "",
-    "MKB Financial Group",
-  ].join("\n");
-  const out = await sendEmail(env, { to: c.email, template: "tax_document_request", subject: `Documents needed for your ${r.taxYear} tax return`, text });
-  await audit(env.DB, a, { action: "Record update", resource: `Tax return ${id}`, department: "tax", meta: `Emailed document request (${list.length} item${list.length > 1 ? "s" : ""})${out.sent ? "" : " — queued, not sent"}` });
-  return { sent: out.sent, count: list.length };
+  const out = await sendTemplate(env, reminder ? "tax_document_reminder" : "tax_document_request", { to: c.email, vars: { firstName: firstName(c), taxYear: String(r.taxYear), count: `${list.length} document${list.length > 1 ? "s" : ""}` }, documents: list });
+  await audit(env.DB, a, { action: "Record update", resource: `Tax return ${id}`, department: "tax", meta: `Emailed document ${reminder ? "reminder" : "request"} (${list.length} item${list.length > 1 ? "s" : ""})${out.sent ? "" : " — queued, not sent"}` });
+  return { count: list.length, sent: out.sent };
+}
+
+const cleanNames = (names: unknown) => [...new Set((Array.isArray(names) ? names : []).map((x) => str(x, 200).replace(/[\r\n]+/g, " ")).filter(Boolean))].slice(0, 40);
+const firstName = (c: { name: string; contact_name: string | null }) => (c.contact_name || c.name).trim().split(/\s+/)[0];
+const longDate = (iso: string) => new Date(iso).toLocaleDateString("en-US", { dateStyle: "long", timeZone: "America/Chicago" });
+
+/**
+ * After an interview is submitted: saves a PDF copy to the client's Documents
+ * (private file storage, visible in the portal) and emails the client the
+ * "we received it" message with the PDF attached and any documents still needed.
+ */
+export async function completeIntake(env: AppEnv, a: Actor, id: string, b: { request?: unknown; email?: unknown }) {
+  requirePermission(a, "tax", "edit");
+  if (a.kind !== "staff") throw forbidden();
+  const r = await load(env, a, id);
+  const iv = r.organizer?.interview;
+  if (!r.organizer?.submittedAt || !iv) throw badRequest("Submit the interview first.");
+  if (!(await rateLimit(env.DB, `intake-pdf:${id}`, 6, 60))) throw new HttpError(429, "Too many copies made for this return in the last hour.", "rate_limited");
+  const c = await one<{ name: string; contact_name: string | null; email: string | null; module_data: string | null; rev: number }>(env.DB, "SELECT name, contact_name, email, module_data, rev FROM clients WHERE id = ?", r.clientId);
+  if (!c) throw notFound("Client not found.");
+  const docs = cleanNames(b.request);
+  const pdf = await buildIntakePdf({ clientName: c.name, taxYear: r.taxYear, form: r.form, returnId: r.id, answers: iv.answers, submittedAt: r.organizer.submittedAt, enteredBy: iv.enteredBy ?? "client", consentName: iv.consentName, documents: docs, engagement: r.organizer.engagement });
+  const docId = randomId("d");
+  const fileName = `MKB-Tax-Interview-${r.taxYear}-${c.name.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "")}.pdf`;
+  const key = `clients/${r.clientId}/${docId}.pdf`;
+  const t = now();
+  await env.FILES.put(key, pdf, { httpMetadata: { contentType: "application/pdf" } });
+  // The document's details on the client record (the storage key stays in client_files).
+  const md = json<Record<string, unknown[]>>(c.module_data, {});
+  const doc = { id: docId, name: `${r.taxYear} tax interview (submitted ${longDate(r.organizer.submittedAt)})`, fileName, service: "tax", category: "Intake", status: "received", sensitive: true, requestedAt: t, uploadedAt: t, sizeKb: Math.max(1, Math.round(pdf.length / 1024)), uploadedBy: "staff", taxYear: r.taxYear, hasFile: true, deliveredAt: t };
+  md.documents = [doc, ...((md.documents as unknown[]) ?? [])];
+  await env.DB.batch([
+    env.DB.prepare("INSERT INTO client_files (id, client_id, r2_key, name, content_type, size_bytes, sensitive, created_at, created_by) VALUES (?, ?, ?, ?, 'application/pdf', ?, 1, ?, ?)").bind(docId, r.clientId, key, fileName, pdf.length, t, a.member.id),
+    env.DB.prepare("UPDATE clients SET module_data = ?, rev = rev + 1, updated_at = ? WHERE id = ?").bind(JSON.stringify(md), t, r.clientId),
+    env.DB.prepare("INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'upload', ?, 'system', ?, ?)").bind(randomId("x"), r.clientId, `Saved a PDF copy of the ${r.taxYear} tax interview to Documents`, a.member.id, t),
+  ]);
+  let emailed = false;
+  if (b.email !== false && c.email) {
+    const out = await sendTemplate(env, "tax_intake_received", { to: c.email, vars: { firstName: firstName(c), taxYear: String(r.taxYear), date: longDate(r.organizer.submittedAt) }, documents: docs, attachments: [{ filename: fileName, content: pdf }] });
+    emailed = out.sent;
+    await run(env.DB, "INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'message', ?, 'system', ?, ?)", randomId("x"), r.clientId, `Emailed “we received your ${r.taxYear} tax interview”${docs.length ? ` with ${docs.length} document${docs.length > 1 ? "s" : ""} still needed` : ""}${out.sent ? "" : " (queued)"}`, a.member.id, now());
+  }
+  await audit(env.DB, a, { action: "Record update", resource: `Tax return ${id}`, department: "tax", meta: `Intake PDF saved to client documents${b.email !== false ? (emailed ? "; emailed to client" : "; email queued") : ""}` });
+  return { docId, emailed, noEmail: !c.email };
 }
 
 /**

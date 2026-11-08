@@ -330,11 +330,13 @@ function Review({ r, sections, a, answers, by, goTo }: { r: TaxReturn; sections:
         if (res.updated.length) { note += ` · profile updated (${res.updated.join(", ")})`; window.dispatchEvent(new CustomEvent("mkb:client-changed", { detail: r.clientId })); }
       } catch { /* the profile can still be updated from the client tab */ }
     }
-    if (by === "staff" && requestRest && out.requested.length && BACKEND) {
+    if (by === "staff" && BACKEND) {
+      // PDF copy to the client's Documents + the "we received it" email (with any documents still needed).
       try {
-        const res = await call<{ sent: boolean }>("POST", `/api/tax/returns/${r.id}/request-docs`, { names: out.requested });
-        note = res.sent ? " — the client was emailed the list" : " — the request email is queued";
-      } catch (e) { note = ` — couldn't email the client (${e instanceof Error ? e.message : "error"})`; }
+        const res = await call<{ emailed: boolean; noEmail: boolean }>("POST", `/api/tax/returns/${r.id}/complete-intake`, { request: requestRest ? out.requested : [] });
+        note += res.noEmail ? " · PDF saved to Documents (no email on file)" : res.emailed ? " · PDF saved and emailed to the client" : " · PDF saved; email queued";
+        window.dispatchEvent(new CustomEvent("mkb:client-changed", { detail: r.clientId }));
+      } catch (e) { note += ` · couldn't save the PDF copy (${e instanceof Error ? e.message : "error"})`; }
     }
     setSending(false);
     toast(by === "staff"

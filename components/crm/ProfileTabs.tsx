@@ -460,11 +460,21 @@ export function DocumentsTab({ c, act }: { c: Client; act: Act }) {
   const [canSensitive, setCanSensitive] = useState(true);
   const docs = c.documents.filter((d) => (svc === "all" || d.service === svc) && (state === "all" || (state === "requested" ? d.status === "requested" || d.status === "rejected" : d.status === "received" || d.status === "reviewed")));
   const services = [...new Set([...c.documents.map((d) => d.service), ...c.enrollments.map((e) => e.service)])];
+  const fileUrl = (d: ClientDocument, inline = false) => `/api/clients/${c.id}/files/${d.id}${inline ? "?inline=1" : ""}`;
   const view = (d: ClientDocument) => {
+    // Stored files open from the server, which checks permission and records the view.
+    if (BACKEND && d.hasFile) return void window.open(fileUrl(d, true), "_blank", "noopener");
     store.logDocumentAccess(c.id, d.id, "Viewed");
     act.open("preview", d);
   };
   const download = (d: ClientDocument) => {
+    if (BACKEND && d.hasFile) {
+      const a = document.createElement("a");
+      a.href = fileUrl(d);
+      a.download = d.fileName ?? d.name;
+      a.click();
+      return;
+    }
     store.logDocumentAccess(c.id, d.id, "Downloaded");
     downloadPlaceholder(d.name);
     toast(`Downloaded "${d.name}" (sample placeholder) — logged`);

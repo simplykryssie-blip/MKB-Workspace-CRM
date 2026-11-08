@@ -83,7 +83,9 @@ export async function audit(db: Db, actor: Actor | { kind: "anonymous"; ip: stri
  * Sends through Resend when RESEND_API_KEY is set; otherwise only records it in
  * the outbox. Bodies are stored only in development (they can contain one-time links).
  */
-export async function sendEmail(env: AppEnv, msg: { to: string; template: string; subject: string; text: string }) {
+export type EmailAttachment = { filename: string; content: Uint8Array };
+const b64 = (u: Uint8Array) => { let s = ""; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000)); return btoa(s); };
+export async function sendEmail(env: AppEnv, msg: { to: string; template: string; subject: string; text: string; html?: string; attachments?: EmailAttachment[] }) {
   const id = randomId("em");
   await run(env.DB, "INSERT INTO email_outbox (id, to_email, template, subject, body_dev, created_at) VALUES (?, ?, ?, ?, ?, ?)", id, msg.to, msg.template, msg.subject, isDev(env) ? msg.text : null, now());
   if (!env.RESEND_API_KEY) return { id, sent: false };
@@ -91,7 +93,7 @@ export async function sendEmail(env: AppEnv, msg: { to: string; template: string
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" },
-      body: JSON.stringify({ from: env.EMAIL_FROM ?? "MKB Financial Group <no-reply@example.com>", to: [msg.to], subject: msg.subject, text: msg.text }),
+      body: JSON.stringify({ from: env.EMAIL_FROM ?? "MKB Financial Group <no-reply@example.com>", to: [msg.to], subject: msg.subject, text: msg.text, ...(msg.html ? { html: msg.html } : {}), ...(msg.attachments?.length ? { attachments: msg.attachments.map((x) => ({ filename: x.filename, content: b64(x.content) })) } : {}) }),
     });
     const out = (await res.json().catch(() => ({}))) as { id?: string; message?: string };
     await run(env.DB, "UPDATE email_outbox SET sent_at = ?, provider_id = ?, error = ? WHERE id = ?", res.ok ? now() : null, out.id ?? null, res.ok ? null : (out.message ?? `HTTP ${res.status}`).slice(0, 300), id);
