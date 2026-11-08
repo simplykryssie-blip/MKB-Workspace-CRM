@@ -273,10 +273,11 @@ function FeesEditor() {
         <CardHeader icon={DollarSign} title="Tax preparation" subtitle="Return prices (forms, schedules, states, amendments, extensions) are in the Tax Center fee schedule. Back-end bank and service bureau fees come with billing." />
         <div className="space-y-4 px-5 pb-5 sm:px-6">
           <div className="grid gap-4 sm:grid-cols-3">
-            {([["software", "Tax software (prepares and transmits)"], ["serviceBureau", "Service bureau"], ["bankProduct", "Refund transfer bank"]] as const).map(([k, l]) => (
+            {([["software", "Tax software (staff only)"], ["serviceBureau", "Service bureau (staff only)"], ["bankProduct", "Refund transfer bank (shown on bank product invoices)"]] as const).map(([k, l]) => (
               <div key={k}><label htmlFor={`tp-${k}`} className="mb-1 block text-[13px] font-medium text-ink-2">{l}</label><input id={`tp-${k}`} disabled={ro} value={f.taxPartners[k]} onChange={(e) => setF({ ...f, taxPartners: { ...f.taxPartners, [k]: e.target.value } })} className={`${input} h-10`} /></div>
             ))}
           </div>
+          <p className="text-[12.5px] text-muted">Clients never see the tax software or service bureau names. Only the refund transfer bank appears on bank product invoices, because the client signs that bank&rsquo;s agreement.</p>
           <Button icon={ExternalLink} href="/services/tax-preparation#fees">Open the tax fee schedule</Button>
         </div>
       </Card>

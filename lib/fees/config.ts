@@ -22,7 +22,7 @@ export type ServiceFees = {
     /** Each charge beyond that. */
     extraChargeFee: number;
   };
-  /** Tax filing partners (names used on the e-file step, invoices and bank product disclosures). */
+  /** Tax filing partners. Software and service bureau are staff-only (never on anything a client sees); the bank appears on bank product invoices. */
   taxPartners: { software: string; serviceBureau: string; bankProduct: string };
   /** Late payment terms (all services). */
   late: { graceDays: number; adminFee: number; monthlyRatePct: number; courtAfterDays: number; /** Added if MKB has to file a claim in court (plus court costs). */ courtAdminFee: number };
