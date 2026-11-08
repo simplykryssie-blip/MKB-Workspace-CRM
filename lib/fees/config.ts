@@ -22,6 +22,8 @@ export type ServiceFees = {
     /** Each charge beyond that. */
     extraChargeFee: number;
   };
+  /** Tax filing partners (names used on the e-file step, invoices and bank product disclosures). */
+  taxPartners: { software: string; serviceBureau: string; bankProduct: string };
   /** Late payment terms (all services). */
   late: { graceDays: number; adminFee: number; monthlyRatePct: number; courtAfterDays: number; /** Added if MKB has to file a claim in court (plus court costs). */ courtAdminFee: number };
 };
@@ -39,6 +41,7 @@ export const DEFAULT_SERVICE_FEES: ServiceFees = {
     upgradeAfterMonths: 2,
   },
   expunge: { baseFee: 550, chargesIncluded: 2, extraChargeFee: 550 },
+  taxPartners: { software: "TaxWise", serviceBureau: "Doucet Financial", bankProduct: "Santa Barbara Tax Products Group (TPG)" },
   late: { graceDays: 7, adminFee: 75, monthlyRatePct: 1, courtAfterDays: 39, courtAdminFee: 250 },
 };
 

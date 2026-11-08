@@ -9,7 +9,7 @@ export async function loadFees(env: AppEnv): Promise<ServiceFees & { updatedAt?:
   const r = await one<{ data: string; updated_at: string }>(env.DB, "SELECT data, updated_at FROM service_settings WHERE key = 'fees'").catch(() => null);
   if (!r) return DEFAULT_SERVICE_FEES;
   const s = json<Partial<ServiceFees>>(r.data, {});
-  return { books: { ...DEFAULT_SERVICE_FEES.books, ...s.books }, expunge: { ...DEFAULT_SERVICE_FEES.expunge, ...s.expunge }, late: { ...DEFAULT_SERVICE_FEES.late, ...s.late }, updatedAt: r.updated_at };
+  return { books: { ...DEFAULT_SERVICE_FEES.books, ...s.books }, expunge: { ...DEFAULT_SERVICE_FEES.expunge, ...s.expunge }, taxPartners: { ...DEFAULT_SERVICE_FEES.taxPartners, ...s.taxPartners }, late: { ...DEFAULT_SERVICE_FEES.late, ...s.late }, updatedAt: r.updated_at };
 }
 
 export async function getFees(env: AppEnv, a: Actor) {
@@ -30,6 +30,7 @@ export async function saveFees(env: AppEnv, a: Actor, b: { fees?: ServiceFees })
       upgradeAfterMonths: Math.round(Number(f.books?.upgradeAfterMonths)),
     },
     expunge: { baseFee: Number(f.expunge?.baseFee), chargesIncluded: Math.round(Number(f.expunge?.chargesIncluded)), extraChargeFee: Number(f.expunge?.extraChargeFee) },
+    taxPartners: { software: String(f.taxPartners?.software ?? "").trim().slice(0, 80), serviceBureau: String(f.taxPartners?.serviceBureau ?? "").trim().slice(0, 80), bankProduct: String(f.taxPartners?.bankProduct ?? "").trim().slice(0, 80) },
     late: { graceDays: Math.round(Number(f.late?.graceDays)), adminFee: Number(f.late?.adminFee), monthlyRatePct: Number(f.late?.monthlyRatePct), courtAfterDays: Math.round(Number(f.late?.courtAfterDays)), courtAdminFee: Number(f.late?.courtAdminFee) },
   };
   const err = checkFees(clean);
