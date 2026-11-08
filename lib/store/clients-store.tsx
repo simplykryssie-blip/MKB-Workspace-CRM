@@ -11,7 +11,7 @@
 import { useEffect } from "react";
 import { BACKEND, RemoteError, call, debouncer, notify, pendingClientCreates } from "@/lib/sync/remote";
 import { createContext, useCallback, useContext, useMemo, useReducer, useRef } from "react";
-import { CLIENTS, SAMPLE_NOW, STAGES, staffById } from "@/lib/sample/clients";
+import { CLIENTS, SAMPLE_NOW, STAGES, staffById, meId } from "@/lib/sample/clients";
 import type {
   ActivityItem,
   ActivityKind,
@@ -147,7 +147,7 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
     addClient(input: NewClientInput): string {
       const id = `c-${Math.floor(100000 + Math.random() * 899_900_000)}`;
       const at = nowIso();
-      const staffIds = input.staffIds.length ? input.staffIds : ["s-mk"];
+      const staffIds = input.staffIds.length ? input.staffIds : [meId()];
       const enrollments: Enrollment[] = input.services.map((s) => ({
         id: uid("e"),
         service: s,
@@ -487,7 +487,7 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
 
     // Notes -----------------------------------------------------------------------
     addNote(id: string, body: string, service?: ServiceKey) {
-      up(id, (c) => log({ ...c, notes: [{ id: uid("n"), authorId: "s-mk", body, at: nowIso(), service } satisfies Note, ...c.notes] }, "note", "Added an internal note"));
+      up(id, (c) => log({ ...c, notes: [{ id: uid("n"), authorId: meId(), body, at: nowIso(), service } satisfies Note, ...c.notes] }, "note", "Added an internal note"));
     },
     togglePin(id: string, noteId: string) {
       up(id, (c) => ({ ...c, notes: c.notes.map((n) => (n.id === noteId ? { ...n, pinned: !n.pinned } : n)) }));

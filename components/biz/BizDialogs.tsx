@@ -7,7 +7,7 @@ import { Checkbox, Label, SelectField, TextArea, TextField } from "@/components/
 import { EmailInput, PhoneInput } from "@/components/ui/FormattedInputs";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
-import { STAFF, SAMPLE_NOW, staffById } from "@/lib/sample/clients";
+import { STAFF, SAMPLE_NOW, staffById, meId } from "@/lib/sample/clients";
 import { useClients } from "@/lib/store/clients-store";
 import { checklistFor, entityStates, requestDocs, requestInvoices, useBiz, type NewRequestInput } from "@/lib/store/biz-store";
 import {
@@ -100,7 +100,7 @@ export function NewRequestDialog({ open, onClose, onCreated, preset }: { open: b
   const [serviceId, setServiceId] = useState("");
   const [description, setDescription] = useState("");
   const [preferredDate, setPreferredDate] = useState("");
-  const [assignedTo, setAssignedTo] = useState("s-mk");
+  const [assignedTo, setAssignedTo] = useState(meId());
   const [price, setPrice] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [note, setNote] = useState("");
@@ -118,7 +118,7 @@ export function NewRequestDialog({ open, onClose, onCreated, preset }: { open: b
     setServiceId(preset?.serviceId ?? "");
     setDescription("");
     setPreferredDate("");
-    setAssignedTo("s-mk");
+    setAssignedTo(meId());
     setPrice("");
     setFiles([]);
     setNote("");
@@ -622,7 +622,7 @@ export function AdjustDialog({ r, open, onClose }: { r: ServiceRequest; open: bo
   const max = !sel ? 0 : kind === "refund" ? sel.paid : kind === "credit" ? sel.amount - sel.paid : Infinity;
   const valid = sel && n > 0 && n <= max && note.trim();
   return (
-    <Modal open={open} onClose={onClose} title="Refund or adjustment" description="Kept in the invoice's adjustment history" footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!valid} onClick={() => { store.adjustInvoice(c!.id, id, { kind, amount: n, note: note.trim(), byId: "s-mk" }); toast("Adjustment recorded"); onClose(); }}>Record</Button></>}>
+    <Modal open={open} onClose={onClose} title="Refund or adjustment" description="Kept in the invoice's adjustment history" footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!valid} onClick={() => { store.adjustInvoice(c!.id, id, { kind, amount: n, note: note.trim(), byId: meId() }); toast("Adjustment recorded"); onClose(); }}>Record</Button></>}>
       {inv.length === 0 ? (
         <p className="text-[14px] text-muted">No invoices on this request yet.</p>
       ) : (
@@ -758,7 +758,7 @@ export function ComplianceItemDialog({ entity, item, open, onClose }: { entity: 
 /** Record that a deadline (or a rule) was checked against the official source. */
 export function VerifyDialog({ title, current, onVerify, open, onClose }: { title: string; current?: string; onVerify: (by: string, source: string) => void; open: boolean; onClose: () => void }) {
   const toast = useToast();
-  const [by, setBy] = useState("s-mk");
+  const [by, setBy] = useState(meId());
   const [source, setSource] = useState("");
   const [ok, setOk] = useState(false);
   useEffect(() => {
@@ -812,7 +812,7 @@ export function StandingDialog({ entity, open, onClose }: { entity: BizEntity; o
   const [state, setState] = useState(entity.state);
   const [source, setSource] = useState("");
   const [note, setNote] = useState("");
-  const [by, setBy] = useState("s-mk");
+  const [by, setBy] = useState(meId());
   useEffect(() => {
     if (open) {
       setStatus("verified_active");
@@ -854,7 +854,7 @@ export function RuleDialog({ rule, open, onClose, defaultState }: { rule?: Compl
   const save = () => {
     const out: ComplianceRule = { ...v, due, label: v.label.trim(), agency: v.agency.trim(), source: v.source.trim(), agencyUrl: v.agencyUrl?.trim() || undefined, filingFee: fee === "" ? undefined : Number(fee) };
     // Changing a date, fee or source clears the verification unless it was re-verified now.
-    if (verifiedNow) Object.assign(out, { lastVerifiedAt: SAMPLE_NOW.toISOString(), verifiedBy: "s-mk" });
+    if (verifiedNow) Object.assign(out, { lastVerifiedAt: SAMPLE_NOW.toISOString(), verifiedBy: meId() });
     else if (changedFacts) Object.assign(out, { lastVerifiedAt: undefined, verifiedBy: undefined });
     biz.saveRule(out);
     toast("Rule saved");
@@ -889,7 +889,7 @@ export function RuleDialog({ rule, open, onClose, defaultState }: { rule?: Compl
           {dueType === "fixed" && <TextField id="ru-day" label="Day" type="number" min={1} max={31} value={fixed.day} onChange={(e) => setV({ ...v, due: { month: fixed.month, day: Number(e.target.value) } })} />}
         </div>
         <TextField id="ru-source" label="Source" required value={v.source} onChange={(e) => setV({ ...v, source: e.target.value })} placeholder="Statute, agency page or notice this comes from" />
-        <p className="rounded-xl bg-surface-2 px-3 py-2 text-[12.5px] text-ink-2 ring-1 ring-line">{rule?.lastVerifiedAt ? `Last verified ${fmtDate(rule.lastVerifiedAt)} by ${staffById(rule.verifiedBy ?? "s-mk").name}. Changing the date, fee or source clears this unless you re-verify.` : "Not verified yet — the rule is flagged everywhere it's used."}</p>
+        <p className="rounded-xl bg-surface-2 px-3 py-2 text-[12.5px] text-ink-2 ring-1 ring-line">{rule?.lastVerifiedAt ? `Last verified ${fmtDate(rule.lastVerifiedAt)} by ${staffById(rule.verifiedBy ?? meId()).name}. Changing the date, fee or source clears this unless you re-verify.` : "Not verified yet — the rule is flagged everywhere it's used."}</p>
         <Checkbox label="I verified this against the official source today" checked={verifiedNow} onChange={() => setVerifiedNow((x) => !x)} />
         <TextArea id="ru-notes" label="Notes" value={v.notes ?? ""} onChange={(e) => setV({ ...v, notes: e.target.value || undefined })} />
       </div>
@@ -996,7 +996,7 @@ export function EntityDialog({ entity, clientId, open, onClose, onSaved }: { ent
   const biz = useBiz();
   const { clients } = useClients();
   const toast = useToast();
-  const blank = (): Omit<BizEntity, "id" | "createdAt"> => ({ clientId: clientId ?? "", legalName: "", entityType: "LLC", state: "GA", status: "active", einStatus: "not_started", principalAddress: "", ownerId: "s-mk", registrations: [], standing: { status: "not_verified" } });
+  const blank = (): Omit<BizEntity, "id" | "createdAt"> => ({ clientId: clientId ?? "", legalName: "", entityType: "LLC", state: "GA", status: "active", einStatus: "not_started", principalAddress: "", ownerId: meId(), registrations: [], standing: { status: "not_verified" } });
   const [v, setV] = useState<Omit<BizEntity, "id" | "createdAt">>(blank());
   const [tried, setTried] = useState(false);
   useEffect(() => {

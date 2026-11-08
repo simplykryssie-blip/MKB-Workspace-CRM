@@ -8,7 +8,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from "react";
 import { BACKEND, RemoteError, call, debouncer, notify, pendingClientCreates } from "@/lib/sync/remote";
 import { DEFAULT_SOURCES, DEFAULT_STAGES, LEADS } from "@/lib/sample/leads";
-import { staffById } from "@/lib/sample/clients";
+import { staffById, meId } from "@/lib/sample/clients";
 import { DEFAULT_FEES, defaultTitleFor, nowIso, useClients, type NewClientInput } from "@/lib/store/clients-store";
 import { SERVICES } from "@/lib/sample-data";
 import type { ActivityItem, ActivityKind, Lead, LeadPriority, LeadStage, Note, ServiceKey } from "@/lib/types";
@@ -94,9 +94,9 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
         createdAt: at,
         lastActivityAt: at,
         reminders: followUp ? [{ id: uid("r"), at: followUp.at, note: followUp.note, done: false, ownerId: input.ownerId }] : [],
-        notes: firstNote?.trim() ? [{ id: uid("n"), authorId: "s-mk", body: firstNote.trim(), at }] : [],
+        notes: firstNote?.trim() ? [{ id: uid("n"), authorId: meId(), body: firstNote.trim(), at }] : [],
         activity: [
-          ...(input.ownerId !== "s-mk" ? [{ id: uid("x"), kind: "lead" as const, text: `Assigned to ${staffById(input.ownerId).name}`, at, actor: "staff" as const }] : []),
+          ...(input.ownerId !== meId() ? [{ id: uid("x"), kind: "lead" as const, text: `Assigned to ${staffById(input.ownerId).name}`, at, actor: "staff" as const }] : []),
           { id: uid("x"), kind: "lead", text: `Lead created from ${input.source}${input.sourceDetail ? ` (${input.sourceDetail})` : ""}`, at, actor: "staff" },
         ],
       };
@@ -131,7 +131,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     },
 
     addNote(id: string, body: string) {
-      up(id, (l) => log({ ...l, notes: [{ id: uid("n"), authorId: "s-mk", body, at: nowIso() } satisfies Note, ...l.notes] }, "note", "Added a note"));
+      up(id, (l) => log({ ...l, notes: [{ id: uid("n"), authorId: meId(), body, at: nowIso() } satisfies Note, ...l.notes] }, "note", "Added a note"));
     },
     togglePin(id: string, noteId: string) {
       up(id, (l) => ({ ...l, notes: l.notes.map((n) => (n.id === noteId ? { ...n, pinned: !n.pinned } : n)) }));

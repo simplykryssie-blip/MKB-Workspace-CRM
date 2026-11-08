@@ -46,7 +46,7 @@ import { Progress } from "@/components/ui/Progress";
 import { ServiceTag } from "@/components/ui/ServiceTag";
 import { useToast } from "@/components/ui/Toast";
 import { SERVICES } from "@/lib/sample-data";
-import { STAGES, SAMPLE_NOW, staffById } from "@/lib/sample/clients";
+import { STAGES, SAMPLE_NOW, staffById, meId } from "@/lib/sample/clients";
 import { useClients } from "@/lib/store/clients-store";
 import { docStatus, enrollmentStatus, invoiceStatus, signatureStatus } from "@/lib/status";
 import { fileSize, fmtDate, fmtDateTime, fmtTime, relTime, usd } from "@/lib/format";
@@ -954,7 +954,7 @@ export function NotesTab({ c }: { c: Client }) {
                 <span className="ml-auto flex items-center gap-1">
                   {n.pinned && <span className="mr-1 inline-flex items-center gap-1 text-[12px] font-medium text-warning-ink"><Pin size={12} /> Pinned</span>}
                   <IconAction icon={n.pinned ? PinOff : Pin} label={n.pinned ? "Unpin" : "Pin to overview"} onClick={() => { store.togglePin(c.id, n.id); toast(n.pinned ? "Note unpinned" : "Note pinned to overview"); }} />
-                  {n.authorId === "s-mk" && <IconAction icon={Trash2} label="Delete note" onClick={() => { if (confirm("Delete this note?")) { store.deleteNote(c.id, n.id); toast("Note deleted"); } }} />}
+                  {n.authorId === meId() && <IconAction icon={Trash2} label="Delete note" onClick={() => { if (confirm("Delete this note?")) { store.deleteNote(c.id, n.id); toast("Note deleted"); } }} />}
                 </span>
               </div>
               <p className="mt-2 whitespace-pre-wrap text-[14px] leading-relaxed text-ink-2">{n.body}</p>

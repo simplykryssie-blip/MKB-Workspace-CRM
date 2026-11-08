@@ -11,7 +11,7 @@ import { SAMPLE_FORMS, SAMPLE_SUBMISSIONS } from "@/lib/sample/forms-seed";
 import { baseFields, consentField, fid, sensitiveReason, slugify, type FormField, type LeadForm, type Submission } from "@/lib/forms/config";
 import { nowIso, useClients } from "@/lib/store/clients-store";
 import { useLeads } from "@/lib/store/leads-store";
-import { SAMPLE_NOW } from "@/lib/sample/clients";
+import { SAMPLE_NOW, meId } from "@/lib/sample/clients";
 import type { Client, ServiceKey } from "@/lib/types";
 
 type State = { forms: LeadForm[]; submissions: Submission[] };
@@ -43,7 +43,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, leads: 
       const at = nowIso();
       const f: LeadForm = src
         ? { ...structuredClone(src), id, name, slug: uniqueSlug(name), status: "draft", createdAt: at, updatedAt: at, publishedAt: undefined, fields: src.fields.map((x) => ({ ...x, id: fid(), showIf: undefined })) }
-        : { id, name, slug: uniqueSlug(name), title: name, intro: "", status: "draft", services: [], fields: [...baseFields(), consentField()], routing: { ownerId: "s-mk", stageId: "st-new", source: "Website", tags: [], followUpHours: 24 }, thankYou: "Thank you! We'll be in touch within one business day.", createdAt: at, updatedAt: at };
+        : { id, name, slug: uniqueSlug(name), title: name, intro: "", status: "draft", services: [], fields: [...baseFields(), consentField()], routing: { ownerId: meId(), stageId: "st-new", source: "Website", tags: [], followUpHours: 24 }, thankYou: "Thank you! We'll be in touch within one business day.", createdAt: at, updatedAt: at };
       // Re-point show-if rules at the copied field IDs.
       if (src) f.fields = f.fields.map((x, i) => (src.fields[i].showIf ? { ...x, showIf: { fieldId: f.fields[src.fields.findIndex((y) => y.id === src.fields[i].showIf!.fieldId)]?.id ?? "", equals: src.fields[i].showIf!.equals } } : x));
       set((s) => ({ ...s, forms: [f, ...s.forms] }));

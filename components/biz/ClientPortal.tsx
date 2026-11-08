@@ -11,7 +11,7 @@ import { SelectField, TextArea, TextField } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { downloadPlaceholder } from "@/components/crm/dialogs";
-import { SAMPLE_NOW, staffById } from "@/lib/sample/clients";
+import { SAMPLE_NOW, staffById, meId } from "@/lib/sample/clients";
 import { useClients } from "@/lib/store/clients-store";
 import { isClosed, openInfo, requestInvoices, useBiz } from "@/lib/store/biz-store";
 import { ENTITY_TYPES, FLOW, NATURE, STATUS_META, stateOptions, type EntityType, type InfoRequest, type ServiceRequest } from "@/lib/biz/config";
@@ -175,7 +175,7 @@ function PortalRequestDialog({ clientId, open, onClose }: { clientId: string; op
   const submit = () => {
     setTried(true);
     if (Object.values(errs).some(Boolean)) return;
-    const id = biz.createRequest({ clientId, entityId: ent?.id, businessName: ent?.legalName ?? name.trim(), structure: ent?.entityType ?? structure, state, serviceId, description: desc, preferredDate: date ? new Date(`${date}T17:00`).toISOString() : undefined, assignedTo: "s-mk", files: toFiles(files), source: "portal" });
+    const id = biz.createRequest({ clientId, entityId: ent?.id, businessName: ent?.legalName ?? name.trim(), structure: ent?.entityType ?? structure, state, serviceId, description: desc, preferredDate: date ? new Date(`${date}T17:00`).toISOString() : undefined, assignedTo: meId(), files: toFiles(files), source: "portal" });
     toast(`Request ${id} sent to MKB`);
     reset();
     onClose();

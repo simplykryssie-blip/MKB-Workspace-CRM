@@ -14,7 +14,7 @@
  */
 import { createContext, useContext, useMemo, useReducer, useRef } from "react";
 import { BIZ_ENTITIES, BIZ_REQUESTS, COMPLIANCE_ITEMS, COMPLIANCE_RULES, STATE_CHECKLISTS, bizEnrollmentState } from "@/lib/sample/biz-seed";
-import { SAMPLE_NOW, staffById } from "@/lib/sample/clients";
+import { SAMPLE_NOW, staffById, meId } from "@/lib/sample/clients";
 import { nowIso, useClients } from "@/lib/store/clients-store";
 import {
   DEFAULT_CATALOG,
@@ -228,7 +228,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
   const msg = (r: ServiceRequest, body: string, from: "staff" | "client" = "staff") => r.clientId && clients().sendMessage(r.clientId, body, "biz", { bizRequestId: r.id, from, author: from === "staff" ? staffById(r.assignedTo).name : undefined });
 
   /** Every status change goes through here: history, client activity and the client's engagement stay in step. */
-  const moveTo = (id: string, status: RequestStatus, note?: string, by = "s-mk", extra: Partial<ServiceRequest> = {}) => {
+  const moveTo = (id: string, status: RequestStatus, note?: string, by = meId(), extra: Partial<ServiceRequest> = {}) => {
     const r = R(id);
     if (r.status === status && !Object.keys(extra).length) return;
     const at = nowIso();
@@ -280,7 +280,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
         preferredDate: input.preferredDate,
         dueAt: input.dueAt ?? input.preferredDate,
         assignedTo: input.assignedTo,
-        reviewerId: input.assignedTo === "s-mk" ? "s-jp" : "s-mk",
+        reviewerId: input.assignedTo === meId() ? "s-jp" : meId(),
         status: "Intake",
         source: input.source,
         createdAt: at,
@@ -306,7 +306,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       const svc = svcOf(r);
       const entityId = r.entityId ?? createEntity({ clientId, legalName: r.businessName, entityType: r.structure, state: r.state, status: svc?.formation ? "forming" : "active", principalAddress: "", ownerId: r.assignedTo });
       const enrollmentId = clients().enroll(clientId, { service: "biz", title: `${r.serviceName} — ${r.businessName}`, staffId: r.assignedTo, fee: quoteTotal(r.quote), dueAt: r.dueAt });
-      upReq(id, (x) => ({ ...x, clientId, entityId, enrollmentId, history: [...x.history, { status: x.status, at: nowIso(), byId: "s-mk", note: x.prospect ? `prospect ${x.prospect.name} linked to the client record` : "linked to the client record" }] }));
+      upReq(id, (x) => ({ ...x, clientId, entityId, enrollmentId, history: [...x.history, { status: x.status, at: nowIso(), byId: meId(), note: x.prospect ? `prospect ${x.prospect.name} linked to the client record` : "linked to the client record" }] }));
       clients().logActivity(clientId, "intake", `Business service request ${r.number} linked (${r.serviceName})`);
     },
     createClientFromProspect(id: string): string {
@@ -328,11 +328,11 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       return clientId;
     },
     updateRequest(id: string, patch: Partial<Pick<ServiceRequest, "description" | "dueAt" | "preferredDate" | "businessName" | "state" | "structure">>, summary = "Details updated") {
-      upReq(id, (r) => ({ ...r, ...patch, history: [...r.history, { status: r.status, at: nowIso(), byId: "s-mk", note: summary }] }));
+      upReq(id, (r) => ({ ...r, ...patch, history: [...r.history, { status: r.status, at: nowIso(), byId: meId(), note: summary }] }));
     },
     assign(id: string, role: "assignedTo" | "reviewerId", staffId: string) {
       const r = R(id);
-      upReq(id, (x) => ({ ...x, [role]: staffId, history: [...x.history, { status: x.status, at: nowIso(), byId: "s-mk", note: `${role === "assignedTo" ? "Assigned to" : "Reviewer"}: ${staffById(staffId).name}` }] }));
+      upReq(id, (x) => ({ ...x, [role]: staffId, history: [...x.history, { status: x.status, at: nowIso(), byId: meId(), note: `${role === "assignedTo" ? "Assigned to" : "Reviewer"}: ${staffById(staffId).name}` }] }));
       logClient(r, `${role === "assignedTo" ? "assigned to" : "reviewer set to"} ${staffById(staffId).name}`);
     },
 
@@ -379,7 +379,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       upReq(id, (x) => ({ ...x, quote: { ...x.quote, status: "declined" } }));
     },
     waivePayment(id: string, reason: string) {
-      upReq(id, (x) => ({ ...x, paymentWaived: reason, history: [...x.history, { status: x.status, at: nowIso(), byId: "s-mk", note: `proceeding before payment — ${reason}` }] }));
+      upReq(id, (x) => ({ ...x, paymentWaived: reason, history: [...x.history, { status: x.status, at: nowIso(), byId: meId(), note: `proceeding before payment — ${reason}` }] }));
     },
     /** Additional fee after the quote: issued as its own invoice so history stays clear. */
     addCharge(id: string, line: Omit<QuoteLine, "id">) {
@@ -439,17 +439,17 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     startWork: (id: string) => moveTo(id, "In Progress", `work started by ${staffById(R(id).assignedTo).name}`, R(id).assignedTo),
     hold(id: string, reason: string) {
       const r = R(id);
-      moveTo(id, "On Hold", reason, "s-mk", { holdFrom: r.status, holdReason: reason });
+      moveTo(id, "On Hold", reason, meId(), { holdFrom: r.status, holdReason: reason });
     },
     resume(id: string) {
       const r = R(id);
-      moveTo(id, r.holdFrom ?? "In Progress", "resumed", "s-mk", { holdFrom: undefined, holdReason: undefined });
+      moveTo(id, r.holdFrom ?? "In Progress", "resumed", meId(), { holdFrom: undefined, holdReason: undefined });
     },
     cancel(id: string, reason: string) {
-      moveTo(id, "Cancelled", reason, "s-mk", { cancelReason: reason });
+      moveTo(id, "Cancelled", reason, meId(), { cancelReason: reason });
     },
     reopen(id: string, reason: string) {
-      moveTo(id, "In Progress", `reopened — ${reason}`, "s-mk", { cancelReason: undefined, completedAt: undefined, approvedBy: undefined });
+      moveTo(id, "In Progress", `reopened — ${reason}`, meId(), { cancelReason: undefined, completedAt: undefined, approvedBy: undefined });
     },
     override(id: string, status: RequestStatus, reason: string) {
       moveTo(id, status, `override — ${reason}`);
@@ -537,7 +537,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     toggleTask(id: string, taskId: string) {
       upReq(id, (x) => ({ ...x, tasks: x.tasks.map((t) => (t.id === taskId ? { ...t, done: !t.done, doneAt: t.done ? undefined : nowIso() } : t)) }));
     },
-    addNote(id: string, body: string, authorId = "s-mk") {
+    addNote(id: string, body: string, authorId = meId()) {
       upReq(id, (x) => ({ ...x, notes: [{ id: uid("n"), authorId, body, at: nowIso() }, ...x.notes] }));
     },
 
@@ -578,7 +578,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       upItem(id, (i) => ({ ...i, ...patch }));
     },
     /** Create a deadline from a configured rule. Fees and dates come from the rule only when set; otherwise staff enter them. */
-    applyRule(entityId: string, ruleId: string, state: string, dueAt?: string, ownerId = "s-mk"): string {
+    applyRule(entityId: string, ruleId: string, state: string, dueAt?: string, ownerId = meId()): string {
       const rule = get().rules.find((r) => r.id === ruleId)!;
       const e = get().entities.find((x) => x.id === entityId)!;
       let due = dueAt;

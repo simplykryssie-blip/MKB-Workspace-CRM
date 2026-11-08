@@ -14,7 +14,7 @@
  */
 import { createContext, useContext, useMemo, useReducer, useRef } from "react";
 import { BOOKS_WORKSPACES } from "@/lib/sample/books";
-import { SAMPLE_NOW, staffById } from "@/lib/sample/clients";
+import { SAMPLE_NOW, staffById, meId } from "@/lib/sample/clients";
 import { nowIso, useClients } from "@/lib/store/clients-store";
 import {
   MONTH_STAGES,
@@ -122,7 +122,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     clients().syncEnrollmentStage(w.clientId, w.enrollmentId, m.stage, status, Math.round((MONTH_STAGES.indexOf(m.stage) / (MONTH_STAGES.length - 1)) * 100));
   };
 
-  const moveTo = (wsId: string, monthId: string, stage: MonthStage, note?: string, by = "s-mk", extra: Partial<BooksMonth> = {}) => {
+  const moveTo = (wsId: string, monthId: string, stage: MonthStage, note?: string, by = meId(), extra: Partial<BooksMonth> = {}) => {
     const w = W(wsId);
     const m = M(wsId, monthId);
     if (m.stage === stage) return;
@@ -164,7 +164,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     submitMonth(wsId: string, monthId: string, by: "client" | "staff") {
       const m = M(wsId, monthId);
       up(wsId, (w) => ({ ...w, tasks: w.tasks.map((t) => (t.period === m.period && ["entry", "categorize", "submit"].includes(t.type) && t.status === "open" ? { ...t, status: "done", completedAt: nowIso(), completedBy: by } : t)) }));
-      moveTo(wsId, monthId, "Ready for MKB Review", by === "staff" ? "submitted by MKB on the client's behalf" : "client confirmed entries are complete", by === "client" ? "client" : "s-mk", { submittedAt: nowIso() });
+      moveTo(wsId, monthId, "Ready for MKB Review", by === "staff" ? "submitted by MKB on the client's behalf" : "client confirmed entries are complete", by === "client" ? "client" : meId(), { submittedAt: nowIso() });
     },
     remindClient(wsId: string, monthId: string): number {
       const w = W(wsId);
@@ -221,7 +221,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       up(wsId, (w) => mapMonth(w, monthId, (m) => ({ ...m, reviewItems: m.reviewItems.map((r) => (r.id === itemId ? { ...r, status: "open", resolvedAt: undefined } : r)) })));
     },
     addReviewNote(wsId: string, monthId: string, body: string) {
-      up(wsId, (w) => log(mapMonth(w, monthId, (m) => ({ ...m, reviewNotes: [{ id: uid("rn"), authorId: "s-mk", body, at: nowIso() }, ...m.reviewNotes] })), "note", "Added a review note"));
+      up(wsId, (w) => log(mapMonth(w, monthId, (m) => ({ ...m, reviewNotes: [{ id: uid("rn"), authorId: meId(), body, at: nowIso() }, ...m.reviewNotes] })), "note", "Added a review note"));
     },
     /** Turn open review items into client tasks and move the month to follow-up. */
     /** `pending` = items dispatched in the same action that are not in the state snapshot yet. */
@@ -309,7 +309,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     },
     reopenMonth(wsId: string, monthId: string, reason: string, to: MonthStage) {
       const m = M(wsId, monthId);
-      moveTo(wsId, monthId, to, `reopened — ${reason}`, "s-mk", {
+      moveTo(wsId, monthId, to, `reopened — ${reason}`, meId(), {
         closedAt: undefined,
         finalApproval: undefined,
         reopenCount: m.reopenCount + 1,
@@ -326,7 +326,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       up(wsId, (x) => log({ ...x, tasks: [...x.tasks, { id: uid("t"), period, type: "statement", title: `Provide: ${name}`, status: "open", createdAt: nowIso(), docIds: [], requestDocId: docId }] }, "upload", `Requested "${name}" from client`));
     },
     addNote(wsId: string, body: string) {
-      up(wsId, (w) => log({ ...w, notes: [{ id: uid("n"), authorId: "s-mk", body, at: nowIso() }, ...w.notes] }, "note", "Added an internal note"));
+      up(wsId, (w) => log({ ...w, notes: [{ id: uid("n"), authorId: meId(), body, at: nowIso() }, ...w.notes] }, "note", "Added an internal note"));
     },
     togglePin(wsId: string, noteId: string) {
       up(wsId, (w) => ({ ...w, notes: w.notes.map((n) => (n.id === noteId ? { ...n, pinned: !n.pinned } : n)) }));

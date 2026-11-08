@@ -14,7 +14,7 @@ import { Breadcrumbs } from "@/components/ui/PageHeader";
 import { useToast } from "@/components/ui/Toast";
 import { downloadPlaceholder } from "@/components/crm/dialogs";
 import { FilePicker } from "@/components/biz/BizDialogs";
-import { STAFF, SAMPLE_NOW, staffById } from "@/lib/sample/clients";
+import { STAFF, SAMPLE_NOW, staffById, meId } from "@/lib/sample/clients";
 import { useClients } from "@/lib/store/clients-store";
 import { useExp } from "@/lib/store/exp-store";
 import { CASE_FLOW, CASE_STATUSES, PREP_META, RECORD_METHODS, RECORD_META, SCREENING_OUTCOMES, chargeCount, verifiedLabel, type CaseStatus, type ExpCase, type ExpMatter, type Jurisdiction, type ScreeningOutcome } from "@/lib/expunge/config";
@@ -143,7 +143,7 @@ function OverviewTab({ c, m, j, go, openFiling, openCourt }: { c: ExpCase; m: Ex
   else if (p === "Awaiting client approval") primary = { label: "Open document preparation", icon: PenLine, run: () => go("documents") };
   else if (p === "Ready for filing") primary = { label: "Record filing", icon: Gavel, run: openFiling };
   else if (p === "Filed / awaiting court action" || p === "Hearing scheduled") primary = { label: "Record court update", icon: Gavel, run: openCourt };
-  else if (p === "Order received — finishing") primary = { label: "Complete case", icon: ShieldCheck, run: () => { if (exp.complete(c.id, "s-mk")) toast("Completed"); else toast("A verified court order is required"); } };
+  else if (p === "Order received — finishing") primary = { label: "Complete case", icon: ShieldCheck, run: () => { if (exp.complete(c.id, meId())) toast("Completed"); else toast("A verified court order is required"); } };
   else if (p === "On hold") primary = { label: "Resume", icon: Play, run: () => { exp.resume(c.id); toast("Resumed"); } };
   return (
     <div className="space-y-5">
@@ -512,7 +512,7 @@ function FilingTab({ c, j, openFiling, openCourt }: { c: ExpCase; j?: Jurisdicti
           <div className="flex flex-wrap gap-2 px-5 py-4 sm:px-6">
             <Button variant={canFile ? "primary" : "secondary"} icon={Gavel} disabled={!canFile} title={canFile ? undefined : "Available when the case is Ready for Filing (client approved the documents)"} onClick={openFiling}>Record filing</Button>
             <Button icon={Gavel} disabled={!filed || ["Completed", "Denied", "Withdrawn"].includes(c.status)} onClick={openCourt}>Record court update</Button>
-            <Button variant="primary" icon={ShieldCheck} disabled={c.status !== "Granted"} title={c.status !== "Granted" ? "Requires a granted case with a verified order" : undefined} onClick={() => { if (exp.complete(c.id, "s-mk")) toast("Completed"); else toast("A verified court order is required"); }}>Complete case</Button>
+            <Button variant="primary" icon={ShieldCheck} disabled={c.status !== "Granted"} title={c.status !== "Granted" ? "Requires a granted case with a verified order" : undefined} onClick={() => { if (exp.complete(c.id, meId())) toast("Completed"); else toast("A verified court order is required"); }}>Complete case</Button>
           </div>
         )}
         <p className="border-t border-line px-5 py-3 text-[12px] text-muted sm:px-6">“Submitted” needs a verified filing confirmation on file. “Granted” needs the court&rsquo;s order on file and verified. “Completed” only follows a verified grant. MKB never files on its own from this app.</p>
@@ -529,7 +529,7 @@ function FilingDialog({ c, open, onClose }: { c: ExpCase; open: boolean; onClose
   useEffect(() => { if (open) { setV({ date: today(), method: "In person", conf: "", fee: "", feeStatus: "unpaid", verified: false }); setFiles([]); } }, [open]);
   const valid = v.conf.trim() && files.length && v.verified && v.date <= today();
   return (
-    <Modal open={open} onClose={onClose} title="Record filing" description="Record a filing that was made with the court. This does not file anything." footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!valid} onClick={() => { if (exp.recordFiling(c.id, { filedAt: v.date, method: v.method, confirmationNumber: v.conf.trim(), file: toFiles(files)[0], verified: v.verified, filingFee: v.fee === "" ? undefined : Number(v.fee), feeStatus: v.fee === "" ? "not_due" : v.feeStatus, byId: "s-mk" })) { toast("Submitted — confirmation on file"); onClose(); } }}>Record filing</Button></>}>
+    <Modal open={open} onClose={onClose} title="Record filing" description="Record a filing that was made with the court. This does not file anything." footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!valid} onClick={() => { if (exp.recordFiling(c.id, { filedAt: v.date, method: v.method, confirmationNumber: v.conf.trim(), file: toFiles(files)[0], verified: v.verified, filingFee: v.fee === "" ? undefined : Number(v.fee), feeStatus: v.fee === "" ? "not_due" : v.feeStatus, byId: meId() })) { toast("Submitted — confirmation on file"); onClose(); } }}>Record filing</Button></>}>
       <div className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <TextField id="fd-date" label="Filing date" type="date" max={today()} value={v.date} onChange={(e) => setV({ ...v, date: e.target.value })} />
@@ -556,7 +556,7 @@ function CourtDialog({ c, open, onClose }: { c: ExpCase; open: boolean; onClose:
   useEffect(() => { if (open) { setKind("awaiting"); setNote(""); setHearing(""); setFiles([]); setVerified(false); } }, [open]);
   const valid = note.trim() && (kind !== "hearing" || hearing) && (kind !== "granted" || (files.length && verified));
   return (
-    <Modal open={open} onClose={onClose} size="lg" title="Record court or agency update" footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!valid} onClick={() => { if (exp.courtUpdate(c.id, { kind, note: note.trim(), hearingAt: hearing ? new Date(hearing).toISOString() : undefined, orderFile: toFiles(files)[0], verified, byId: "s-mk" })) { toast("Court update recorded"); onClose(); } }}>Record</Button></>}>
+    <Modal open={open} onClose={onClose} size="lg" title="Record court or agency update" footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!valid} onClick={() => { if (exp.courtUpdate(c.id, { kind, note: note.trim(), hearingAt: hearing ? new Date(hearing).toISOString() : undefined, orderFile: toFiles(files)[0], verified, byId: meId() })) { toast("Court update recorded"); onClose(); } }}>Record</Button></>}>
       <div className="space-y-4">
         <SelectField id="cu-kind" label="Update" value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} options={[["awaiting", "Awaiting agency / court response"], ["hearing", "Hearing scheduled"], ["info", "Additional information requested"], ["granted", "Granted — order received"], ["denied", "Denied"], ["withdrawn", "Withdrawn"]]} />
         {kind === "hearing" && <TextField id="cu-hearing" label="Hearing date and time" type="datetime-local" required value={hearing} onChange={(e) => setHearing(e.target.value)} />}

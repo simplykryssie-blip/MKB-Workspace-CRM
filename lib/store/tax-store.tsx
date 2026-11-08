@@ -14,7 +14,7 @@ import { DEFAULT_FEE_SCHEDULE, ORGANIZERS, RETURN_STATUSES, baseChecklist, defau
 import { TAX_RETURNS } from "@/lib/sample/tax";
 import { docsFor, type Answers } from "@/lib/tax/interview/engine";
 import { impliedFilingStatus, sectionsFor } from "@/lib/tax/interview/questions";
-import { SAMPLE_NOW, staffById } from "@/lib/sample/clients";
+import { SAMPLE_NOW, staffById, meId } from "@/lib/sample/clients";
 import { nowIso, useClients } from "@/lib/store/clients-store";
 import type { ActivityItem, ActivityKind, Client, ClientDocument, Invoice } from "@/lib/types";
 
@@ -121,7 +121,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
   const label = (r: TaxReturn) => `TY ${r.taxYear} ${r.form}`;
 
   /** Status change: history + activity on the return, client activity, engagement sync. */
-  const moveTo = (id: string, status: ReturnStatus, text?: string, by = "s-mk") => {
+  const moveTo = (id: string, status: ReturnStatus, text?: string, by = meId()) => {
     const r = R(id);
     if (r.status === status) return;
     up(id, (x) =>
@@ -174,7 +174,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
         checklist,
         efile: [],
         pricing: { lines, discount: 0 },
-        statusHistory: [{ status: "Intake", at, by: "s-mk" }],
+        statusHistory: [{ status: "Intake", at, by: meId() }],
         notes: [],
         activity: [{ id: uid("x"), kind: "intake", text: `Return created — TY ${input.taxYear} ${input.form}`, at, actor: "staff" }],
         createdAt: at,
@@ -438,7 +438,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     },
 
     addNote(id: string, body: string) {
-      up(id, (x) => log({ ...x, notes: [{ id: uid("n"), authorId: "s-mk", body, at: nowIso() }, ...x.notes] }, "note", "Added a note"));
+      up(id, (x) => log({ ...x, notes: [{ id: uid("n"), authorId: meId(), body, at: nowIso() }, ...x.notes] }, "note", "Added a note"));
     },
 
     /* ---------------- Fee schedule ---------------- */

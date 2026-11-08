@@ -7,7 +7,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { Checkbox, Label, SelectField, TextArea, TextField } from "@/components/ui/Field";
 import { useToast } from "@/components/ui/Toast";
-import { STAFF, SAMPLE_NOW, staffById } from "@/lib/sample/clients";
+import { STAFF, SAMPLE_NOW, staffById, meId } from "@/lib/sample/clients";
 import { TAX_YEARS } from "@/lib/sample/tax";
 import { useClients } from "@/lib/store/clients-store";
 import { billing, useTax } from "@/lib/store/tax-store";
@@ -33,7 +33,7 @@ export function NewReturnDialog({ open, onClose, defaultYear, clientId: presetCl
   const [form, setForm] = useState<TaxForm>("1040");
   const [filingStatus, setFilingStatus] = useState<FilingStatus>("Single");
   const [preparer, setPreparer] = useState("s-al");
-  const [reviewer, setReviewer] = useState("s-mk");
+  const [reviewer, setReviewer] = useState(meId());
   const [states, setStates] = useState<string[]>(["GA"]);
   const [extension, setExtension] = useState(false);
   const client = clients.find((c) => c.id === clientId);

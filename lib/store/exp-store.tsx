@@ -14,7 +14,7 @@
  */
 import { createContext, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { EXP_CASES, EXP_JURISDICTIONS, EXP_MATTERS, EXP_PRICES, EXP_SERVICES } from "@/lib/sample/exp-seed";
-import { SAMPLE_NOW, staffById } from "@/lib/sample/clients";
+import { SAMPLE_NOW, staffById, meId } from "@/lib/sample/clients";
 import { nowIso, useClients } from "@/lib/store/clients-store";
 import {
   ASSIGNMENT_ROLES,
@@ -80,7 +80,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
   const logClient = (clientId: string, text: string, actor: "staff" | "client" = "staff") => clients().logActivity(clientId, "status", text, actor);
   const who = () => ({ who: role() === "owner" ? "MKB Owner" : role() === "coordinator" ? "Jesse Park" : role() === "intake" ? "Alex Lane" : "Robin Tate", role: EXP_ROLES[role()].label });
 
-  const moveTo = (caseId: string, status: CaseStatus, note?: string, byId = "s-mk", extra: Partial<ExpCase> = {}) => {
+  const moveTo = (caseId: string, status: CaseStatus, note?: string, byId = meId(), extra: Partial<ExpCase> = {}) => {
     const c = C(caseId);
     const at = nowIso();
     upC(caseId, (x) => ({ ...x, ...extra, status, history: [...x.history, { at, byId, status, note }] }));
@@ -159,7 +159,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     assign(matterId: string, roleName: AssignmentRole, staffId: string) {
       upM(matterId, (m) => ({ ...m, assignments: { ...m.assignments, [roleName]: staffId } }));
     },
-    addNote(matterId: string, body: string, authorId = "s-mk") {
+    addNote(matterId: string, body: string, authorId = meId()) {
       upM(matterId, (m) => ({ ...m, notes: [{ id: uid("n"), authorId, body, at: nowIso() }, ...m.notes] }));
     },
 
@@ -181,7 +181,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
         screening: { ruleIds: [], offenseCategory: "", dispositionSummary: "", sentenceCompleted: input.sentenceCompleted ?? "unknown", waitingPeriod: "", waitingPeriodMet: "unknown", obligationsOutstanding: "unknown", pendingCharges: "unknown", onSupervision: "unknown", priorExpungements: "unknown", supportingDocsComplete: "unknown", missingInfo: "", disqualifyingIssues: "", legalReviewRequired: false, answers: {}, outcome: "Information Incomplete", reviews: [] },
         prep: { preparerId: m.assignments["Document preparation"], reviewerId: m.assignments["Quality review"], status: "not_started", forms: [], missing: [], clientApproval: "not_sent", delivery: "not_delivered" },
         filing: { court: input.dockets[0]?.court ?? "", clerkContact: "", feeStatus: "not_due" },
-        history: [{ at: nowIso(), byId: by === "client" ? "client" : "s-mk", status: "Not Started", note: by === "client" ? "added by the client in the portal" : "case created" }],
+        history: [{ at: nowIso(), byId: by === "client" ? "client" : meId(), status: "Not Started", note: by === "client" ? "added by the client in the portal" : "case created" }],
         internalNotes: [],
       };
       set((x) => ({ ...x, cases: [...x.cases, c] }));
@@ -194,11 +194,11 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       const remedyChanged = patch.remedyId !== undefined && patch.remedyId !== c.remedyId;
       const j = get().jurisdictions.find((x) => x.id === (patch.jurisdictionId ?? c.jurisdictionId));
       upC(caseId, (x) => {
-        let next: ExpCase = { ...x, ...patch, history: [...x.history, { at: nowIso(), byId: "s-mk", status: "note", note }] };
+        let next: ExpCase = { ...x, ...patch, history: [...x.history, { at: nowIso(), byId: meId(), status: "note", note }] };
         if (remedyChanged) {
           const name = j?.remedies.find((r) => r.id === patch.remedyId)?.name ?? "new workflow";
           const add = x.draft ? [] : checklistFor(j, patch.remedyId, next.dockets).filter((d) => !x.records.some((r) => r.docType === d)).map((docType) => ({ id: uid("rec"), docType, kind: kindOf(docType), required: true, status: "not_requested" as const }));
-          next = { ...next, records: [...x.records, ...add], screening: { ...x.screening, ruleIds: [], answers: {}, outcome: "Information Incomplete", legalReviewRequired: x.screening.legalReviewRequired }, history: [...next.history, { at: nowIso(), byId: "s-mk", status: "note", note: `workflow set to ${name} — screening reset (requirements are separate)` }] };
+          next = { ...next, records: [...x.records, ...add], screening: { ...x.screening, ruleIds: [], answers: {}, outcome: "Information Incomplete", legalReviewRequired: x.screening.legalReviewRequired }, history: [...next.history, { at: nowIso(), byId: meId(), status: "note", note: `workflow set to ${name} — screening reset (requirements are separate)` }] };
         }
         return next;
       });
@@ -206,7 +206,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     removeDraftCase(caseId: string) {
       set((s) => ({ ...s, cases: s.cases.filter((c) => !(c.id === caseId && c.draft)) }));
     },
-    addCaseNote(caseId: string, body: string, authorId = "s-mk") {
+    addCaseNote(caseId: string, body: string, authorId = meId()) {
       upC(caseId, (c) => ({ ...c, internalNotes: [{ id: uid("n"), authorId, body, at: nowIso() }, ...c.internalNotes] }));
     },
 
@@ -335,11 +335,11 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     },
     hold(caseId: string, reason: string) {
       const c = C(caseId);
-      moveTo(caseId, "On Hold", reason, "s-mk", { holdFrom: c.status, holdReason: reason });
+      moveTo(caseId, "On Hold", reason, meId(), { holdFrom: c.status, holdReason: reason });
     },
     resume(caseId: string) {
       const c = C(caseId);
-      moveTo(caseId, c.holdFrom ?? "Not Started", "resumed", "s-mk", { holdFrom: undefined, holdReason: undefined });
+      moveTo(caseId, c.holdFrom ?? "Not Started", "resumed", meId(), { holdFrom: undefined, holdReason: undefined });
     },
     /** Manual status change — never to Granted or Completed (those need confirmation). */
     override(caseId: string, status: CaseStatus, reason: string) {
@@ -348,7 +348,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       return true;
     },
     assignCase(caseId: string, staffId: string) {
-      upC(caseId, (c) => ({ ...c, assignedTo: staffId, history: [...c.history, { at: nowIso(), byId: "s-mk", status: "note", note: `assigned to ${staffById(staffId).name}` }] }));
+      upC(caseId, (c) => ({ ...c, assignedTo: staffId, history: [...c.history, { at: nowIso(), byId: meId(), status: "note", note: `assigned to ${staffById(staffId).name}` }] }));
     },
 
     /* ---------------- Client requests ---------------- */

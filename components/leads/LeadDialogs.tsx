@@ -8,7 +8,7 @@ import { Checkbox, Label, SelectField, TextArea, TextField } from "@/components/
 import { AddressFields, DOBInput, EINInput, EmailInput, PhoneInput, ResponsiblePartyFields, TaxIdInput } from "@/components/ui/FormattedInputs";
 import { useToast } from "@/components/ui/Toast";
 import { SERVICES, SERVICE_ORDER } from "@/lib/sample-data";
-import { SAMPLE_NOW, STAFF } from "@/lib/sample/clients";
+import { SAMPLE_NOW, STAFF, meId } from "@/lib/sample/clients";
 import { LOST_REASONS } from "@/lib/sample/leads";
 import { defaultTitleFor, useClients } from "@/lib/store/clients-store";
 import { useLeads, type NewLeadInput } from "@/lib/store/leads-store";
@@ -77,7 +77,7 @@ export function leadToForm(l?: Lead, defaults?: { stageId: string; source: strin
     sourceDetail: l?.sourceDetail ?? "",
     interests: l?.interests ?? [],
     estValue: l ? String(l.estValue) : "",
-    ownerId: l?.ownerId ?? "s-mk",
+    ownerId: l?.ownerId ?? meId(),
     priority: l?.priority ?? "medium",
     stageId: l?.stageId ?? defaults?.stageId ?? "",
     tags: l?.tags.join(", ") ?? "",

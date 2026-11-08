@@ -12,7 +12,7 @@ import { Modal } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useToast } from "@/components/ui/Toast";
 import { Kpi } from "@/components/biz/BizBits";
-import { STAFF, SAMPLE_NOW, staffById } from "@/lib/sample/clients";
+import { STAFF, SAMPLE_NOW, staffById, meId } from "@/lib/sample/clients";
 import { useClients } from "@/lib/store/clients-store";
 import { matterCases, useExp } from "@/lib/store/exp-store";
 import { ASSIGNMENT_ROLES, CASE_STATUSES, COMPLEXITY, EXP_ROLES, RELEASE_STATES, PHASES, RECORD_META, SCREENING_OUTCOMES, chargeCount, verifiedLabel, type Complexity, type ExpMatter, type Jurisdiction, type Phase } from "@/lib/expunge/config";
@@ -341,7 +341,7 @@ function JurisdictionsTab() {
   const remedy = v.remedies.find((r) => r.id === rem) ?? v.remedies[0];
   const upList = <K extends ListKey>(k: K, i: number, patch: Partial<Jurisdiction[K][number]>) => setV({ ...v, [k]: (v[k] as Jurisdiction[K][number][]).map((x, j) => (j === i ? { ...x, ...patch } : x)) });
   const rmList = (k: ListKey, i: number) => setV({ ...v, [k]: (v[k] as unknown[]).filter((_, j) => j !== i) });
-  const stamp = { lastVerifiedAt: SAMPLE_NOW.toISOString(), verifiedBy: "s-mk" };
+  const stamp = { lastVerifiedAt: SAMPLE_NOW.toISOString(), verifiedBy: meId() };
   const inp = "h-9 w-full rounded-lg border border-line bg-surface px-2.5 text-[13px] text-ink disabled:opacity-70";
   const VBadge = ({ x }: { x: { lastVerifiedAt?: string } }) => x.lastVerifiedAt ? <Badge tone="success" icon={BadgeCheck}>{verifiedLabel(x)}</Badge> : <Badge tone="warning" icon={ShieldAlert}>Not verified</Badge>;
   const mine = <T extends { remedyId: string }>(list: T[]) => list.map((x, i) => ({ x, i })).filter(({ x }) => x.remedyId === remedy?.id);

@@ -34,8 +34,18 @@ export const STAFF: Staff[] = [
   { id: "s-rt", name: "Robin Tate", initials: "RT", title: "Bookkeeper" },
   { id: "s-jp", name: "Jesse Park", initials: "JP", title: "Case coordinator" },
 ];
+/**
+ * With the backend on, the real team (loaded after sign-in) and the signed-in
+ * member replace the sample directory and the sample "MKB Owner" identity.
+ */
+let LIVE_STAFF: Staff[] = [];
+let ME = "s-mk";
+export function setStaffDirectory(list: Staff[]) { LIVE_STAFF = list; }
+export function setMeId(id: string) { ME = id; }
+/** The member the current action is recorded under (the signed-in person). */
+export const meId = () => ME;
 /** Resolves any staff identity — current or former — so historical attribution never breaks. */
-export const staffById = (id: string): Staff => STAFF.find((s) => s.id === id) ?? TEAM_STAFF.find((s) => s.id === id) ?? { id, name: "Former team member", initials: "—", title: "" };
+export const staffById = (id: string): Staff => LIVE_STAFF.find((s) => s.id === id) ?? STAFF.find((s) => s.id === id) ?? TEAM_STAFF.find((s) => s.id === id) ?? { id, name: "Former team member", initials: "—", title: "" };
 
 /** Workflow stages per division (also used by the service workspaces). */
 export const STAGES: Record<ServiceKey, string[]> = {

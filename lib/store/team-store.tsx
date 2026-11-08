@@ -11,7 +11,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { BACKEND, RemoteError, call, notify } from "@/lib/sync/remote";
 import { ACCESS_REQUESTS, AUDIT_SEED, DEFAULT_ROLES, DEPARTMENT_CONFIG, INVITATIONS, MEMBERS, SECURITY_DEFAULTS } from "@/lib/sample/team-seed";
-import { SAMPLE_NOW } from "@/lib/sample/clients";
+import { SAMPLE_NOW, setMeId, setStaffDirectory } from "@/lib/sample/clients";
 import { nowIso, useClients } from "@/lib/store/clients-store";
 import { useTax } from "@/lib/store/tax-store";
 import { useBooks } from "@/lib/store/books-store";
@@ -418,6 +418,8 @@ function useTeamSync(local: Actions, dispatch: React.Dispatch<Action>, ref: Reac
   const refresh = useCallback(async () => {
     try {
       const s = await call<ServerState>("GET", "/api/team/state");
+      // Real names for every module's "who did this" (instead of the sample directory).
+      setStaffDirectory(s.members.map((m) => ({ id: m.id, name: m.name, initials: m.initials, title: m.title })));
       dispatch({ type: "fn", fn: (cur) => ({ ...cur, roles: s.roles, departments: s.departments, members: s.members, invitations: s.invitations, requests: s.requests, security: s.security ?? cur.security }) });
     } catch (e) {
       if (!(e instanceof RemoteError && e.status === 401)) notify("Couldn't load team information.");
@@ -436,7 +438,7 @@ function useTeamSync(local: Actions, dispatch: React.Dispatch<Action>, ref: Reac
     (async () => {
       try {
         const me = await call<{ kind: string; member?: { id: string }; caps?: string[] }>("GET", "/api/auth/session");
-        if (me.member) setActing({ kind: "member", id: me.member.id });
+        if (me.member) { setMeId(me.member.id); setActing({ kind: "member", id: me.member.id }); }
         await refresh();
         if (me.caps?.includes("audit.view")) await refreshAudit();
       } finally {

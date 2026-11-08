@@ -83,11 +83,24 @@ export async function createReturn(env: AppEnv, a: Actor, r: ReturnSnapshot) {
 }
 
 /** Saves a return. Each kind of change needs its own permission; a stale revision is refused. */
+/** Applies `fn` to entries that weren't in `before` (matched by id, or by position for id-less lists). */
+export function stampNew<T>(before: T[] | undefined, after: T[] | undefined, fn: (x: T) => T): T[] {
+  const prev = before ?? [];
+  const ids = new Set(prev.map((x) => (x as { id?: string }).id).filter(Boolean));
+  return (after ?? []).map((x, i) => {
+    const id = (x as { id?: string }).id;
+    const isNew = id ? !ids.has(id) : i >= prev.length;
+    return isNew ? fn(x) : x;
+  });
+}
+
 export async function saveReturn(env: AppEnv, a: Actor, id: string, next: ReturnSnapshot) {
   requirePermission(a, "tax", "view");
   if (a.kind !== "staff") throw forbidden();
   const cur = await load(env, a, id);
   if (next.rev !== cur.rev) throw new HttpError(409, "Someone else updated this return. Reloading the latest version.", "conflict");
+  // New notes and status steps are recorded as the signed-in person, whatever the browser says.
+  next = { ...next, notes: stampNew(cur.notes, next.notes, (n) => ({ ...n, authorId: a.member.id })), statusHistory: stampNew(cur.statusHistory, next.statusHistory, (h) => (h.by === "client" || h.by === "system" ? h : { ...h, by: a.member.id })) };
   if (next.clientId !== cur.clientId || next.taxYear !== cur.taxYear || next.kind !== cur.kind) throw badRequest("A return's client, year and type can't change.");
   const same = (k: keyof TaxReturn) => JSON.stringify(next[k] ?? null) === JSON.stringify(cur[k] ?? null);
   const need = (action: "edit" | "assign" | "approve", what: string) => { if (!canDo(a.policy, a.member, "tax", action)) throw forbidden(`Your role can't ${what}.`); };
