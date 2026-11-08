@@ -125,10 +125,14 @@ export async function stripeWebhook(env: AppEnv, req: Request) {
   const id = s.metadata?.invoice_id;
   const r = id ? await one<InvoiceRow>(env.DB, "SELECT * FROM invoices WHERE id = ?", id) : null;
   if (!r) throw notFound("Invoice not found.");
+  const ref = s.payment_intent ?? s.id;
+  // Stripe may send the same event more than once: record it (and ring the bell) only the first time.
+  if (await one(env.DB, "SELECT 1 FROM payments WHERE source = 'stripe' AND reference = ?", ref)) return { received: true, duplicate: true };
   try {
     const owed = r.amount_cents - r.paid_cents;
     const amt = Math.min(s.amount_total ?? 0, owed);
-    if (amt > 0) await applyPayment(env, r, { amountCents: amt, method: "Card / bank (Stripe)", source: "stripe", reference: s.payment_intent ?? s.id, receivedAt: now() });
+    if (amt > 0) await applyPayment(env, r, { amountCents: amt, method: "Card / bank (Stripe)", source: "stripe", reference: ref, receivedAt: now() });
+    else return { received: true, nothingOwed: true };
   } catch (e) {
     if (e instanceof HttpError && e.code === "duplicate") return { received: true, duplicate: true };
     throw e;

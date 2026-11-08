@@ -62,7 +62,7 @@ export const NAV: { section?: string; items: NavItem[] }[] = [
     items: [
       { label: "Appointments", href: "/appointments", icon: CalendarDays },
       { label: "Documents", href: "/documents", icon: FolderOpen },
-      { label: "Invoices & Payments", href: "/invoices", icon: Receipt },
+      { label: "Billing", href: "/billing", icon: Receipt },
       { label: "Messages", href: "/messages", icon: Mail, badge: process.env.NEXT_PUBLIC_BACKEND === "1" ? undefined : 3 },
       { label: "Tasks", href: "/tasks", icon: CheckSquare },
     ],

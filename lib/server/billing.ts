@@ -34,10 +34,14 @@ export const toInvoice = (r: InvoiceRow): Invoice => ({
 });
 
 /* ---------------------------------------------------------------- access */
-/** Billing staff, or tax staff who can edit returns (for tax invoices). */
+/** The department module behind each service (its staff can bill their own service). */
+const SERVICE_MODULE = { tax: "tax", books: "books", biz: "biz", expunge: "exp" } as const;
+/** Billing staff, or staff who can edit the service the invoice is for. */
 function canBill(a: Staff, service: ServiceKey | "any", action: "view" | "create" | "edit" | "approve" | "settings") {
   if (canDo(a.policy, a.member, "billing", action)) return true;
-  return (service === "tax" || service === "any") && action !== "settings" && action !== "approve" && canDo(a.policy, a.member, "tax", "edit");
+  if (action === "settings" || action === "approve") return false;
+  const mods = service === "any" ? Object.values(SERVICE_MODULE) : [SERVICE_MODULE[service]];
+  return mods.some((m) => canDo(a.policy, a.member, m, "edit"));
 }
 function need(a: Actor, service: ServiceKey | "any", action: Parameters<typeof canBill>[2]): asserts a is Staff {
   requireStaff(a);
@@ -66,7 +70,7 @@ export async function listInvoices(env: AppEnv, a: Actor, clientId?: string) {
   const ok = new Map<string, string>();
   for (const c of clients) if (await canOpen(env, a, c)) ok.set(c.id, c.name);
   const full = canDo(a.policy, a.member, "billing", "view");
-  return { invoices: rows.filter((r) => ok.has(r.client_id) && (full || r.service === "tax")).map((r) => ({ ...toInvoice(r), clientId: r.client_id, clientName: ok.get(r.client_id)! })) };
+  return { invoices: rows.filter((r) => ok.has(r.client_id) && (full || canDo(a.policy, a.member, SERVICE_MODULE[r.service], "edit"))).map((r) => ({ ...toInvoice(r), clientId: r.client_id, clientName: ok.get(r.client_id)! })) };
 }
 
 /** Invoices for the client profile (used when loading full client records). */
@@ -285,3 +289,55 @@ export async function invoicePayments(env: AppEnv, id: string) {
   return (await all<{ id: string; amount_cents: number; method: string; source: string; reference: string | null; received_at: string; note: string | null }>(env.DB, "SELECT id, amount_cents, method, source, reference, received_at, note FROM payments WHERE invoice_id = ? ORDER BY received_at DESC", id)).map((p) => ({ id: p.id, amount: dollars(p.amount_cents), method: p.method, source: p.source, reference: p.reference ?? undefined, receivedAt: p.received_at, note: p.note ?? undefined }));
 }
 export { dollars };
+
+/* ---------------------------------------------------------------- late fees */
+const DAY = 86_400_000;
+/** What late fees are due now on one invoice (admin fee once after the grace period, then interest each full month). */
+function lateDue(r: InvoiceRow, late: { graceDays: number; adminFee: number; monthlyRatePct: number }, at = Date.now()) {
+  if (r.payment_mode !== "upfront" || !["open", "partial"].includes(r.status) || r.amount_cents <= r.paid_cents) return null;
+  const daysLate = Math.floor((at - new Date(r.due_at).getTime()) / DAY);
+  if (daysLate < late.graceDays) return null;
+  const lines = json<InvoiceLine[]>(r.lines, []);
+  const hasAdmin = lines.some((l) => l.kind === "late_fee" && l.label.startsWith("Late administrative fee"));
+  const months = Math.floor(daysLate / 30);
+  const charged = lines.filter((l) => l.kind === "late_fee" && l.label.startsWith("Late interest")).length;
+  const add: InvoiceLine[] = [];
+  if (!hasAdmin && late.adminFee > 0) add.push({ label: `Late administrative fee (${late.graceDays} days past due)`, amount: late.adminFee, kind: "late_fee" });
+  const base = r.amount_cents - r.paid_cents - lines.filter((l) => l.kind === "late_fee").reduce((s, l) => s + cents(l.amount), 0);
+  for (let m = charged + 1; m <= months && late.monthlyRatePct > 0; m++) add.push({ label: `Late interest — month ${m} (${late.monthlyRatePct}% of unpaid balance)`, amount: dollars(Math.round(Math.max(0, base) * late.monthlyRatePct / 100)), kind: "late_fee" });
+  return add.filter((l) => l.amount > 0).length ? { daysLate, add: add.filter((l) => l.amount > 0) } : null;
+}
+
+export async function lateFeeCandidates(env: AppEnv, a: Actor) {
+  need(a, "any", "view");
+  const { late } = await loadFees(env);
+  const rows = await all<InvoiceRow & { c_name: string }>(env.DB, "SELECT i.*, c.name AS c_name FROM invoices i JOIN clients c ON c.id = i.client_id WHERE i.payment_mode = 'upfront' AND i.status IN ('open', 'partial') AND i.due_at < ?", now());
+  const out = [];
+  for (const r of rows) {
+    const d = lateDue(r, late);
+    if (!d) continue;
+    const c = await one<ClientRow>(env.DB, `${CLIENT_SQL} WHERE c.id = ?`, r.client_id);
+    if (c && (await canOpen(env, a as Staff, c))) out.push({ id: r.id, number: r.number, clientName: r.c_name, daysLate: d.daysLate, add: d.add.reduce((s, l) => s + l.amount, 0), lines: d.add.map((l) => l.label) });
+  }
+  return { candidates: out, terms: late };
+}
+
+/** Adds the late fees that are due to the chosen invoices (logged on each invoice). */
+export async function applyLateFees(env: AppEnv, a: Actor, b: { ids?: unknown }) {
+  need(a, "any", "edit");
+  const ids = Array.isArray(b.ids) ? b.ids.filter((x): x is string => typeof x === "string").slice(0, 200) : [];
+  const { late } = await loadFees(env);
+  let n = 0;
+  for (const id of ids) {
+    const r = await rowFor(env, a as Staff, id);
+    const d = lateDue(r, late);
+    if (!d) continue;
+    const lines = [...json<InvoiceLine[]>(r.lines, []), ...d.add];
+    const add = d.add.reduce((s, l) => s + cents(l.amount), 0);
+    await run(env.DB, "UPDATE invoices SET lines = ?, amount_cents = amount_cents + ?, late_fee_at = ?, history = ?, updated_at = ?, rev = rev + 1 WHERE id = ?", JSON.stringify(lines), add, now(), hist(r.history, a.kind === "staff" ? a.member.id : "system", `Late fees added: ${d.add.map((l) => `${l.label} $${l.amount.toFixed(2)}`).join("; ")}`), now(), id);
+    await run(env.DB, "INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'invoice', ?, 'staff', ?, ?)", randomId("x"), r.client_id, `Late fees of $${dollars(add).toFixed(2)} added to ${r.number}`, a.kind === "staff" ? a.member.id : null, now());
+    n++;
+  }
+  await audit(env.DB, a, { action: "Record update", resource: "Late fees", meta: `Applied to ${n} invoice${n === 1 ? "" : "s"}` });
+  return { applied: n };
+}

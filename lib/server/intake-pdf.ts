@@ -102,8 +102,10 @@ async function makeWriter(docTitle: string, headerRight: string) {
     need(ll.length * (size + 4) + 8);
     ll.forEach((l, i) => page.drawText(l, { x: M, y: y - i * (size + 4), size, font, color }));
     if (amount) { const a = safe(amount); page.drawText(a, { x: W - M - font.widthOfTextAtSize(a, size), y, size, font, color }); }
-    y -= ll.length * (size + 4) + 4;
-    if (!o.group) { page.drawRectangle({ x: M, y: y + 2, width: W - 2 * M, height: 0.5, color: LINE }); y -= 4; }
+    // Divider sits below the last line of text, then the next row starts below it.
+    y -= (ll.length - 1) * (size + 4);
+    if (!o.group) { page.drawRectangle({ x: M, y: y - 6, width: W - 2 * M, height: 0.5, color: LINE }); y -= size + 12; }
+    else y -= size + 6;
   };
   return { text, heading, row, space, finish, amountRow, fonts: { reg, bold, serif } };
 }

@@ -322,6 +322,15 @@ function FeesEditor() {
       </Card>
 
       <Card>
+        <CardHeader icon={DollarSign} title="Invoice wording" subtitle="Shown on invoices. {{bank}} becomes your refund transfer bank." />
+        <div className="space-y-3 px-5 pb-5 sm:px-6">
+          <div><label htmlFor="iw-up" className="mb-1 block text-[13px] font-medium text-ink-2">Pay upfront invoices — payment note</label><textarea id="iw-up" rows={2} disabled={ro} value={f.invoiceText.upfrontNote} onChange={(e) => setF({ ...f, invoiceText: { ...f.invoiceText, upfrontNote: e.target.value } })} className={`${input} py-2`} /></div>
+          <div><label htmlFor="iw-bp" className="mb-1 block text-[13px] font-medium text-ink-2">Bank product invoices — how fees paid from the refund work</label><textarea id="iw-bp" rows={8} disabled={ro} value={f.invoiceText.bankDisclosure} onChange={(e) => setF({ ...f, invoiceText: { ...f.invoiceText, bankDisclosure: e.target.value } })} className={`${input} py-2`} /></div>
+          <p className="text-[12px] text-warning-ink">Draft wording — check it against your refund transfer bank&rsquo;s agreement before clients see it.</p>
+        </div>
+      </Card>
+
+      <Card>
         <CardHeader icon={DollarSign} title="Late payments (all services)" subtitle="Used in the Standard terms of every engagement letter." />
         <div className="space-y-3 px-5 pb-5 sm:px-6">
           <div className="grid gap-4 sm:grid-cols-3">
@@ -355,7 +364,8 @@ function DesigneeEditor() {
   const [d, setD] = useState<Designee | null>(BACKEND ? null : EMPTY_DESIGNEE);
   const [saved, setSaved] = useState<Designee | null>(null);
   const [saving, setSaving] = useState(false);
-  useEffect(() => { if (BACKEND) call<{ designee: Designee }>("GET", "/api/settings/designee").then((r) => { setD(r.designee); setSaved(r.designee); }).catch((e) => toast(e instanceof Error ? e.message : "Couldn't load", "info")); }, []);
+  // Only the first answer fills the form, so a slow second load never wipes what's been typed.
+  useEffect(() => { if (BACKEND) call<{ designee: Designee }>("GET", "/api/settings/designee").then((r) => { setSaved((cur) => cur ?? r.designee); setD((cur) => cur ?? r.designee); }).catch((e) => toast(e instanceof Error ? e.message : "Couldn't load", "info")); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   if (!d) return <Card className="p-8 text-center text-muted">Loading…</Card>;
   const save = async () => {
     if (!BACKEND) return toast("Saving needs the live CRM (preview or production).", "info");

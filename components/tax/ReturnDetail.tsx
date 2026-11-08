@@ -49,6 +49,8 @@ import { fmtDate, fmtDateTime, relTime, usd } from "@/lib/format";
 import { formatPhone, maskDOB, maskEIN, maskTaxId } from "@/lib/validation";
 import type { Client } from "@/lib/types";
 import { InterviewTab } from "./InterviewTab";
+import { InvoiceEditor } from "@/components/billing/BillingPage";
+import { BACKEND } from "@/lib/sync/remote";
 import { DueDiligenceCard, ExtensionCard, ExtensionDialog, FinalApprovalCard } from "./ReviewParts";
 import { ddComplete } from "@/lib/tax/due-diligence";
 import { useTeam } from "@/lib/store/team-store";
@@ -293,7 +295,10 @@ export function ReturnDetail({ id }: { id: string }) {
       <StatusDialog r={r} open={dlg === "status"} onClose={() => setDlg(null)} />
       <AddItemDialog r={r} open={dlg === "additem"} onClose={() => setDlg(null)} />
       <AddLineDialog r={r} open={dlg === "addline"} onClose={() => setDlg(null)} />
-      <TaxInvoiceDialog r={r} open={dlg === "invoice"} onClose={() => setDlg(null)} />
+      {BACKEND ? (
+        <InvoiceEditor open={dlg === "invoice"} onClose={() => setDlg(null)} onSaved={() => { setDlg(null); window.dispatchEvent(new CustomEvent("mkb:client-changed", { detail: r.clientId })); }}
+          preset={{ clientId: r.clientId, service: "tax", taxReturnId: r.id, description: `${r.taxYear} tax preparation — ${r.form}`, lines: [...r.pricing.lines.map((l) => ({ label: l.qty > 1 ? `${l.description} × ${l.qty}` : l.description, amount: String(l.qty * l.unit), kind: "service" as const })), ...(r.pricing.discount ? [{ label: "Discount", amount: String(r.pricing.discount), kind: "discount" as const }] : [])] }} />
+      ) : <TaxInvoiceDialog r={r} open={dlg === "invoice"} onClose={() => setDlg(null)} />}
       <PaymentDialog client={client} open={dlg === "payment"} onClose={() => setDlg(null)} invoiceId={b.invoices.find((i) => i.amount > i.paid && i.status !== "draft")?.id} />
       <AckDialog r={r} attempt={ackId ? r.efile.find((e) => e.id === ackId) ?? null : null} onClose={() => setAckId(null)} />
       <WaiveDialog r={r} itemId={waiveId} onClose={() => setWaiveId(null)} />
