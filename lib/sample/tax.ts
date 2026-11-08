@@ -194,7 +194,7 @@ function buildReturn(sp: Spec): TaxReturn {
 /** Sample: Morgan started the 2026 interview in the portal and stopped partway through the business section. */
 const MORGAN_INTERVIEW = {
   fname: "Morgan", lname: "Mockwell", ssn: "•••-••-0124", dob: "1979-08-21", occupation: "Property manager", phone: "(555) 010-0124", email: "morgan.mockwell@example.com",
-  street: "6 Test Court", city: "Lakeside", state: "GA", zip: "30002", moved: "No", blind: "No", dependentOfOther: "No", ippin: "No", newClient: "No", photoId: "Yes",
+  street: "6 Test Court", city: "Lakeside", state: "GA", zip: "30002", moved: "No", blind: "No", dependentOfOther: "No", ippin: "No", mkbBefore: "Yes", photoId: "Yes",
   marital: "Single (never married)", paidHome: "No", hasDeps: "No",
   w2: "No", unemp: "No", interest: "Yes", invest: "No", crypto: "No", retire: "No", ssa: "No", rental: "Yes", k1: "No", homesale: "No", gambling: "No", alimonyIn: "No", foreign: "No", otherInc: "No",
   intCount: "1",

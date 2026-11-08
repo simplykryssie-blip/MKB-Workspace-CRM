@@ -77,7 +77,7 @@ const you: Section = {
     { id: "blind", label: "Are you legally blind?", type: YN },
     { id: "dependentOfOther", label: "Can someone else (like a parent) claim you as a dependent?", type: YN },
     { id: "ippin", label: "Did the IRS give you an Identity Protection PIN (IP PIN)?", type: YN, help: "A 6-digit number the IRS mails each year (letter CP01A) to prevent identity theft.", docs: [doc("IRS IP PIN letter (CP01A)", "Identity", true)] },
-    { id: "newClient", label: "Is this your first year filing with MKB?", type: YN, docs: [doc("Last year's tax return (federal and state)", "Prior returns")] },
+    { id: "mkbBefore", label: "Did MKB prepare your tax return last year?", type: YN, help: "This is only about who prepared last year's return — not about amending a return.", docsWhen: "No", docs: [doc("Last year's tax return (federal and state)", "Prior returns")] },
     { id: "priorAgi", label: "Last year's adjusted gross income (AGI), if you know it", type: "money", optional: true, help: "Used to verify your identity when e-filing. It's on line 11 of last year's Form 1040." },
     { id: "photoId", label: "Can you upload a photo ID (driver's license or state ID)?", type: YN, docs: [doc("Photo ID — taxpayer", "Identity", true)], help: "Many states ask for ID details to process e-filed returns." },
   ],
@@ -185,7 +185,7 @@ const incomeScreen: Section = {
     { id: "unemp", label: "Unemployment benefits (1099-G)?", type: YN, docs: [doc("Form 1099-G (unemployment)", "Income")] },
     { id: "interest", label: "Bank interest or dividends (1099-INT, 1099-DIV)?", type: YN },
     { id: "invest", label: "Sold stocks, bonds, mutual funds or other investments (1099-B)?", type: YN },
-    { id: "crypto", label: "At any time this year, did you receive, sell, exchange or otherwise dispose of a digital asset (crypto, stablecoins, NFTs)?", type: YN, help: "This question is printed on Form 1040 and must be answered." },
+    { id: "crypto", label: "At any time this year, did you receive, sell, exchange or otherwise dispose of a digital asset (crypto, stablecoins, NFTs)?", type: YN, warn: "This question is printed on Form 1040 and must be answered truthfully — the IRS checks it against exchange reports." },
     { id: "retire", label: "Withdrawals from a retirement plan, IRA or pension (1099-R)?", type: YN },
     { id: "ssa", label: "Social Security or railroad retirement benefits (SSA-1099 / RRB-1099)?", type: YN },
     { id: "rental", label: "Owned rental property or received royalties?", type: YN },
@@ -246,7 +246,7 @@ const retirement: Section = {
     { id: "rWithheld", label: "Was federal tax withheld from the distribution?", type: YN, optional: true },
     { id: "rPension", label: "Do you receive a pension or annuity?", type: YN },
     { id: "rPensionNew", label: "Did the pension or annuity start this year?", type: YN, show: yes("rPension"), help: "We may need the plan's statement of your after-tax contributions.", docs: [doc("Pension/annuity starting statement (after-tax contributions)", "Income")] },
-    { id: "rRmd", label: "Did you take your required minimum distribution (RMD) from every IRA and retirement plan?", type: "choice", options: ["Yes, from every account", "No, or not from every account", "Not sure"], show: ageAtLeast(73), help: "Required each year once you reach 73. Missing one can mean a penalty, which can often be reduced if it's fixed quickly." },
+    { id: "rRmd", label: "Did you take your required minimum distribution (RMD) from every IRA and retirement plan?", type: "choice", options: ["Yes, from every account", "No, or not from every account", "Not sure"], show: ageAtLeast(73), help: "Required each year once you reach 73.", warn: "A missed RMD can mean a penalty of up to 25% of the amount not taken. Tell us right away — it can often be reduced if it's fixed quickly.", warnWhen: "No, or not from every account" },
     { id: "rQcd", label: "Did you send any IRA money directly to a charity (a qualified charitable distribution)?", type: YN, show: ageAtLeast(70), help: "Done right, it isn't taxed — we need the charity's acknowledgment letter.", docs: [doc("Charity acknowledgment for IRA charitable distribution (QCD)", "Income")] },
     { id: "rQcdAmt", label: "Total sent directly to charities", type: "money", show: all(ageAtLeast(70), yes("rQcd")) },
     { id: "rInherited", label: "Did any of it come from an inherited IRA or retirement plan?", type: YN },
@@ -364,7 +364,7 @@ const credits: Section = {
   questions: [
     { id: "childcare", label: "Paid for child care or dependent care so you (and your spouse) could work or look for work?", type: YN, show: yes("hasDeps") },
     { id: "ccProvider", label: "Care provider's name", type: "text", show: yes("childcare") },
-    { id: "ccTin", label: "Provider's EIN or SSN", type: "tin", show: yes("childcare"), help: "Required on Form 2441. Ask the daycare for a statement — it usually lists it." },
+    { id: "ccTin", label: "Provider's EIN or SSN", type: "tin", show: yes("childcare"), help: "Ask the daycare for a statement — it usually lists it.", warn: "Required on Form 2441 — without the provider's ID number the child care credit can be denied." },
     { id: "ccAmount", label: "Total paid for care", type: "money", show: yes("childcare"), docs: [] },
     { id: "ccStatement", label: "Do you have the provider's year-end statement?", type: YN, show: yes("childcare"), docs: [doc("Child care provider statement", "Credits")] },
     { id: "tuition", label: "Paid college or vocational school tuition for you, your spouse or a dependent?", type: YN, docs: [doc("Form 1098-T (tuition)", "Credits")] },
@@ -447,7 +447,11 @@ const bizIncome: Section = {
     { id: "refunds", label: "Refunds and returns given to customers", type: "money", show: enterTotals, optional: true },
     { id: "nec", label: "Did you receive 1099-NEC forms from customers?", type: YN, docs: [doc("Forms 1099-NEC received", "Business")] },
     { id: "k1099", label: "Received 1099-K forms (card processors, PayPal, Venmo, Square, Etsy, Uber…)?", type: YN, docs: [doc("Forms 1099-K", "Business")] },
-    { id: "cashInc", label: "Any cash or payment-app income not on a 1099?", type: YN },
+    { id: "cashInc", label: "Any cash or payment-app income not on a 1099?", type: YN, warn: "All business income is taxable, even without a 1099. Leaving out cash or app income is one of the most common reasons for IRS notices.", warnWhen: "Yes" },
+    { id: "cashAmt", label: "About how much cash or payment-app income wasn't on a 1099?", type: "money", show: yes("cashInc") },
+    { id: "salesChannels", label: "Where do you sell?", type: "multi", optional: true, options: ["In person / storefront", "My own website", "Online marketplaces (Etsy, Amazon, eBay…)", "Social media / payment apps", "Wholesale to other businesses", "Services only — no products"] },
+    { id: "salesTax", label: "Did you collect sales tax from customers?", type: YN, help: "Sales tax you collected and paid to the state isn't income — we'll back it out.", show: (a) => !String(a.salesChannels ?? "").startsWith("Services only") },
+    { id: "salesTaxAmt", label: "Total sales tax collected (included in your sales total)", type: "money", optional: true, show: all(yes("salesTax"), enterTotals) },
     { id: "otherBizInc", label: "Other business income (grants, interest, insurance payouts, sale of equipment)?", type: YN, optional: true },
   ],
 };
@@ -464,6 +468,13 @@ const cogs: Section = {
     { id: "invPurchases", label: "Inventory purchased during the year", type: "money", show: all(yes("inventory"), enterTotals) },
     { id: "invEnd", label: "Inventory value at the end of the year (count or estimate)", type: "money", show: yes("inventory"), docs: [] },
     { id: "invMethod", label: "How do you value inventory?", type: "choice", options: ["Cost", "Lower of cost or market", "Not sure"], show: yes("inventory") },
+    { id: "invMaterials", label: "Materials and supplies used to make your products", type: "money", optional: true, show: all(yes("inventory"), enterTotals) },
+    { id: "invLabor", label: "Labor paid to make products (not your own pay)", type: "money", optional: true, show: all(yes("inventory"), enterTotals) },
+    { id: "invShipping", label: "Shipping and freight to get products to you", type: "money", optional: true, show: all(yes("inventory"), enterTotals) },
+    { id: "invOther", label: "Other product costs (packaging, marketplace fees counted in cost)", type: "money", optional: true, show: all(yes("inventory"), enterTotals) },
+    { id: "invPersonal", label: "Did you take any products for personal use or give any away?", type: YN, show: yes("inventory"), help: "Their cost comes out of cost of goods sold." },
+    { id: "invPersonalAmt", label: "Cost of products taken for personal use", type: "money", show: all(yes("inventory"), yes("invPersonal")) },
+    { id: "invCount", label: "Did you count your inventory at year-end?", type: YN, show: yes("inventory"), warn: "An inventory count (or a reliable estimate) at year-end is needed to figure cost of goods sold. Without it, your profit — and tax — may be overstated.", warnWhen: "No", docsWhen: "Yes", docs: [doc("Year-end inventory count or report", "Business")] },
   ],
 };
 
@@ -543,7 +554,7 @@ const vehicles: Section = {
     { id: "vtotal", label: "Total miles this year (all use)", type: "number" },
     { id: "vcommute", label: "Commuting miles (home to regular workplace)", type: "number", optional: true },
     { id: "vmethod", label: "How do you want to deduct it?", type: "choice", options: ["Standard mileage rate", "Actual expenses (gas, repairs, insurance…)", "Not sure — let my preparer decide"] },
-    { id: "vlog", label: "Do you have a mileage log or other written record?", type: YN, help: "The IRS requires written evidence of business miles." },
+    { id: "vlog", label: "Do you have a mileage log or other written record?", type: YN, warn: "The IRS requires a written record of business miles. Without one, vehicle deductions can be denied in an audit — start a log now (an app works).", warnWhen: "No" },
     { id: "vanother", label: "Is another vehicle available for personal use?", type: YN },
   ],
 };
@@ -632,7 +643,7 @@ const entity: Section = {
     { id: "firstYear", label: "Is this the business's first tax year?", type: YN },
     { id: "finalYear", label: "Is this the final year (closing, selling or merging)?", type: YN },
     { id: "addrChanged", label: "Did the business name or address change this year?", type: YN },
-    { id: "newToMkb", label: "Is this the first year MKB is preparing this return?", type: YN, docs: [doc("Prior-year business return with all schedules", "Prior returns"), doc("Prior-year depreciation schedule", "Prior returns")] },
+    { id: "bizMkbBefore", label: "Did MKB prepare this business's tax return last year?", type: YN, help: "This is only about who prepared last year's return — not about amending a return.", docsWhen: "No", docs: [doc("Prior-year business return with all schedules", "Prior returns"), doc("Prior-year depreciation schedule", "Prior returns")] },
   ],
 };
 
@@ -657,7 +668,7 @@ const ownerRows: Section = {
     { id: "ocontrib", label: "Money or property this owner put into the business this year", type: "money", optional: true },
     { id: "odistrib", label: "Money or property this owner took out (distributions)", type: "money", optional: true, show: form("1065", "1120-S") },
     { id: "oofficer", label: "Is this owner an officer who works in the business?", type: YN, show: form("1120-S", "1120") },
-    { id: "owages", label: "W-2 wages paid to them this year", type: "money", show: all(form("1120-S", "1120"), yes("oofficer")), help: "S-corp owner-employees must be paid a reasonable salary through payroll." },
+    { id: "owages", label: "W-2 wages paid to them this year", type: "money", show: all(form("1120-S", "1120"), yes("oofficer")), warn: "S-corp owners who work in the business must be paid a reasonable salary through payroll. Taking only distributions is a common IRS audit issue." },
     { id: "ohealth", label: "Did the company pay their health insurance?", type: YN, show: form("1120-S") },
     { id: "oloan", label: "Loans this owner made to the company (balance at year-end)", type: "money", optional: true, show: form("1120-S", "1065") },
     { id: "obasis", label: "Do you have this shareholder's stock basis from prior years?", type: YN, show: form("1120-S") },
@@ -714,7 +725,7 @@ const finish: Section = {
   questions: [
     { id: "lifeEvents", label: "Any big changes this year we should know about?", type: "multi", optional: true, options: ["New baby or adoption", "Marriage or divorce", "Bought or sold a home", "Started or closed a business", "Changed jobs", "Moved states", "Death in the family", "None of these"], show: form("1040", "1040 + Sch C", "1040-X") },
     { id: "notes", label: "Anything else you'd like your preparer to know, or questions you have?", type: "textarea", optional: true },
-    { id: "contactPref", label: "If we have a question, how should we reach you?", type: "choice", options: ["Client portal message", "Email", "Text", "Phone call"] },
+    { id: "contactPref", label: "If we have a question, how can we reach you? Choose all that work for you.", type: "multi", options: ["Client portal message", "Email", "Text", "Phone call"] },
   ],
 };
 

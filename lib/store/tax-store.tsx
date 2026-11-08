@@ -236,17 +236,28 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       }));
     },
     /** Submits the interview: documents it calls for join the checklist, and the filing status is set. */
-    submitInterview(id: string, answers: Answers, by: "client" | "staff", consentName: string) {
+    submitInterview(id: string, answers: Answers, by: "client" | "staff", consentName: string, opts: { brought?: string[]; request?: boolean } = {}) {
       const r = R(id);
       const docs = docsFor(sectionsFor(r.form), { ...answers, __form: r.form, __year: String(r.taxYear) });
-      const toAdd: ChecklistItem[] = docs.filter((d) => !r.checklist.some((i) => i.name === d.name)).map((d) => ({ id: uid("ci"), ...d, required: true, source: "organizer" as const }));
+      const added: ChecklistItem[] = docs.filter((d) => !r.checklist.some((i) => i.name === d.name)).map((d) => ({ id: uid("ci"), ...d, required: true, source: "organizer" as const }));
+      // In the office: papers the client brought are recorded as received; the rest can be requested right away.
+      const brought = new Set(opts.brought ?? []);
+      const requested: string[] = [];
+      const settle = (i: ChecklistItem): ChecklistItem => {
+        if (i.docId || i.waivedReason || i.archived) return i;
+        if (brought.has(i.name)) return { ...i, docId: clients().uploadDocument(r.clientId, { name: i.name, service: "tax", category: i.category, sensitive: i.sensitive, sizeKb: 0, taxYear: r.taxYear, by: "staff" }) };
+        if (opts.request && i.required) { requested.push(i.name); return { ...i, docId: clients().requestDocument(r.clientId, { name: docTitle(r, i.name), service: "tax", category: i.category, sensitive: i.sensitive, taxYear: r.taxYear }) }; }
+        return i;
+      };
+      const toAdd = added.map(settle);
+      const existing = r.checklist.map(settle);
       const fs = r.kind === "individual" ? (impliedFilingStatus(answers) as FilingStatus | undefined) : undefined;
       up(id, (x) =>
         log(
           {
             ...x,
             filingStatus: fs ?? x.filingStatus,
-            checklist: [...x.checklist, ...toAdd],
+            checklist: [...x.checklist.map((i) => existing.find((e) => e.id === i.id) ?? i), ...toAdd],
             organizer: { ...x.organizer, status: "submitted", submittedAt: nowIso(), sentAt: x.organizer.sentAt ?? nowIso(), interview: { ...x.organizer.interview, answers, updatedAt: nowIso(), enteredBy: by, consentName } },
           },
           "intake",
@@ -255,8 +266,10 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
         ),
       );
       clients().logActivity(r.clientId, "message", `Tax interview submitted for ${label(r)}`);
+      if (brought.size) up(id, (x) => log(x, "upload", `Received in the office: ${[...brought].join(", ")}`));
+      if (requested.length) up(id, (x) => log(x, "upload", `Requested ${requested.length} document${requested.length > 1 ? "s" : ""} from the client`));
       if (r.status === "Intake") moveTo(id, "Awaiting Documents", "interview submitted");
-      return toAdd.length;
+      return { added: toAdd.length, requested };
     },
     /** Preparer questions are collected as drafts, then sent to the client together in one request. */
     addFollowUp(id: string, question: string, ref?: string) {

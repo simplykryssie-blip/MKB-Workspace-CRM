@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, Check, CheckCircle2, Circle, FileUp, Lock, MessageSquareReply, Pencil, Plus, Save, Send, Trash2, Type, UserCog } from "lucide-react";
+import { AlertTriangle, Eye, EyeOff, ArrowLeft, ArrowRight, Check, CheckCircle2, Circle, FileUp, Lock, MessageSquareReply, Pencil, Plus, Save, Send, Trash2, Type, UserCog } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -65,7 +65,12 @@ function Runner({ r, clientName, by, prefillSource }: { r: TaxReturn; clientName
   const persist = (next = step) => { tax.saveInterview(r.id, answers, by, next); setSaved(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })); };
   const go = (n: number) => { persist(n); setStep(n); top.current?.scrollIntoView({ block: "start" }); };
   const next = () => {
-    if (sec && missingIn(sec, a).length) { setTried({ ...tried, [sec.id]: true }); return; }
+    if (sec && missingIn(sec, a).length) {
+      setTried({ ...tried, [sec.id]: true });
+      // Take the person straight to the first question that still needs an answer.
+      requestAnimationFrame(() => { const el = document.querySelector<HTMLElement>('[data-missing="1"]'); el?.scrollIntoView({ behavior: "smooth", block: "center" }); el?.focus({ preventScroll: true }); });
+      return;
+    }
     go(Math.min(step + 1, steps.length - 1));
   };
   const setVal = (qid: string, v: string) => setAnswers((x) => ({ ...x, [qid]: v }));
@@ -120,7 +125,7 @@ function Runner({ r, clientName, by, prefillSource }: { r: TaxReturn; clientName
           </div>
 
           {cur.key === "followups" && <FollowUpStep r={r} by={by} onDone={() => go(step + 1)} />}
-          {sec && <SectionView s={sec} a={a} prefilled={initial.ids} showErrors={!!tried[sec.id]} setVal={setVal} setRows={setRows} secure={BACKEND ? (key, kind, value) => call("PUT", `/api/tax/returns/${r.id}/secure`, { key, kind, value }) : undefined} />}
+          {sec && <SectionView s={sec} a={a} prefilled={initial.ids} showErrors={!!tried[sec.id]} setVal={setVal} setRows={setRows} secure={BACKEND ? (key, kind, value) => call("PUT", `/api/tax/returns/${r.id}/secure`, { key, kind, value }) : undefined} reveal={BACKEND && by === "staff" ? (key) => call<{ value: string }>("POST", `/api/tax/returns/${r.id}/secure`, { key }).then((x) => x.value) : undefined} />}
           {cur.key === "review" && (submitted ? <Submitted r={r} by={by} /> : <Review r={r} sections={visible} a={a} by={by} answers={answers} goTo={(sid) => go(steps.findIndex((x) => x.key === sid))} />)}
 
           {cur.key !== "review" && cur.key !== "followups" && (
@@ -142,7 +147,9 @@ const StepIcon = ({ done }: { done: boolean }) => (done ? <CheckCircle2 size={15
 /* ------------------------------------------------------------------ */
 
 type SecureSave = (key: string, kind: "ssn" | "ein" | "bank", value: string) => Promise<unknown>;
-function SectionView({ s, a, prefilled, showErrors, setVal, setRows, secure }: { s: Section; a: Answers; prefilled: Set<string>; showErrors: boolean; setVal: (id: string, v: string) => void; setRows: (sid: string, rows: Row[]) => void; secure?: SecureSave }) {
+/** Staff only: fetches the full number from the vault (permission-checked and audited on the server). */
+type SecureReveal = (key: string) => Promise<string>;
+function SectionView({ s, a, prefilled, showErrors, setVal, setRows, secure, reveal }: { s: Section; a: Answers; prefilled: Set<string>; showErrors: boolean; setVal: (id: string, v: string) => void; setRows: (sid: string, rows: Row[]) => void; secure?: SecureSave; reveal?: SecureReveal }) {
   const rows = rowsOf(a, s.id);
   return (
     <Card className="p-5 sm:p-6">
@@ -157,7 +164,7 @@ function SectionView({ s, a, prefilled, showErrors, setVal, setRows, secure }: {
                 <Button size="sm" variant="ghost" icon={Trash2} aria-label={`Remove ${s.repeat!.noun} ${i + 1}`} onClick={() => setRows(s.id, rows.filter((_, j) => j !== i))}>Remove</Button>
               </div>
               <div className="space-y-5">
-                {s.questions.filter((q) => qVisible(q, a, row)).map((q) => <Field key={q.id} q={q} idp={`${s.id}-${i}`} secureKey={`${s.id}.${i}.${q.id}`} secure={secure} value={row[q.id] ?? ""} row={row} err={showErrors && !q.optional && !(row[q.id] ?? "").trim()} onChange={(v) => setRows(s.id, rows.map((x, j) => (j === i ? { ...x, [q.id]: v } : x)))} />)}
+                {s.questions.filter((q) => qVisible(q, a, row)).map((q) => <Field key={q.id} q={q} idp={`${s.id}-${i}`} secureKey={`${s.id}.${i}.${q.id}`} secure={secure} reveal={reveal} value={row[q.id] ?? ""} row={row} err={showErrors && !q.optional && !(row[q.id] ?? "").trim()} onChange={(v) => setRows(s.id, rows.map((x, j) => (j === i ? { ...x, [q.id]: v } : x)))} />)}
               </div>
             </div>
           ))}
@@ -166,7 +173,7 @@ function SectionView({ s, a, prefilled, showErrors, setVal, setRows, secure }: {
         </div>
       ) : (
         <div className="mt-5 space-y-5">
-          {s.questions.filter((q) => qVisible(q, a)).map((q) => <Field key={q.id} q={q} idp={s.id} secureKey={`${s.id}.${q.id}`} secure={secure} value={(a[q.id] as string) ?? ""} prefilled={prefilled.has(q.id) && a[q.id] !== ""} err={showErrors && !q.optional && !((a[q.id] as string) ?? "").trim()} onChange={(v) => setVal(q.id, v)} />)}
+          {s.questions.filter((q) => qVisible(q, a)).map((q) => <Field key={q.id} q={q} idp={s.id} secureKey={`${s.id}.${q.id}`} secure={secure} reveal={reveal} value={(a[q.id] as string) ?? ""} prefilled={prefilled.has(q.id) && a[q.id] !== ""} err={showErrors && !q.optional && !((a[q.id] as string) ?? "").trim()} onChange={(v) => setVal(q.id, v)} />)}
         </div>
       )}
     </Card>
@@ -175,7 +182,7 @@ function SectionView({ s, a, prefilled, showErrors, setVal, setRows, secure }: {
 
 const inputCls = (err?: boolean) => `h-11 w-full rounded-xl border bg-surface px-3 text-[15px] text-ink placeholder:text-faint focus:outline-none focus:ring-4 ${err ? "border-danger focus:ring-danger/15" : "border-line focus:border-accent focus:ring-accent/15"}`;
 
-function Field({ q, idp, value, onChange, err, prefilled, row, secure, secureKey }: { q: Q; idp: string; value: string; onChange: (v: string) => void; err?: boolean; prefilled?: boolean; row?: Row; secure?: SecureSave; secureKey?: string }) {
+function Field({ q, idp, value, onChange, err, prefilled, row, secure, reveal, secureKey }: { q: Q; idp: string; value: string; onChange: (v: string) => void; err?: boolean; prefilled?: boolean; row?: Row; secure?: SecureSave; reveal?: SecureReveal; secureKey?: string }) {
   const id = `iv-${idp}-${q.id}`;
   const pill = (on: boolean) => `rounded-xl border px-4 py-2.5 text-left text-[14px] font-medium transition-colors ${on ? "border-accent bg-accent-soft text-accent-ink" : "border-line bg-surface text-ink-2 hover:border-line-strong"}`;
   const label = (
@@ -234,23 +241,33 @@ function Field({ q, idp, value, onChange, err, prefilled, row, secure, secureKey
     case "ein":
     case "tin":
     case "bank":
-      input = <SecureNumber id={id} q={q} value={value} onChange={onChange} err={err} save={secure && secureKey ? (kind, v) => secure(secureKey, kind, v) : undefined} kind={q.type === "tin" ? (row?.okind && row.okind !== "Individual" ? "ein" : row?.okind === "Individual" ? "ssn" : "ein") : q.type} />;
+      input = <SecureNumber id={id} q={q} value={value} onChange={onChange} err={err} save={secure && secureKey ? (kind, v) => secure(secureKey, kind, v) : undefined} reveal={reveal && secureKey ? () => reveal(secureKey) : undefined} kind={q.type === "tin" ? (row?.okind && row.okind !== "Individual" ? "ein" : row?.okind === "Individual" ? "ssn" : "ein") : q.type} />;
       break;
     default:
       input = <input id={id} type={q.type === "email" ? "email" : "text"} value={value} placeholder={q.placeholder} onChange={(e) => onChange(e.target.value)} className={inputCls(err)} />;
   }
+  const showWarn = q.warn && (q.warnWhen === undefined || value === q.warnWhen || value.split("|").includes(q.warnWhen));
   return (
-    <div data-q={q.id} data-type={q.type} data-answered={value ? "1" : "0"} className={err ? "rounded-xl bg-danger-soft/30 p-2 -m-2" : ""}>
+    <div data-q={q.id} data-type={q.type} data-answered={value ? "1" : "0"} data-missing={err ? "1" : undefined} tabIndex={err ? -1 : undefined} className={err ? "-m-2 rounded-xl border-2 border-danger bg-danger-soft/40 p-2 outline-none" : ""}>
       {label}
       {input}
-      {err && <p className="mt-1 text-[12px] text-danger-ink">Please answer this question.</p>}
+      {showWarn && (
+        <div role="note" className="mt-2.5 flex gap-2.5 rounded-xl border-l-4 border-warning bg-warning-soft px-3 py-2.5">
+          <AlertTriangle size={18} className="mt-0.5 shrink-0 text-warning-ink" />
+          <p className="text-[13.5px] font-semibold leading-snug text-warning-ink">{q.warn}</p>
+        </div>
+      )}
+      {err && <p className="mt-1.5 flex items-center gap-1 text-[12.5px] font-semibold text-danger-ink"><AlertTriangle size={13} /> Please answer this question.</p>}
     </div>
   );
 }
 
 /** Sensitive numbers: entered once, kept as the last four digits only (production: full value goes straight to the encrypted vault). */
 /** With the backend on, the full number is sent once to the server's encrypted vault; only the last four stay here. */
-function SecureNumber({ id, value, onChange, err, kind, save }: { id: string; q: Q; value: string; onChange: (v: string) => void; err?: boolean; kind: "ssn" | "ein" | "bank"; save?: (kind: "ssn" | "ein" | "bank", value: string) => Promise<unknown> }) {
+function SecureNumber({ id, value, onChange, err, kind, save, reveal }: { id: string; q: Q; value: string; onChange: (v: string) => void; err?: boolean; kind: "ssn" | "ein" | "bank"; save?: (kind: "ssn" | "ein" | "bank", value: string) => Promise<unknown>; reveal?: () => Promise<string> }) {
+  const [shown, setShown] = useState<string | null>(null);
+  const [revealErr, setRevealErr] = useState<string | null>(null);
+  useEffect(() => { if (!shown) return; const t = setTimeout(() => setShown(null), 30_000); return () => clearTimeout(t); }, [shown]);
   const [busy, setBusy] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -261,9 +278,11 @@ function SecureNumber({ id, value, onChange, err, kind, save }: { id: string; q:
   if (!editing && value)
     return (
       <div className="flex flex-wrap items-center gap-2">
-        <span className="inline-flex items-center gap-1.5 rounded-xl bg-surface-2 px-3 py-2 text-[14px] tabular-nums text-ink ring-1 ring-line"><Lock size={13} className="text-success" /> {value}</span>
-        <span className="text-[12px] text-muted">Stored securely — only the last 4 digits are shown</span>
-        <Button size="sm" variant="ghost" icon={Pencil} onClick={() => { setDraft(""); setEditing(true); }}>Change</Button>
+        <span className="inline-flex items-center gap-1.5 rounded-xl bg-surface-2 px-3 py-2 text-[14px] tabular-nums text-ink ring-1 ring-line"><Lock size={13} className="text-success" /> {shown ?? value}</span>
+        <span className="text-[12px] text-muted">{shown ? "Hides again in 30 seconds — this view was logged" : "Stored securely — only the last 4 digits are shown"}</span>
+        {reveal && <Button size="sm" variant="ghost" icon={shown ? EyeOff : Eye} onClick={async () => { if (shown) return setShown(null); setRevealErr(null); try { setShown(await reveal()); } catch (e) { setRevealErr(e instanceof Error ? e.message : "Couldn't reveal the number."); } }}>{shown ? "Hide" : "Reveal"}</Button>}
+        <Button size="sm" variant="ghost" icon={Pencil} onClick={() => { setDraft(""); setShown(null); setEditing(true); }}>Change</Button>
+        {revealErr && <p role="alert" className="w-full text-[12px] text-danger-ink">{revealErr}</p>}
       </div>
     );
   return (
@@ -293,6 +312,26 @@ function Review({ r, sections, a, answers, by, goTo }: { r: TaxReturn; sections:
   const [sig, setSig] = useState("");
   const missing = sections.flatMap((s) => missingIn(s, a).map((m) => ({ ...m, s })));
   const docs = docsFor(sections, a);
+  // In the office: what the client brought today, and whether to request the rest by email.
+  const outstanding = [...new Set([...r.checklist.filter((i) => i.required && !i.docId && !i.waivedReason && !i.archived).map((i) => i.name), ...docs.map((d) => d.name)])];
+  const [brought, setBrought] = useState<string[]>([]);
+  const [requestRest, setRequestRest] = useState(true);
+  const [sending, setSending] = useState(false);
+  const submit = async () => {
+    setSending(true);
+    const out = tax.submitInterview(r.id, answers, by, sig.trim(), by === "staff" ? { brought, request: requestRest } : {});
+    let note = "";
+    if (by === "staff" && requestRest && out.requested.length && BACKEND) {
+      try {
+        const res = await call<{ sent: boolean }>("POST", `/api/tax/returns/${r.id}/request-docs`, { names: out.requested });
+        note = res.sent ? " — the client was emailed the list" : " — the request email is queued";
+      } catch (e) { note = ` — couldn't email the client (${e instanceof Error ? e.message : "error"})`; }
+    }
+    setSending(false);
+    toast(by === "staff"
+      ? `Interview submitted${brought.length ? ` · ${brought.length} received today` : ""}${out.requested.length ? ` · ${out.requested.length} requested` : ""}${note}`
+      : `Interview submitted — ${out.added} document${out.added === 1 ? "" : "s"} added to your upload list`);
+  };
   return (
     <div className="space-y-5">
       <Card className="p-5 sm:p-6">
@@ -313,15 +352,42 @@ function Review({ r, sections, a, answers, by, goTo }: { r: TaxReturn; sections:
           )) : <Answered qs={s.questions.filter((q) => qVisible(q, a))} get={(q) => a[q.id] as string} />}
         </Card>
       ))}
-      <Card className="p-5 sm:p-6">
-        <h3 className="flex items-center gap-2 text-[15px] font-semibold text-ink"><FileUp size={16} className="text-accent" /> Documents you&rsquo;ll upload next ({docs.length})</h3>
-        <p className="mt-0.5 text-[12.5px] text-muted">Based on your answers. You can upload them right after you submit.</p>
-        <ul className="mt-2 grid gap-1 sm:grid-cols-2">{docs.map((d) => <li key={d.name} className="text-[13px] text-ink-2">• {d.name}</li>)}</ul>
-      </Card>
+      {by === "staff" ? (
+        <Card className="p-5 sm:p-6">
+          <h3 className="flex items-center gap-2 text-[15px] font-semibold text-ink"><FileUp size={16} className="text-accent" /> Documents needed ({outstanding.length})</h3>
+          <p className="mt-0.5 text-[12.5px] text-muted">Tick what the client brought today — those are marked received. Everything else can be requested now.</p>
+          <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+            {outstanding.map((n) => {
+              const on = brought.includes(n);
+              return (
+                <li key={n}>
+                  <label className={`flex min-h-11 cursor-pointer items-start gap-2.5 rounded-xl border px-3 py-2.5 text-[13.5px] ${on ? "border-success bg-success-soft/50 text-ink" : "border-line text-ink-2"}`}>
+                    <input type="checkbox" checked={on} onChange={() => setBrought(on ? brought.filter((x) => x !== n) : [...brought, n])} className="mt-0.5 h-4 w-4 accent-[var(--accent)]" />
+                    <span><span className="block">{n}</span><span className="text-[11.5px] text-muted">{on ? "Brought today — will be marked received" : "Still needed"}</span></span>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+          {outstanding.length > brought.length && (
+            <label className="mt-3 flex items-start gap-2 rounded-xl bg-surface-2 p-3 text-[13.5px] text-ink ring-1 ring-line">
+              <input type="checkbox" checked={requestRest} onChange={() => setRequestRest(!requestRest)} className="mt-0.5 h-4 w-4 accent-[var(--accent)]" />
+              <span>Request the {outstanding.length - brought.length} document{outstanding.length - brought.length > 1 ? "s" : ""} still needed and email the client the list
+                <span className="block text-[12px] text-muted">The email lists document names only and asks them to drop papers off — never to email tax documents.</span></span>
+            </label>
+          )}
+        </Card>
+      ) : (
+        <Card className="p-5 sm:p-6">
+          <h3 className="flex items-center gap-2 text-[15px] font-semibold text-ink"><FileUp size={16} className="text-accent" /> Documents you&rsquo;ll upload next ({docs.length})</h3>
+          <p className="mt-0.5 text-[12.5px] text-muted">Based on your answers. You can upload them right after you submit.</p>
+          <ul className="mt-2 grid gap-1 sm:grid-cols-2">{docs.map((d) => <li key={d.name} className="text-[13px] text-ink-2">• {d.name}</li>)}</ul>
+        </Card>
+      )}
       <Card className="space-y-3 p-5 sm:p-6">
         <label className="flex items-start gap-2 text-[13.5px] text-ink"><input type="checkbox" checked={agree} onChange={() => setAgree(!agree)} className="mt-0.5 h-4 w-4 accent-[var(--accent)]" />{by === "staff" ? "The client confirmed these answers are complete and accurate to the best of their knowledge." : "My answers are complete and accurate to the best of my knowledge. I'll tell MKB if anything changes."}</label>
         <div className="max-w-sm"><label htmlFor="iv-sig" className="mb-1 block text-[13px] font-medium text-ink-2">{by === "staff" ? "Client's name (confirmed verbally or in person)" : "Type your full name"}</label><input id="iv-sig" value={sig} onChange={(e) => setSig(e.target.value)} className={inputCls()} /></div>
-        <Button variant="primary" icon={Send} disabled={!agree || sig.trim().length < 3 || missing.length > 0} onClick={() => { const n = tax.submitInterview(r.id, answers, by, sig.trim()); toast(`Interview submitted — ${n} document${n === 1 ? "" : "s"} added to the upload list`); }}>Submit to MKB</Button>
+        <Button variant="primary" icon={Send} disabled={sending || !agree || sig.trim().length < 3 || missing.length > 0} onClick={submit}>{sending ? "Submitting…" : "Submit to MKB"}</Button>
         {missing.length > 0 && <p className="text-[12px] text-muted">Answer the remaining questions to submit.</p>}
       </Card>
     </div>

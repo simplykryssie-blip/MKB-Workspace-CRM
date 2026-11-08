@@ -9,7 +9,7 @@ import { canDo, clientAccess } from "@/lib/team/policy";
 import type { ServiceKey } from "@/lib/types";
 import { all, badRequest, forbidden, HttpError, json, notFound, now, one, rateLimit, run, str, type AppEnv, type Db } from "./core";
 import { decryptField, encryptField } from "./crypto";
-import { audit, hasSensitivePerm, requirePermission, type Actor } from "./identity";
+import { audit, hasSensitivePerm, requirePermission, sendEmail, type Actor } from "./identity";
 import { assignmentSets } from "./clients";
 
 type Row = { id: string; client_id: string; enrollment_id: string | null; tax_year: number; kind: TaxReturn["kind"]; form: TaxReturn["form"]; filing_status: string | null; states: string; status: TaxReturn["status"]; preparer_id: string; reviewer_id: string; due_at: string | null; extension: string | null; review_signoff: string | null; approval_signature_id: string | null; client_approved_at: string | null; organizer: string; checklist: string; efile: string; pricing: string; status_history: string; notes: string; activity: string; created_at: string; completed_at: string | null; rev: number };
@@ -168,4 +168,38 @@ export async function revealSecureAnswer(env: AppEnv, a: Actor, id: string, key:
   const value = await decryptField(env.ENCRYPTION_KEY!, v, `tax_return:${id}:${key}`);
   await audit(env.DB, a, { action: "Sensitive reveal", resource: `Tax return ${id} — interview ${v.kind.toUpperCase()}`, department: "tax" });
   return { value };
+}
+
+/**
+ * Emails the client the list of documents MKB still needs for this return.
+ * Only document names are sent (never answers or numbers), and clients are
+ * told not to email tax documents back.
+ */
+export async function emailDocumentRequest(env: AppEnv, a: Actor, id: string, names: unknown) {
+  requirePermission(a, "tax", "edit");
+  if (a.kind !== "staff") throw forbidden();
+  const r = await load(env, a, id);
+  // Document names only (the interview's list can arrive before the checklist finishes saving).
+  const list = [...new Set((Array.isArray(names) ? names : []).map((x) => str(x, 200).replace(/[\r\n]+/g, " ")).filter(Boolean))].slice(0, 40);
+  if (!list.length) throw badRequest("Choose at least one document.");
+  const c = await one<{ name: string; contact_name: string | null; email: string | null }>(env.DB, "SELECT name, contact_name, email FROM clients WHERE id = ?", r.clientId);
+  if (!c?.email) throw badRequest("This client has no email address on file.");
+  if (!(await rateLimit(env.DB, `docreq:${id}`, 10, 60))) throw new HttpError(429, "Too many requests for this return in the last hour.", "rate_limited");
+  const first = (c.contact_name || c.name).split(" ")[0];
+  const text = [
+    `Hi ${first},`,
+    "",
+    `Thank you for completing your ${r.taxYear} tax interview with MKB Financial Group. To finish your return, we still need:`,
+    "",
+    ...list.map((n) => `  • ${n}`),
+    "",
+    "Please drop them off at our office, or wait for your secure upload link. For your security, please do not email tax documents.",
+    "",
+    "Questions? Call us at 833-379-3320.",
+    "",
+    "MKB Financial Group",
+  ].join("\n");
+  const out = await sendEmail(env, { to: c.email, template: "tax_document_request", subject: `Documents needed for your ${r.taxYear} tax return`, text });
+  await audit(env.DB, a, { action: "Record update", resource: `Tax return ${id}`, department: "tax", meta: `Emailed document request (${list.length} item${list.length > 1 ? "s" : ""})${out.sent ? "" : " — queued, not sent"}` });
+  return { sent: out.sent, count: list.length };
 }

@@ -53,6 +53,9 @@ export type Q = {
   /** Profile field used to pre-fill the answer. */
   prefill?: PrefillKey;
   placeholder?: string;
+  /** Firm warning shown prominently (always, or only when the answer equals `warnWhen`). */
+  warn?: string;
+  warnWhen?: string;
 };
 
 export type Section = {
