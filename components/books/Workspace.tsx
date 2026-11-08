@@ -771,7 +771,7 @@ function BillingTab({ w, c, open }: { w: BooksWorkspace; c: Client; open: (d: Dl
   const pending = w.extras.filter((x) => !x.invoiced);
   const latest = [...w.months].sort((a, b) => b.period.localeCompare(a.period))[0];
   const nextToBill = invoices.some((i) => i.description.includes(periodLabel(latest.period))) ? undefined : latest.period;
-  const statusTone = { paid: "success", open: "info", overdue: "danger", partial: "warning", draft: "neutral" } as const;
+  const statusTone = { paid: "success", open: "info", overdue: "danger", partial: "warning", draft: "neutral", void: "neutral" } as const;
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

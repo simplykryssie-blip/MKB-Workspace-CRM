@@ -517,10 +517,10 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     setDiscount(id: string, discount: number) {
       up(id, (x) => ({ ...x, pricing: { ...x.pricing, discount } }));
     },
-    invoice(id: string, amount: number, description: string, dueAt: string): string {
+    invoice(id: string, amount: number, description: string, dueAt: string, paymentMode: "upfront" | "bank_product" = "upfront", lines?: { label: string; amount: number; kind: "service" | "discount" }[]): string {
       const r = R(id);
-      const number = clients().createInvoice(r.clientId, { service: "tax", description, amount, dueAt, draft: false, taxReturnId: r.id });
-      up(id, (x) => log(x, "invoice", `Invoice ${number} sent — $${amount.toFixed(2)}`));
+      const number = clients().createInvoice(r.clientId, { service: "tax", description, amount, dueAt, draft: false, taxReturnId: r.id, paymentMode, lines });
+      up(id, (x) => log(x, "invoice", `Invoice ${BACKEND ? "created" : number} — $${amount.toFixed(2)} preparation fees${paymentMode === "bank_product" ? " (paid from refund)" : ""}`));
       return number;
     },
 

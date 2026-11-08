@@ -135,7 +135,11 @@ export const DEFAULT_FEES: Record<ServiceKey, number> = { tax: 425, books: 650, 
 
 const last4 = (v?: string) => (v ? v.replace(/\D/g, "").slice(-4) : undefined);
 
-type Remote = { setIds: (id: string, v: Parameters<ReturnType<typeof makeStore>["updateTaxIds"]>[1]) => Promise<void> };
+type Remote = {
+  setIds: (id: string, v: Parameters<ReturnType<typeof makeStore>["updateTaxIds"]>[1]) => Promise<void>;
+  /** Billing calls (live CRM): the server owns invoices and payments; the client is reloaded afterwards. */
+  billing: (clientId: string, method: "POST" | "PUT", path: string, body: unknown, done?: string) => void;
+};
 const maskedDob = (iso?: string) => (iso ? `${iso.slice(0, 4)}-••-••` : undefined);
 
 function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => number, getVault: () => Record<string, VaultEntry>, remote?: Remote) {
@@ -423,7 +427,11 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
     },
 
     // Invoices -----------------------------------------------------------------
-    createInvoice(id: string, i: { service: ServiceKey; description: string; amount: number; dueAt: string; draft: boolean; taxReturnId?: string; workspaceId?: string; bizRequestId?: string; expMatterId?: string; lines?: Invoice["lines"] }) {
+    createInvoice(id: string, i: { service: ServiceKey; description: string; amount: number; dueAt: string; draft: boolean; taxReturnId?: string; workspaceId?: string; bizRequestId?: string; expMatterId?: string; lines?: Invoice["lines"]; paymentMode?: Invoice["paymentMode"] }) {
+      if (BACKEND && remote) {
+        remote.billing(id, "POST", "/api/billing/invoices", { clientId: id, ...i, lines: i.lines?.length ? i.lines : [{ label: i.description, amount: i.amount, kind: "service" }] });
+        return "the new invoice";
+      }
       const number = `INV-${getNextInvoice()}`;
       up(id, (c) =>
         log(
@@ -438,9 +446,11 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
       return number;
     },
     sendInvoice(id: string, invId: string) {
+      if (BACKEND && remote) return remote.billing(id, "POST", `/api/billing/invoices/${invId}/send`, {}, "Invoice sent");
       up(id, (c) => log({ ...c, invoices: c.invoices.map((x) => (x.id === invId ? { ...x, status: "open" as const } : x)) }, "invoice", `Sent invoice ${c.invoices.find((x) => x.id === invId)?.number}`));
     },
     recordPayment(id: string, invId: string, amount: number, method: string) {
+      if (BACKEND && remote) return remote.billing(id, "POST", `/api/billing/invoices/${invId}/payments`, { amount, method });
       up(id, (c) => {
         const invoices = c.invoices.map((x): Invoice => {
           if (x.id !== invId) return x;
@@ -454,6 +464,7 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
 
     /** Refund (reduces amount paid), credit (reduces amount owed) or correction (changes the total). History is kept on the invoice. */
     adjustInvoice(id: string, invId: string, adj: { kind: "refund" | "credit" | "correction"; amount: number; note: string; byId: string }) {
+      if (BACKEND && remote) return remote.billing(id, "POST", `/api/billing/invoices/${invId}/adjust`, { kind: adj.kind, amount: adj.amount, note: adj.note });
       up(id, (c) => {
         const inv = c.invoices.find((x) => x.id === invId)!;
         const invoices = c.invoices.map((x): Invoice => {
@@ -639,6 +650,19 @@ function useClientSync(state: State, dispatch: React.Dispatch<Action>) {
         notify(e instanceof RemoteError ? e.message : "Couldn't save the identifier.");
         await reload(id);
       }
+    },
+    billing(clientId, method, path, body, done) {
+      (async () => {
+        try {
+          await pendingClientCreates.get(clientId);
+          await call(method, path, body);
+          if (done) notify(done);
+        } catch (e) {
+          notify(e instanceof RemoteError ? e.message : "Couldn't save the invoice — check your connection.");
+        }
+        await reload(clientId);
+        window.dispatchEvent(new CustomEvent("mkb:billing-changed", { detail: clientId }));
+      })();
     },
   } : undefined), []);
 

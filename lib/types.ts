@@ -99,7 +99,7 @@ export type Appointment = {
   status: "scheduled" | "completed" | "cancelled" | "no_show";
 };
 
-export type InvoiceStatus = "draft" | "open" | "overdue" | "paid" | "partial";
+export type InvoiceStatus = "draft" | "open" | "overdue" | "paid" | "partial" | "void";
 
 export type Invoice = {
   id: string;
@@ -124,9 +124,20 @@ export type Invoice = {
   paidAt?: string;
   /** Refunds, credits and other adjustments, newest first. */
   adjustments?: InvoiceAdjustment[];
+  /** Tax invoices: paid upfront, or taken from the refund through a bank product. */
+  paymentMode?: "upfront" | "bank_product";
+  /** Service bureau whose back-end fees are on the invoice (staff only). */
+  bureau?: string;
+  sentAt?: string;
+  voidedAt?: string;
+  voidReason?: string;
+  lateFeeAt?: string;
+  /** Every change, newest first (server records). */
+  history?: { at: string; by: string; text: string }[];
+  rev?: number;
 };
 
-export type InvoiceLine = { label: string; amount: number; kind: "service" | "additional" | "filing" | "third_party" | "discount" | "clerk" | "government" | "records" };
+export type InvoiceLine = { label: string; amount: number; kind: "service" | "additional" | "filing" | "third_party" | "discount" | "clerk" | "government" | "records" | "backend" | "late_fee" };
 export type InvoiceAdjustment = { id: string; kind: "refund" | "credit" | "correction"; amount: number; note: string; at: string; byId: string };
 
 export type Signature = {

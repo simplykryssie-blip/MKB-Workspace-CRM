@@ -3,6 +3,7 @@
  * permission-checked separately on the server (details, team assignments,
  * services, notes), whatever the interface sent. Server-only.
  */
+import { invoicesByClient } from "./billing";
 import type { ActivityItem, Client, Enrollment, Note, ServiceKey } from "@/lib/types";
 import { canDo, clientAccess } from "@/lib/team/policy";
 import { all, badRequest, forbidden, HttpError, json, notFound, now, one, type AppEnv, type Db } from "./core";
@@ -22,7 +23,7 @@ const sOpt = (v: unknown, max = 300) => (typeof v === "string" && v ? v.slice(0,
 
 /* ---------------------------------------------------------------- load */
 async function loadParts(db: Db, ids: string[]) {
-  if (!ids.length) return { enr: [], notes: [], act: [], team: [] };
+  if (!ids.length) return { enr: [], notes: [], act: [], team: [], inv: new Map() };
   const q = ids.map(() => "?").join(",");
   const [enr, notes, act, team] = await Promise.all([
     all<{ id: string; client_id: string; service: ServiceKey; title: string; stage: string; progress: number; status: Enrollment["status"]; staff_id: string; started_at: string; due_at: string | null; fee: number }>(db, `SELECT * FROM client_enrollments WHERE client_id IN (${q}) ORDER BY started_at`, ...ids),
@@ -30,7 +31,9 @@ async function loadParts(db: Db, ids: string[]) {
     all<{ id: string; client_id: string; kind: ActivityItem["kind"]; text: string; actor: ActivityItem["actor"]; at: string }>(db, `SELECT * FROM client_activity WHERE client_id IN (${q}) ORDER BY at DESC LIMIT 5000`, ...ids),
     all<{ client_id: string; member_id: string }>(db, `SELECT client_id, member_id FROM record_assignments WHERE source = 'client_team' AND client_id IN (${q})`, ...ids),
   ]);
-  return { enr, notes, act, team };
+  // Invoices are their own server records (billing); never taken from the browser.
+  const inv = await invoicesByClient({ DB: db } as AppEnv, ids);
+  return { enr, notes, act, team, inv };
 }
 
 function assemble(r: FullRow, parts: Awaited<ReturnType<typeof loadParts>>, l4: Record<string, string | null>, dobYear?: string): ClientSnapshot {
@@ -47,7 +50,7 @@ function assemble(r: FullRow, parts: Awaited<ReturnType<typeof loadParts>>, l4: 
     staffIds: parts.team.filter((t) => t.client_id === r.id).map((t) => t.member_id),
     status: r.status as Client["status"], portal: r.portal as Client["portal"], tags: json(r.tags, []), source: r.source, leadId: r.lead_id ?? undefined, since: r.since, lastActivityAt: r.last_activity_at,
     enrollments: parts.enr.filter((e) => e.client_id === r.id).map((e) => ({ id: e.id, service: e.service, title: e.title, stage: e.stage, progress: e.progress, status: e.status, staffId: e.staff_id, startedAt: e.started_at, dueAt: e.due_at ?? undefined, fee: e.fee })),
-    documents: md.documents ?? [], messages: md.messages ?? [], appointments: md.appointments ?? [], invoices: md.invoices ?? [], signatures: md.signatures ?? [],
+    documents: md.documents ?? [], messages: md.messages ?? [], appointments: md.appointments ?? [], invoices: parts.inv.get(r.id) ?? [], signatures: md.signatures ?? [],
     notes: parts.notes.filter((n) => n.client_id === r.id).map((n): Note => ({ id: n.id, authorId: n.author_id, body: n.body, at: n.at, service: n.service ?? undefined, pinned: !!n.pinned || undefined })),
     activity: parts.act.filter((x) => x.client_id === r.id).map((x) => ({ id: x.id, kind: x.kind, text: x.text, at: x.at, actor: x.actor })),
     rev: r.rev,
@@ -113,7 +116,8 @@ const cleanEnrollment = (e: Enrollment): Enrollment => {
   return { id: s(e.id, 60), service: e.service, title: s(e.title, 200), stage: s(e.stage, 100), progress: Math.max(0, Math.min(100, Math.round(Number(e.progress) || 0))), status: e.status, staffId: s(e.staffId, 60), startedAt: s(e.startedAt, 40), dueAt: sOpt(e.dueAt, 40), fee: Math.max(0, Number(e.fee) || 0) };
 };
 function moduleData(c: Partial<Client>) {
-  const md: ModuleData = { documents: c.documents ?? [], messages: c.messages ?? [], appointments: c.appointments ?? [], invoices: c.invoices ?? [], signatures: c.signatures ?? [] };
+  // Invoices live in the billing tables, so they're left out of the client record.
+  const md: ModuleData = { documents: c.documents ?? [], messages: c.messages ?? [], appointments: c.appointments ?? [], invoices: [], signatures: c.signatures ?? [] };
   const text = JSON.stringify(md);
   if (text.length > MAX_MODULE_DATA) throw new HttpError(413, "This client record is too large to save.");
   return text;

@@ -19,9 +19,9 @@ export async function loadWording(env: AppEnv, key: TemplateKey) {
   return { wording: wordingFor(key, r ? json<Partial<EmailWording>>(r.data, {}) : null), updatedAt: r?.updated_at, updatedBy: r?.updated_by ?? undefined, custom: !!r };
 }
 
-export async function sendTemplate(env: AppEnv, key: TemplateKey, m: { to: string; vars: Record<string, string>; documents?: string[]; attachments?: EmailAttachment[] }) {
+export async function sendTemplate(env: AppEnv, key: TemplateKey, m: { to: string; vars: Record<string, string>; documents?: string[]; attachments?: EmailAttachment[]; buttonUrl?: string }) {
   const { wording } = await loadWording(env, key);
-  const e = renderEmail({ wording, docsTitle: EMAIL_TEMPLATES[key].docsTitle, vars: m.vars, documents: m.documents, buttonUrl: portalUrl(env), logoUrl: `${publicAssetOrigin(env)}/brand/mkb-seal-192.png` });
+  const e = renderEmail({ wording, docsTitle: EMAIL_TEMPLATES[key].docsTitle, vars: m.vars, documents: m.documents, buttonUrl: m.buttonUrl ?? portalUrl(env), logoUrl: `${publicAssetOrigin(env)}/brand/mkb-seal-192.png` });
   return sendEmail(env, { to: m.to, template: key, subject: e.subject, text: e.text, html: e.html, attachments: m.attachments });
 }
 

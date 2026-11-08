@@ -24,6 +24,8 @@ export type ServiceFees = {
   };
   /** Tax filing partners. Software and service bureau are staff-only (never on anything a client sees); the bank appears on bank product invoices. */
   taxPartners: { software: string; serviceBureau: string; bankProduct: string };
+  /** Invoice wording (editable). {{bank}} is the refund transfer bank from Tax filing partners. */
+  invoiceText: { upfrontNote: string; bankDisclosure: string };
   /** Late payment terms (all services). */
   late: { graceDays: number; adminFee: number; monthlyRatePct: number; courtAfterDays: number; /** Added if MKB has to file a claim in court (plus court costs). */ courtAdminFee: number };
 };
@@ -42,6 +44,10 @@ export const DEFAULT_SERVICE_FEES: ServiceFees = {
   },
   expunge: { baseFee: 550, chargesIncluded: 2, extraChargeFee: 550 },
   taxPartners: { software: "TaxWise", serviceBureau: "Doucet Financial", bankProduct: "Santa Barbara Tax Products Group (TPG)" },
+  invoiceText: {
+    upfrontNote: "Pay securely online by card or bank transfer, or pay in person at our office. Your return is filed after payment and your e-signature.",
+    bankDisclosure: "You chose to have these fees taken out of your federal refund. Your refund goes first to {{bank}}, which deducts the fees and sends you the rest.\n\nIf your refund is smaller than expected, delayed, or reduced — for example because the IRS adjusts it or applies it to a past-due debt (an \"offset\") — the fees may not be fully collected. Any amount not collected from your refund remains due, and we'll send you an updated invoice to pay directly.\n\nYou can always choose to pay upfront instead and receive your full refund. No payment is due now unless your refund can't cover these fees.",
+  },
   late: { graceDays: 7, adminFee: 75, monthlyRatePct: 1, courtAfterDays: 39, courtAdminFee: 250 },
 };
 

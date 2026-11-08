@@ -31,6 +31,7 @@ export const invoiceStatus: Record<InvoiceStatus, { label: string; tone: Tone }>
   partial: { label: "Partially paid", tone: "warning" },
   overdue: { label: "Overdue", tone: "danger" },
   paid: { label: "Paid", tone: "success" },
+  void: { label: "Void", tone: "neutral" },
 };
 export const signatureStatus: Record<Signature["status"], { label: string; tone: Tone }> = {
   pending: { label: "Awaiting signature", tone: "warning" },

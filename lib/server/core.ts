@@ -22,6 +22,10 @@ export type AppEnv = Omit<CloudflareEnv, "APP_ENV" | "BACKEND_ENABLED"> & {
   WEBSITE_HOSTS?: string;
   /** One-time link secret for creating the Owner account in an empty database. */
   OWNER_SETUP_TOKEN?: string;
+  /** Stripe secret key (sk_live_… / sk_test_…). Without it, invoices show "pay at our office". */
+  STRIPE_SECRET_KEY?: string;
+  /** Signing secret of the Stripe webhook endpoint (whsec_…). */
+  STRIPE_WEBHOOK_SECRET?: string;
   /** Development only: password given to sample team members by the dev seed. */
   DEV_SEED_PASSWORD?: string;
 };
@@ -94,13 +98,13 @@ export const str = (v: unknown, max = 500) => (typeof v === "string" ? v.trim().
 
 /** Wraps a route handler: errors become JSON responses; unexpected errors are hidden from the caller. */
 /** `rawBody`: the route reads a file upload instead of JSON (the same-origin check still applies). */
-export function handle<P extends Record<string, string> = Record<string, never>>(fn: (req: Request, env: AppEnv, params: P) => Promise<Response>, opts: { rawBody?: boolean } = {}) {
+export function handle<P extends Record<string, string> = Record<string, never>>(fn: (req: Request, env: AppEnv, params: P) => Promise<Response>, opts: { rawBody?: boolean; /** Server-to-server callbacks that prove themselves with a signature (e.g. Stripe). */ signedExternal?: boolean } = {}) {
   return async (req: Request, ctx: { params: Promise<P> }) => {
     let env: AppEnv | undefined;
     try {
       env = await getEnv();
       if (env.BACKEND_ENABLED !== "true" && !isDev(env)) return jsonResponse({ error: "Backend not enabled." }, 503);
-      checkSameOrigin(req, env, opts.rawBody);
+      if (!opts.signedExternal) checkSameOrigin(req, env, opts.rawBody);
       return await fn(req, env, ((await ctx?.params) ?? {}) as P);
     } catch (e) {
       if (e instanceof HttpError) return jsonResponse({ error: e.message, code: e.code }, e.status);

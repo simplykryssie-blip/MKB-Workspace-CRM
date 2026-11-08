@@ -6,7 +6,7 @@
  * document contents in an email.
  */
 
-export type TemplateKey = "tax_intake_received" | "tax_document_reminder" | "tax_document_request" | "tax_extension_filed";
+export type TemplateKey = "tax_intake_received" | "tax_document_reminder" | "tax_document_request" | "tax_extension_filed" | "invoice_sent";
 
 export type EmailWording = {
   subject: string;
@@ -66,6 +66,20 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
     steps: "An extension gives you more time to file, not more time to pay. Interest applies to any tax not paid by the original due date.\nWe'll keep working on your return as your documents come in.\nWe'll let you know when it's ready for your review and signature.",
     button: "Open your client portal",
     closing: "Questions? Reply through your portal or call us at 833-379-3320.",
+  },
+  invoice_sent: {
+    key: "invoice_sent",
+    name: "Invoice",
+    when: "Sent when staff send or resend an invoice. The branded invoice PDF is attached.",
+    placeholders: ["firstName", "number", "amount", "dueDate", "payNote"],
+    subject: "Invoice {{number}} from MKB Financial Group",
+    heading: "Hi {{firstName}}, here's your invoice.",
+    intro: "Invoice {{number}} for {{amount}} is attached. {{payNote}}",
+    docsTitle: "Invoice",
+    docsNote: "",
+    steps: "",
+    button: "View and pay",
+    closing: "Questions about your invoice? Call us at 833-379-3320.",
   },
   tax_document_request: {
     key: "tax_document_request",

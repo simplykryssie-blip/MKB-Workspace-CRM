@@ -93,7 +93,19 @@ async function makeWriter(docTitle: string, headerRight: string) {
     return pdf.save();
   };
   newPage();
-  return { text, heading, row, space, finish, fonts: { reg, bold, serif } };
+  /** A line with the amount right-aligned (invoices). */
+  const amountRow = (label: string, amount: string, o: { strong?: boolean; muted?: boolean; group?: boolean; size?: number } = {}) => {
+    const size = o.size ?? (o.group ? 8 : 10);
+    const font = o.strong || o.group ? bold : reg;
+    const color = o.group ? GOLD : o.muted ? MUTED : INK;
+    const ll = wrap(o.group ? label.toUpperCase() : label, font, size, W - 2 * M - 120);
+    need(ll.length * (size + 4) + 8);
+    ll.forEach((l, i) => page.drawText(l, { x: M, y: y - i * (size + 4), size, font, color }));
+    if (amount) { const a = safe(amount); page.drawText(a, { x: W - M - font.widthOfTextAtSize(a, size), y, size, font, color }); }
+    y -= ll.length * (size + 4) + 4;
+    if (!o.group) { page.drawRectangle({ x: M, y: y + 2, width: W - 2 * M, height: 0.5, color: LINE }); y -= 4; }
+  };
+  return { text, heading, row, space, finish, amountRow, fonts: { reg, bold, serif } };
 }
 
 export async function buildIntakePdf(x: IntakePdfInput): Promise<Uint8Array> {
@@ -157,4 +169,49 @@ export async function buildLetterPdf(x: { clientName: string; parts: { title: st
   row("Letters accepted", x.parts.map((p) => `${p.title} (v${p.version})`).join("; "));
   void bold;
   return finish(x.clientName);
+}
+
+
+export type InvoicePdfInput = {
+  number: string; issuedAt: string; dueAt: string; status: string; paymentMode: "upfront" | "bank_product";
+  billTo: string[]; lines: { label: string; amount: number; kind: string }[]; total: number; paid: number;
+  adjustments: { kind: string; amount: number; note: string }[]; payUrl?: string; payNote: string; disclosure?: string;
+};
+const usdFmt = (n: number) => `${n < 0 ? "-" : ""}$${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+/** Branded invoice (pay upfront, or fees paid from the refund with the disclosure). */
+export async function buildInvoicePdf(x: InvoicePdfInput): Promise<Uint8Array> {
+  const { text, heading, space, finish, amountRow, fonts: { serif, bold } } = await makeWriter(`Invoice ${x.number}`, `Invoice ${x.number}`);
+  const day = (iso: string) => new Date(iso).toLocaleDateString("en-US", { dateStyle: "long", timeZone: "America/Chicago" });
+  text("Invoice", { size: 24, font: serif, gap: 6 });
+  text(`${x.number} · Issued ${day(x.issuedAt)} · ${x.paymentMode === "bank_product" ? "Paid from your refund" : `Due ${day(x.dueAt)}`}`, { size: 9.5, color: MUTED, gap: 4 });
+  text(x.status === "void" ? "VOID" : x.paymentMode === "bank_product" ? "PAID FROM YOUR REFUND" : x.status === "paid" ? "PAID" : "PAY UPFRONT", { size: 9, font: bold, color: GOLD, gap: 10 });
+  text("Billed to", { size: 8.5, font: bold, color: MUTED, gap: 3 });
+  x.billTo.filter(Boolean).forEach((l) => text(l, { size: 10, gap: 3 }));
+  space(10);
+  const groups: [string, (k: string) => boolean][] = [
+    ["Preparation fees", (k) => ["service", "additional", "discount"].includes(k)],
+    [x.paymentMode === "bank_product" ? "Refund processing (bank product)" : "Processing fees", (k) => k === "backend"],
+    ["Government and third-party fees", (k) => ["filing", "third_party", "clerk", "government", "records"].includes(k)],
+    ["Late fees", (k) => k === "late_fee"],
+  ];
+  for (const [title, test] of groups) {
+    const ls = x.lines.filter((l) => test(l.kind));
+    if (!ls.length) continue;
+    amountRow(title, "", { group: true });
+    ls.forEach((l) => amountRow(l.label, usdFmt(l.kind === "discount" ? -Math.abs(l.amount) : l.amount)));
+  }
+  x.adjustments.forEach((a) => amountRow(`${a.kind[0].toUpperCase()}${a.kind.slice(1)} — ${a.note}`, usdFmt(a.kind === "correction" ? a.amount : -Math.abs(a.amount)), { muted: true }));
+  amountRow(x.paymentMode === "bank_product" ? "Total — deducted from your refund" : "Total", usdFmt(x.total), { strong: true, size: 11 });
+  if (x.paid) amountRow("Paid", usdFmt(-x.paid), { muted: true });
+  amountRow(x.paymentMode === "bank_product" && x.paid < x.total ? "Balance (collected from your refund)" : "Balance due", usdFmt(Math.max(0, x.total - x.paid)), { strong: true, size: 12 });
+  space(8);
+  if (x.paymentMode === "bank_product" && x.disclosure) {
+    heading("How fees paid from your refund work");
+    x.disclosure.split(/\n\s*\n/).forEach((p) => { text(p.replace(/\s+/g, " "), { size: 9.5, gap: 3 }); space(4); });
+  } else if (x.status !== "paid" && x.status !== "void") {
+    text(x.payNote, { size: 10, gap: 4 });
+    if (x.payUrl) text(`Pay online: ${x.payUrl}`, { size: 9, color: GOLD, gap: 4 });
+  }
+  return finish(x.billTo[0] ?? "Client");
 }
