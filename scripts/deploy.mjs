@@ -65,11 +65,19 @@ try {
 // Files are stored gzip-compressed: smaller, and Cloudflare's firewall doesn't
 // mistake script contents in an upload for an attack.
 const GZ = join(ROOT, ".open-next/.gz");
-let n = 0;
+// Only upload files whose contents changed since the last deploy to this
+// environment (remembered locally; --force-upload sends everything).
+const CACHE = join(ROOT, `.wrangler/static-upload-${ENV}.json`);
+let sent = {};
+try { if (!args.includes("--force-upload")) sent = JSON.parse(readFileSync(CACHE, "utf8")); } catch { sent = {}; }
+let n = 0, skipped = 0;
 for (const f of files) {
+  const raw = readFileSync(f.path);
+  const sum = createHash("sha256").update(raw).digest("hex");
+  if (sent[f.id] === sum) { skipped++; continue; }
   const gz = join(GZ, f.key);
   mkdirSync(dirname(gz), { recursive: true });
-  writeFileSync(gz, gzipSync(readFileSync(f.path), { level: 9 }));
+  writeFileSync(gz, gzipSync(raw, { level: 9 }));
   const type = TYPES[extname(f.key).toLowerCase()] ?? "application/octet-stream";
   let ok = false;
   for (let attempt = 0; attempt < 5 && !ok; attempt++) {
@@ -78,10 +86,13 @@ for (const f of files) {
       "--data-binary", `@${gz}`, base + "a/" + f.id], { encoding: "utf8" });
     try { ok = JSON.parse(out).success === true; } catch { ok = false; }
   }
-  if (!ok) throw new Error(`Upload failed for ${f.key}`);
-  if (++n % 25 === 0) console.log(`  uploaded ${n}/${files.length} page files`);
+  if (!ok) { mkdirSync(dirname(CACHE), { recursive: true }); writeFileSync(CACHE, JSON.stringify(sent)); throw new Error(`Upload failed for ${f.key}`); }
+  sent[f.id] = sum;
+  if (++n % 25 === 0) { console.log(`  uploaded ${n} page files`); mkdirSync(dirname(CACHE), { recursive: true }); writeFileSync(CACHE, JSON.stringify(sent)); }
 }
-console.log(`Uploaded ${files.length} page files to R2 bucket ${STATIC_BUCKET}.`);
+mkdirSync(dirname(CACHE), { recursive: true });
+writeFileSync(CACHE, JSON.stringify(sent));
+console.log(`Uploaded ${n} changed page files to R2 bucket ${STATIC_BUCKET} (${skipped} unchanged, skipped).`);
 
 // 3. Wrapper worker: serves those files, and stands in for the ASSETS binding.
 const keys = Object.fromEntries(files.map((f) => [f.key, "a/" + f.id]));
