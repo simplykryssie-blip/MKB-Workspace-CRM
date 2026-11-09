@@ -8,7 +8,7 @@
  * re-approve every tax year.
  */
 import type { DocSpec, TaxForm } from "@/lib/tax/config";
-import { all, any, form, gt, has, is, not, yes, type Answers, type Cond, type Q, type Row, type Section } from "./engine";
+import { all, any, form, gt, has, is, not, rowsOf, yes, type Answers, type Cond, type Q, type Row, type Section } from "./engine";
 
 export const INTERVIEW_VERSION = { taxYear: 2026, version: "v1", status: "Draft — pending preparer approval" };
 
@@ -70,7 +70,7 @@ const you: Section = {
     { id: "street", label: "Home address", type: "text", prefill: "street" },
     { id: "city", label: "City", type: "text", prefill: "city" },
     { id: "state", label: "State", type: "state", prefill: "state" },
-    { id: "zip", label: "ZIP", type: "text", prefill: "zip" },
+    { id: "zip", label: "ZIP", type: "zip", prefill: "zip" },
     { id: "moved", label: "Did you live in more than one state during the year?", type: YN, help: "Part-year residents usually file a return in each state." },
     { id: "prevState", label: "Which other state did you live in?", type: "state", show: yes("moved") },
     { id: "moveDate", label: "Date you moved", type: "date", show: yes("moved") },
@@ -636,7 +636,7 @@ const entity: Section = {
     { id: "bstreet", label: "Business address", type: "text", prefill: "street" },
     { id: "bcity", label: "City", type: "text", prefill: "city" },
     { id: "bstate", label: "State", type: "state", prefill: "state" },
-    { id: "bzip", label: "ZIP", type: "text", prefill: "zip" },
+    { id: "bzip", label: "ZIP", type: "zip", prefill: "zip" },
     { id: "activity", label: "Main business activity", type: "text", prefill: "activity" },
     { id: "product", label: "Main product or service", type: "text" },
     { id: "taxYearEnd", label: "Tax year", type: "choice", options: ["Calendar year (ends December 31)", "Fiscal year (ends another month)"] },
@@ -654,12 +654,20 @@ const ownerRows: Section = {
   show: form(...BIZ),
   intro: "Add every owner. Each partner or S-corp shareholder receives a Schedule K-1; corporations list owners of 20% or more.",
   covers: ["Schedule K-1 for each partner / shareholder", "Schedule B-1 / Schedule G — owners of 50% / 20% or more", "Guaranteed payments (1065) and officer compensation (1120-S, 1120)", "Capital accounts and shareholder basis"],
+  // Ownership can be less than 100% while owners are still being added, but never more.
+  check: (a) => {
+    const total = rowsOf(a, "owners").reduce((s, r) => s + (Number(r.opct) || 0), 0);
+    return total > 100.0001 ? `Ownership adds up to ${+total.toFixed(4)}% — it can't be more than 100%. Check each owner's percentage.` : undefined;
+  },
   repeat: { noun: "owner", rowTitle: (r, i) => r.oname || `Owner ${i + 1}`, rowDocs: (r, a) => (a.__form === "1120-S" && r.obasis === "No" ? [doc(`Shareholder basis history — ${r.oname || "shareholder"}`, "Business")] : []) },
   questions: [
     { id: "oname", label: "Owner's name", type: "text" },
     { id: "okind", label: "Type of owner", type: "choice", options: ["Individual", "Business or other entity", "Trust or estate"] },
     { id: "otin", label: "SSN (individual) or EIN (entity)", type: "tin" },
-    { id: "oaddr", label: "Mailing address", type: "text" },
+    { id: "oaddr", label: "Mailing address — street", type: "text", placeholder: "123 Main St, Apt 4" },
+    { id: "ocity", label: "City", type: "text" },
+    { id: "ostate", label: "State", type: "state" },
+    { id: "ozip", label: "ZIP", type: "zip" },
     { id: "opct", label: "Ownership percentage at year-end", type: "percent" },
     { id: "ochange", label: "Did this owner's percentage change during the year (bought, sold, joined, left)?", type: YN },
     { id: "ochangeWhat", label: "What changed and when?", type: "textarea", show: yes("ochange") },

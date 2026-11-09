@@ -17,7 +17,7 @@ import { useLetters } from "@/lib/engagement/use-letters";
 import { useServiceFees } from "@/lib/fees/use-fees";
 import { feeWords } from "@/lib/fees/config";
 import { LetterView } from "@/components/engagement/LetterView";
-import { display, docsFor, maskLast4, missingIn, progress, qVisible, rowsOf, sectionVisible, type Answers, type Q, type Row, type Section } from "@/lib/tax/interview/engine";
+import { display, docsFor, invalidReason, maskLast4, missingIn, needsFix, progress, qVisible, rowsOf, sectionVisible, type Answers, type Q, type Row, type Section } from "@/lib/tax/interview/engine";
 import { INTERVIEW_VERSION, sectionsFor } from "@/lib/tax/interview/questions";
 import { applyPrefill, prefillFrom } from "@/lib/tax/interview/prefill";
 import { US_STATES, formatPhone } from "@/lib/validation";
@@ -169,16 +169,17 @@ function SectionView({ s, a, prefilled, showErrors, setVal, setRows, secure, rev
                 <Button size="sm" variant="ghost" icon={Trash2} aria-label={`Remove ${s.repeat!.noun} ${i + 1}`} onClick={() => setRows(s.id, rows.filter((_, j) => j !== i))}>Remove</Button>
               </div>
               <div className="space-y-5">
-                {s.questions.filter((q) => qVisible(q, a, row)).map((q) => <Field key={q.id} q={q} idp={`${s.id}-${i}`} secureKey={`${s.id}.${i}.${q.id}`} secure={secure} reveal={reveal} value={row[q.id] ?? ""} row={row} err={showErrors && !q.optional && !(row[q.id] ?? "").trim()} onChange={(v) => setRows(s.id, rows.map((x, j) => (j === i ? { ...x, [q.id]: v } : x)))} />)}
+                {s.questions.filter((q) => qVisible(q, a, row)).map((q) => <Field key={q.id} q={q} idp={`${s.id}-${i}`} secureKey={`${s.id}.${i}.${q.id}`} secure={secure} reveal={reveal} value={row[q.id] ?? ""} row={row} err={(showErrors && needsFix(q, row[q.id])) || !!invalidReason(q, row[q.id])} onChange={(v) => setRows(s.id, rows.map((x, j) => (j === i ? { ...x, [q.id]: v } : x)))} />)}
               </div>
             </div>
           ))}
-          <Button icon={Plus} onClick={() => setRows(s.id, [...rows, {}])}>{rows.length ? `Add another ${s.repeat.noun}` : `Add a ${s.repeat.noun}`}</Button>
+          {s.check?.(a) && <p role="alert" className="rounded-xl border-2 border-danger bg-danger-soft/50 px-3 py-2 text-[13.5px] font-semibold text-danger-ink">{s.check(a)}</p>}
+          <Button icon={Plus} onClick={() => setRows(s.id, [...rows, {}])}>{rows.length ? `Add another ${s.repeat.noun}` : `Add ${/^[aeiou]/i.test(s.repeat.noun) ? "an" : "a"} ${s.repeat.noun}`}</Button>
           {showErrors && rows.length < (s.repeat.min ?? 1) && <p role="alert" className="text-[12.5px] text-danger-ink">Add at least one {s.repeat.noun}.</p>}
         </div>
       ) : (
         <div className="mt-5 space-y-5">
-          {s.questions.filter((q) => qVisible(q, a)).map((q) => <Field key={q.id} q={q} idp={s.id} secureKey={`${s.id}.${q.id}`} secure={secure} reveal={reveal} value={(a[q.id] as string) ?? ""} prefilled={prefilled.has(q.id) && a[q.id] !== ""} err={showErrors && !q.optional && !((a[q.id] as string) ?? "").trim()} onChange={(v) => setVal(q.id, v)} />)}
+          {s.questions.filter((q) => qVisible(q, a)).map((q) => <Field key={q.id} q={q} idp={s.id} secureKey={`${s.id}.${q.id}`} secure={secure} reveal={reveal} value={(a[q.id] as string) ?? ""} prefilled={prefilled.has(q.id) && a[q.id] !== ""} err={(showErrors && needsFix(q, a[q.id] as string)) || !!invalidReason(q, a[q.id] as string)} onChange={(v) => setVal(q.id, v)} />)}
         </div>
       )}
     </Card>
@@ -225,6 +226,9 @@ function Field({ q, idp, value, onChange, err, prefilled, row, secure, reveal, s
     case "textarea":
       input = <textarea id={id} rows={3} value={value} onChange={(e) => onChange(e.target.value)} className={`${inputCls(err)} h-auto py-2.5`} />;
       break;
+    case "zip":
+      input = <input id={id} inputMode="numeric" autoComplete="postal-code" value={value} onChange={(e) => { const d = e.target.value.replace(/\D/g, "").slice(0, 9); onChange(d.length > 5 ? `${d.slice(0, 5)}-${d.slice(5)}` : d); }} className={`${inputCls(err)} max-w-[160px] tabular-nums`} placeholder="70601" />;
+      break;
     case "state":
       input = <select id={id} value={value} onChange={(e) => onChange(e.target.value)} className={inputCls(err)}><option value="">Choose a state…</option>{US_STATES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>;
       break;
@@ -256,6 +260,7 @@ function Field({ q, idp, value, onChange, err, prefilled, row, secure, reveal, s
     <div data-q={q.id} data-type={q.type} data-answered={value ? "1" : "0"} data-missing={err ? "1" : undefined} tabIndex={err ? -1 : undefined} className={err ? "-m-2 rounded-xl border-2 border-danger bg-danger-soft/40 p-2 outline-none" : ""}>
       {label}
       {input}
+      {invalidReason(q, value) && <p className="mt-1.5 text-[12.5px] font-semibold text-danger-ink">{invalidReason(q, value)}</p>}
       {showWarn && (
         <div role="note" className="mt-2.5 flex gap-2.5 rounded-xl border-l-4 border-warning bg-warning-soft px-3 py-2.5">
           <AlertTriangle size={18} className="mt-0.5 shrink-0 text-warning-ink" />

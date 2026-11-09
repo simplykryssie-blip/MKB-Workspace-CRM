@@ -28,6 +28,8 @@ export type QType =
   | "date"
   | "year"
   | "state"
+  /** US ZIP code: 5 digits or ZIP+4. */
+  | "zip"
   | "phone"
   | "email"
   /** SSN / ITIN — kept as last four only. */
@@ -68,6 +70,8 @@ export type Section = {
   covers: string[];
   show?: Cond;
   repeat?: { noun: string; min?: number; rowTitle?: (r: Row, i: number) => string; rowDocs?: (r: Row, a: Answers) => DocSpec[] };
+  /** Whole-section rule (e.g. ownership can't add up to more than 100%). Returns the problem, or nothing. */
+  check?: (a: Answers) => string | undefined;
   questions: Q[];
 };
 
@@ -94,16 +98,31 @@ export const rowsOf = (a: Answers, sectionId: string): Row[] => (Array.isArray(a
 const filled = (v?: string) => v !== undefined && v.trim() !== "";
 
 /** Required questions still unanswered in a section (counts every repeat row). */
+/** Why an answer isn't acceptable as entered (format problems), or nothing. */
+export function invalidReason(q: Q, v?: string): string | undefined {
+  if (!filled(v)) return undefined;
+  const t = v!.trim();
+  if (q.type === "zip" && !/^\d{5}(-\d{4})?$/.test(t)) return "Enter a 5-digit ZIP (or ZIP+4).";
+  if (q.type === "percent" && !(Number(t) >= 0 && Number(t) <= 100)) return "Enter a percentage from 0 to 100.";
+  if (q.type === "state" && !/^[A-Z]{2}$/.test(t)) return "Choose a state.";
+  return undefined;
+}
+/** Shown red: required and empty, or filled in the wrong format. */
+export const needsFix = (q: Q, v?: string) => (!q.optional && !filled(v)) || !!invalidReason(q, v);
+
 export function missingIn(s: Section, a: Answers): { id: string; label: string; row?: number }[] {
   if (!sectionVisible(s, a)) return [];
+  const out: { id: string; label: string; row?: number }[] = [];
   if (s.repeat) {
     const rows = rowsOf(a, s.id);
-    const out: { id: string; label: string; row?: number }[] = [];
     if (rows.length < (s.repeat.min ?? 1)) out.push({ id: `${s.id}:rows`, label: `Add at least one ${s.repeat.noun}` });
-    rows.forEach((r, i) => s.questions.forEach((q) => !q.optional && qVisible(q, a, r) && !filled(r[q.id]) && out.push({ id: q.id, label: q.label, row: i })));
-    return out;
+    rows.forEach((r, i) => s.questions.forEach((q) => qVisible(q, a, r) && needsFix(q, r[q.id]) && out.push({ id: q.id, label: q.label, row: i })));
+  } else {
+    s.questions.filter((q) => qVisible(q, a) && needsFix(q, val(a, undefined, q.id))).forEach((q) => out.push({ id: q.id, label: q.label }));
   }
-  return s.questions.filter((q) => !q.optional && qVisible(q, a) && !filled(val(a, undefined, q.id))).map((q) => ({ id: q.id, label: q.label }));
+  const problem = s.check?.(a);
+  if (problem) out.push({ id: `${s.id}:check`, label: problem });
+  return out;
 }
 
 export function progress(sections: Section[], a: Answers) {
