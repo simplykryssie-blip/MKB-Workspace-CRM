@@ -447,7 +447,7 @@ const bizIncome: Section = {
     { id: "refunds", label: "Refunds and returns given to customers", type: "money", show: enterTotals, optional: true },
     { id: "nec", label: "Did you receive 1099-NEC forms from customers?", type: YN, docs: [doc("Forms 1099-NEC received", "Business")] },
     { id: "k1099", label: "Received 1099-K forms (card processors, PayPal, Venmo, Square, Etsy, Uber…)?", type: YN, docs: [doc("Forms 1099-K", "Business")] },
-    { id: "cashInc", label: "Any cash or payment-app income not on a 1099?", type: YN, warn: "All business income is taxable, even without a 1099. Leaving out cash or app income is one of the most common reasons for IRS notices.", warnWhen: "Yes" },
+    { id: "cashInc", label: "Any cash or payment-app income not on a 1099?", type: YN, warn: "All business income is taxable, even without a 1099. Leaving out cash or app income is one of the most common reasons for IRS notices.", warnWhen: "No" },
     { id: "cashAmt", label: "About how much cash or payment-app income wasn't on a 1099?", type: "money", show: yes("cashInc") },
     { id: "salesChannels", label: "Where do you sell?", type: "multi", optional: true, options: ["In person / storefront", "My own website", "Online marketplaces (Etsy, Amazon, eBay…)", "Social media / payment apps", "Wholesale to other businesses", "Services only — no products"] },
     { id: "salesTax", label: "Did you collect sales tax from customers?", type: YN, help: "Sales tax you collected and paid to the state isn't income — we'll back it out.", show: (a) => !String(a.salesChannels ?? "").startsWith("Services only") },
