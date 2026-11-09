@@ -200,7 +200,7 @@ async function saveEngagementPdf(env: AppEnv, a: Actor, r: TaxReturn, clientName
 }
 
 /** Stores a generated PDF privately and lists it in the client's Documents. Returns the document id. */
-async function storeClientPdf(env: AppEnv, a: Actor, clientId: string, pdf: Uint8Array, d: { name: string; fileName: string; category: string; taxYear?: number; activity: string }) {
+export async function storeClientPdf(env: AppEnv, a: Actor, clientId: string, pdf: Uint8Array, d: { name: string; fileName: string; category: string; taxYear?: number; activity: string; service?: string }) {
   if (a.kind !== "staff") throw forbidden();
   const docId = randomId("d");
   const key = `clients/${clientId}/${docId}.pdf`;
@@ -208,7 +208,7 @@ async function storeClientPdf(env: AppEnv, a: Actor, clientId: string, pdf: Uint
   await env.FILES.put(key, pdf, { httpMetadata: { contentType: "application/pdf" } });
   const c = await one<{ module_data: string | null }>(env.DB, "SELECT module_data FROM clients WHERE id = ?", clientId);
   const md = json<Record<string, unknown[]>>(c?.module_data, {});
-  md.documents = [{ id: docId, name: d.name, fileName: d.fileName, service: "tax", category: d.category, status: "received", sensitive: true, requestedAt: t, uploadedAt: t, sizeKb: Math.max(1, Math.round(pdf.length / 1024)), uploadedBy: "staff", taxYear: d.taxYear, hasFile: true, deliveredAt: t }, ...((md.documents as unknown[]) ?? [])];
+  md.documents = [{ id: docId, name: d.name, fileName: d.fileName, service: d.service ?? "tax", category: d.category, status: "received", sensitive: true, requestedAt: t, uploadedAt: t, sizeKb: Math.max(1, Math.round(pdf.length / 1024)), uploadedBy: "staff", taxYear: d.taxYear, hasFile: true, deliveredAt: t }, ...((md.documents as unknown[]) ?? [])];
   await env.DB.batch([
     env.DB.prepare("INSERT INTO client_files (id, client_id, r2_key, name, content_type, size_bytes, sensitive, created_at, created_by) VALUES (?, ?, ?, ?, 'application/pdf', ?, 1, ?, ?)").bind(docId, clientId, key, d.fileName, pdf.length, t, a.member.id),
     env.DB.prepare("UPDATE clients SET module_data = ?, rev = rev + 1, updated_at = ? WHERE id = ?").bind(JSON.stringify(md), t, clientId),

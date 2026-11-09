@@ -18,6 +18,7 @@ import { fmtDate, usd } from "@/lib/format";
 import type { Client } from "@/lib/types";
 import { DELIVERY_META, OwnerBadge, QboBadge, RECON_META, REVIEW_META, StageBadge, money } from "./BooksBits";
 import { StartWorkspace } from "./StartWorkspace";
+import { IntakesCard } from "./IntakesCard";
 import { useTeam } from "@/lib/store/team-store";
 import { BACKEND } from "@/lib/sync/remote";
 
@@ -71,6 +72,7 @@ export function BooksCenter() {
           ))}
         </div>
       </div>
+      <IntakesCard />
       {starting && <StartWorkspace open onClose={() => setStarting(false)} onCreated={(id) => { setStarting(false); router.push(`/services/bookkeeping/${id}`); }} />}
       {!books.ready ? (
         <div className="grid min-h-[30vh] place-items-center text-[14px] text-muted" role="status">Loading…</div>

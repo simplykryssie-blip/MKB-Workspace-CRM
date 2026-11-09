@@ -36,6 +36,9 @@ function wrap(text: string, font: PDFFont, size: number, width: number) {
 export type IntakePdfInput = {
   clientName: string; taxYear: number; form: TaxForm; returnId: string; answers: Answers;
   submittedAt: string; enteredBy: "client" | "staff"; consentName?: string; documents: string[]; engagement?: { title: string; version: number; acceptedName: string; acceptedAt: string };
+  /** Other interviews (e.g. bookkeeping intake): their own sections and title instead of the tax return's. */
+  sections?: import("@/lib/tax/interview/engine").Section[];
+  title?: string;
 };
 
 /** Branded page writer shared by the intake copy and engagement letters. */
@@ -111,11 +114,12 @@ async function makeWriter(docTitle: string, headerRight: string) {
 }
 
 export async function buildIntakePdf(x: IntakePdfInput): Promise<Uint8Array> {
-  const { text, heading, row, space, finish, fonts: { bold, serif } } = await makeWriter(`${x.taxYear} Tax Interview — ${x.clientName}`, `${x.taxYear} Tax Interview`);
-  text(`${x.taxYear} Tax Interview`, { size: 20, font: serif, gap: 8 });
+  const title = x.title ?? `${x.taxYear} Tax Interview`;
+  const { text, heading, row, space, finish, fonts: { bold, serif } } = await makeWriter(`${title} — ${x.clientName}`, title);
+  text(title, { size: 20, font: serif, gap: 8 });
   text(x.clientName, { size: 12, font: bold, gap: 10 });
   const when = new Date(x.submittedAt).toLocaleString("en-US", { dateStyle: "long", timeStyle: "short", timeZone: "America/Chicago" });
-  row("Return", `${x.returnId} · Form ${x.form}`);
+  if (!x.sections) row("Return", `${x.returnId} · Form ${x.form}`);
   row("Submitted", `${when} (Central)`);
   row("Completed by", x.enteredBy === "staff" ? "MKB staff with the client" : "The client, online");
   if (x.consentName) row("Confirmed accurate by (typed name)", x.consentName);
@@ -124,7 +128,7 @@ export async function buildIntakePdf(x: IntakePdfInput): Promise<Uint8Array> {
   text("Social Security numbers, EINs and bank account numbers show only the last four digits. Full numbers are kept encrypted at MKB.", { size: 8.5, color: MUTED });
 
   const a = x.answers;
-  for (const s of sectionsFor(x.form).filter((s) => sectionVisible(s, a))) {
+  for (const s of (x.sections ?? sectionsFor(x.form)).filter((s) => sectionVisible(s, a))) {
     if (s.repeat) {
       const rows = rowsOf(a, s.id);
       heading(s.title);

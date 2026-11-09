@@ -13,6 +13,9 @@ import { meId } from "@/lib/sample/clients";
 import { REPORT_TYPES, periodLabel, type ReportType } from "@/lib/books/config";
 import { DEFAULT_SERVICE_FEES } from "@/lib/fees/config";
 import { useServiceFees } from "@/lib/fees/use-fees";
+import { ENTITY_TO_WORKSPACE, recommendPlan, reportsFrom } from "@/lib/books/intake";
+import { rowsOf } from "@/lib/tax/interview/engine";
+import type { BooksIntake } from "@/lib/server/books-intake";
 
 /** MKB's bookkeeping packages (defaults; the live prices come from Settings → Fees). Fees can be adjusted per client. */
 export const BOOKS_PLANS = [
@@ -36,7 +39,7 @@ const monthOptions = (): [string, string][] => {
   return out;
 };
 
-export function StartWorkspace({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: (id: string) => void }) {
+export function StartWorkspace({ open, onClose, onCreated, intake }: { open: boolean; onClose: () => void; onCreated: (id: string) => void; intake?: BooksIntake }) {
   const clients = useClients();
   const books = useBooks();
   const team = useTeam();
@@ -51,8 +54,24 @@ export function StartWorkspace({ open, onClose, onCreated }: { open: boolean; on
   const [entityType, setEntityType] = useState("LLC");
   const [plan, setPlan] = useState<string>(DEFAULT_SERVICE_FEES.books.plans[0].key);
   const [fee, setFee] = useState(DEFAULT_SERVICE_FEES.books.plans[0].fee);
-  // When the saved prices arrive, start from the first plan's current price.
-  useEffect(() => { if (F.fees) { setPlan(F.fees.books.plans[0].key); setFee(F.fees.books.plans[0].fee); } }, [F.fees]);
+  // When the saved prices arrive, start from the plan the intake recommends (or the first plan).
+  useEffect(() => {
+    if (!F.fees) return;
+    const p = intake ? recommendPlan(intake.answers, F.fees.books.plans) : F.fees.books.plans[0];
+    setPlan(p.key); setFee(p.fee);
+  }, [F.fees]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Everything else the intake already answered.
+  useEffect(() => {
+    if (!intake) return;
+    const a = intake.answers;
+    setClientId(intake.clientId);
+    if (typeof a.legalName === "string" && a.legalName) setBusinessName(a.legalName);
+    if (typeof a.entity === "string" && ENTITY_TO_WORKSPACE[a.entity]) setEntityType(ENTITY_TO_WORKSPACE[a.entity]);
+    setReports(reportsFrom(a));
+    if (a.system === "QuickBooks Online" && typeof a.legalName === "string") setQbo(a.legalName);
+    const rows = rowsOf(a, "accounts");
+    if (rows.length) setAccounts(rows.map((r) => ({ name: r.nickname || r.kind || "Account", kind: ["Credit card", "Line of credit"].includes(r.kind) ? "credit_card" : "bank", mask: (r.last4 ?? "").slice(0, 4), institution: r.bank ?? "" })));
+  }, [intake]);
   const [reports, setReports] = useState<ReportType[]>(DEFAULT_REPORTS);
   const [bookkeeperId, setBookkeeperId] = useState(meId());
   const [reviewerId, setReviewerId] = useState(meId());
@@ -81,7 +100,7 @@ export function StartWorkspace({ open, onClose, onCreated }: { open: boolean; on
     <Modal open={open} onClose={onClose} size="lg" title="Start bookkeeping" description="Sets up monthly review, reconciliation and close for one client business. The client keeps their own QuickBooks." footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" onClick={submit}>Start bookkeeping</Button></>}>
       <div className="space-y-5">
         <div className="grid gap-4 sm:grid-cols-2">
-          <SelectField label="Client" required value={clientId} onChange={(e) => pickClient(e.target.value)} options={[["", clients.clients.length ? "Choose a client…" : "Add the client in Clients first"], ...clients.clients.map((c): [string, string] => [c.id, c.name])]} />
+          <SelectField label="Client" required disabled={!!intake} value={clientId} onChange={(e) => pickClient(e.target.value)} options={[["", clients.clients.length ? "Choose a client…" : "Add the client in Clients first"], ...clients.clients.map((c): [string, string] => [c.id, c.name])]} />
           <TextField label="Business name" required value={businessName} onChange={(e) => setBusinessName(e.target.value)} />
           <SelectField label="Business type" value={entityType} onChange={(e) => setEntityType(e.target.value)} options={["LLC", "S Corporation", "C Corporation", "Sole proprietorship", "Partnership", "Nonprofit"].map((x): [string, string] => [x, x])} />
           <TextField label="QuickBooks company name" hint="optional" value={qbo} onChange={(e) => setQbo(e.target.value)} />

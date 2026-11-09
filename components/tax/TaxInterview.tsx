@@ -151,10 +151,10 @@ const StepIcon = ({ done }: { done: boolean }) => (done ? <CheckCircle2 size={15
 
 /* ------------------------------------------------------------------ */
 
-type SecureSave = (key: string, kind: "ssn" | "ein" | "bank", value: string) => Promise<unknown>;
+export type SecureSave = (key: string, kind: "ssn" | "ein" | "bank", value: string) => Promise<unknown>;
 /** Staff only: fetches the full number from the vault (permission-checked and audited on the server). */
 type SecureReveal = (key: string) => Promise<string>;
-function SectionView({ s, a, prefilled, showErrors, setVal, setRows, secure, reveal }: { s: Section; a: Answers; prefilled: Set<string>; showErrors: boolean; setVal: (id: string, v: string) => void; setRows: (sid: string, rows: Row[]) => void; secure?: SecureSave; reveal?: SecureReveal }) {
+export function SectionView({ s, a, prefilled, showErrors, setVal, setRows, secure, reveal }: { s: Section; a: Answers; prefilled: Set<string>; showErrors: boolean; setVal: (id: string, v: string) => void; setRows: (sid: string, rows: Row[]) => void; secure?: SecureSave; reveal?: SecureReveal }) {
   const rows = rowsOf(a, s.id);
   return (
     <Card className="p-5 sm:p-6">
@@ -225,6 +225,9 @@ function Field({ q, idp, value, onChange, err, prefilled, row, secure, reveal, s
     }
     case "textarea":
       input = <textarea id={id} rows={3} value={value} onChange={(e) => onChange(e.target.value)} className={`${inputCls(err)} h-auto py-2.5`} />;
+      break;
+    case "last4":
+      input = <div className="flex items-center gap-2"><span className="text-[15px] text-muted">••••</span><input id={id} inputMode="numeric" value={value} onChange={(e) => onChange(e.target.value.replace(/\D/g, "").slice(0, 4))} className={`${inputCls(err)} max-w-[110px] tabular-nums`} placeholder="1234" /></div>;
       break;
     case "zip":
       input = <input id={id} inputMode="numeric" autoComplete="postal-code" value={value} onChange={(e) => { const d = e.target.value.replace(/\D/g, "").slice(0, 9); onChange(d.length > 5 ? `${d.slice(0, 5)}-${d.slice(5)}` : d); }} className={`${inputCls(err)} max-w-[160px] tabular-nums`} placeholder="70601" />;

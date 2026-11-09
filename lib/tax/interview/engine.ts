@@ -30,6 +30,8 @@ export type QType =
   | "state"
   /** US ZIP code: 5 digits or ZIP+4. */
   | "zip"
+  /** Last four digits of an account number (full numbers are never collected). */
+  | "last4"
   | "phone"
   | "email"
   /** SSN / ITIN — kept as last four only. */
@@ -72,6 +74,8 @@ export type Section = {
   repeat?: { noun: string; min?: number; rowTitle?: (r: Row, i: number) => string; rowDocs?: (r: Row, a: Answers) => DocSpec[] };
   /** Whole-section rule (e.g. ownership can't add up to more than 100%). Returns the problem, or nothing. */
   check?: (a: Answers) => string | undefined;
+  /** Documents this section calls for that depend on several answers (e.g. multiple-choice). */
+  docs?: (a: Answers) => DocSpec[];
   questions: Q[];
 };
 
@@ -103,6 +107,7 @@ export function invalidReason(q: Q, v?: string): string | undefined {
   if (!filled(v)) return undefined;
   const t = v!.trim();
   if (q.type === "zip" && !/^\d{5}(-\d{4})?$/.test(t)) return "Enter a 5-digit ZIP (or ZIP+4).";
+  if (q.type === "last4" && !/^\d{4}$/.test(t)) return "Enter only the last 4 digits.";
   if (q.type === "percent" && !(Number(t) >= 0 && Number(t) <= 100)) return "Enter a percentage from 0 to 100.";
   if (q.type === "state" && !/^[A-Z]{2}$/.test(t)) return "Choose a state.";
   return undefined;
@@ -151,6 +156,7 @@ export function docsFor(sections: Section[], a: Answers): DocSpec[] {
         s.questions.forEach((q) => q.docs && qVisible(q, a, r) && r[q.id] === (q.docsWhen ?? "Yes") && q.docs.forEach(add));
       });
     } else s.questions.forEach((q) => q.docs && qVisible(q, a) && val(a, undefined, q.id) === (q.docsWhen ?? "Yes") && q.docs.forEach(add));
+    s.docs?.(a).forEach(add);
   });
   return out;
 }
@@ -167,6 +173,7 @@ export function coverage(sections: Section[], a: Answers): CoverageItem[] {
 /** Human-readable answer. */
 export function display(q: Q, v?: string) {
   if (!filled(v)) return "—";
+  if (q.type === "last4") return `••••${v}`;
   if (q.type === "money") return `$${Number(v).toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
   if (q.type === "percent") return `${v}%`;
   if (q.type === "multi") return v!.split("|").join(", ");

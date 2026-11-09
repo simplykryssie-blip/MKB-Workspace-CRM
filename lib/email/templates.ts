@@ -6,7 +6,7 @@
  * document contents in an email.
  */
 
-export type TemplateKey = "tax_intake_received" | "tax_document_reminder" | "tax_document_request" | "tax_extension_filed" | "invoice_sent";
+export type TemplateKey = "tax_intake_received" | "tax_document_reminder" | "tax_document_request" | "tax_extension_filed" | "invoice_sent" | "books_intake_received";
 
 export type EmailWording = {
   subject: string;
@@ -64,6 +64,20 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
     docsTitle: "Documents we still need",
     docsNote: "Upload them in your portal, or drop them off at our office. Please don't email tax documents.",
     steps: "An extension gives you more time to file, not more time to pay. Interest applies to any tax not paid by the original due date.\nWe'll keep working on your return as your documents come in.\nWe'll let you know when it's ready for your review and signature.",
+    button: "Open your client portal",
+    closing: "Questions? Reply through your portal or call us at 833-379-3320.",
+  },
+  books_intake_received: {
+    key: "books_intake_received",
+    name: "Bookkeeping intake received",
+    when: "Sent right after a bookkeeping intake is submitted. The PDF copy is attached.",
+    placeholders: ["firstName", "businessName", "date", "plan"],
+    subject: "We received your bookkeeping intake — here's what happens next",
+    heading: "Thank you, {{firstName}} — we're getting {{businessName}} set up.",
+    intro: "We received your bookkeeping intake on {{date}}. A copy is attached and saved in your client portal. Recommended plan: {{plan}}.",
+    docsTitle: "What we need from you",
+    docsNote: "Upload these in your portal. Please don't email bank statements or tax documents.",
+    steps: "Invite MKB to your accounting software (we'll send instructions if you need them).\nWe connect your accounts and review your books, including any catch-up months.\nWe confirm your plan and your first monthly close date.\nEach month you get your reports and a list of anything we need from you.",
     button: "Open your client portal",
     closing: "Questions? Reply through your portal or call us at 833-379-3320.",
   },
