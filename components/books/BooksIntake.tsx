@@ -77,11 +77,14 @@ function Runner({ intake, client, reload }: { intake: Intake; client: Client; re
   };
   const setVal = (qid: string, v: string) => setAnswers((x) => ({ ...x, [qid]: v }));
   const setRows = (sid: string, rows: Row[]) => setAnswers((x) => ({ ...x, [sid]: rows }));
-  // The EIN goes straight to the client's encrypted vault; only the last 4 stay in the answers.
-  const secure = async (_key: string, kind: "ssn" | "ein" | "bank", value: string) => {
-    if (kind !== "ein") throw new Error("Only the EIN is collected here.");
-    return call("PUT", `/api/clients/${client.id}/identifiers/ein`, { value });
+  // Full numbers go straight to encrypted storage; only the last 4 stay in the answers.
+  // EIN → the client's vault; bank account / routing numbers → this intake's vault.
+  const secure = async (key: string, kind: "ssn" | "ein" | "bank", value: string) => {
+    if (kind === "ein") return call("PUT", `/api/clients/${client.id}/identifiers/ein`, { value });
+    if (kind === "bank") return call("PUT", `/api/books/intakes/${intake.id}/secure`, { key, value });
+    throw new Error("Not collected here.");
   };
+  const reveal = async (key: string) => (await call<{ value: string }>("POST", `/api/books/intakes/${intake.id}/secure`, { key })).value;
 
   return (
     <div ref={top} className="space-y-5">
@@ -108,7 +111,7 @@ function Runner({ intake, client, reload }: { intake: Intake; client: Client; re
           <select aria-label="Intake step" value={step} onChange={(e) => go(Number(e.target.value))} className="h-10 w-full rounded-xl border border-line bg-surface px-3 text-[14px] text-ink lg:hidden">
             {steps.map((s, i) => <option key={s.key} value={i}>{i + 1}. {s.title}</option>)}
           </select>
-          {sec && <SectionView s={sec} a={answers} prefilled={initial.ids} showErrors={!!tried[sec.id]} setVal={setVal} setRows={setRows} secure={secure} />}
+          {sec && <SectionView s={sec} a={answers} prefilled={initial.ids} showErrors={!!tried[sec.id]} setVal={setVal} setRows={setRows} secure={secure} reveal={reveal} />}
           {cur.key === "review" && (submitted ? <Submitted intake={intake} client={client} /> : <Review intake={intake} client={client} answers={answers} rev={rev} goTo={(sid) => go(steps.findIndex((x) => x.key === sid))} onSubmitted={reload} />)}
           {cur.key !== "review" && (
             <div className="flex items-center gap-2">

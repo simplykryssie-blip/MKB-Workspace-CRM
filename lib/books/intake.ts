@@ -12,6 +12,8 @@ import { all, has, is, not, rowsOf, yes, type Answers, type Q, type Section } fr
 import type { BooksPlan } from "@/lib/fees/config";
 
 const YN = "yesno" as const;
+/** "••••1234" from a saved (masked) account number. */
+export const last4Of = (v?: string) => { const d = (v ?? "").replace(/\D/g, ""); return d.length >= 4 ? `••••${d.slice(-4)}` : ""; };
 const doc = (name: string, category: string, sensitive = false): DocSpec => ({ name, category, sensitive });
 const LLC = is("entity", "Single-member LLC", "Multi-member LLC");
 
@@ -123,17 +125,18 @@ const accounts: Section = {
   id: "accounts",
   title: "Bank, credit card and payment accounts",
   group: "Money accounts",
-  intro: "List every account the business uses — checking, savings, credit cards, lines of credit, and payment-app balances (PayPal, Square, Cash App Business). Only the last 4 digits; never enter full account numbers.",
+  intro: "List every account the business uses — checking, savings, credit cards, lines of credit, and payment-app balances (PayPal, Square, Cash App Business). Full numbers are encrypted when saved; afterwards only the last 4 digits show.",
   covers: ["Accounts to reconcile", "Statement access", "Commingling"],
   repeat: {
     noun: "account",
-    rowTitle: (r, i) => [r.bank, r.kind, r.last4 && `••••${r.last4}`].filter(Boolean).join(" · ") || `Account ${i + 1}`,
-    rowDocs: (r) => [doc(`Statements for the last 3 months — ${[r.bank, r.kind, r.last4 && `••••${r.last4}`].filter(Boolean).join(" ")}`.trim(), "Bank statements", true)],
+    rowTitle: (r, i) => [r.bank, r.kind, last4Of(r.acct)].filter(Boolean).join(" · ") || `Account ${i + 1}`,
+    rowDocs: (r) => [doc(`Statements for the last 3 months — ${[r.bank, r.kind, last4Of(r.acct)].filter(Boolean).join(" ")}`.trim(), "Bank statements", true)],
   },
   questions: [
     { id: "kind", label: "Type of account", type: "choice", options: ["Checking", "Savings", "Credit card", "Line of credit", "Payment app (PayPal, Square, Cash App…)", "Merchant / clearing account", "Other"] },
     { id: "bank", label: "Bank or company", type: "text", placeholder: "e.g. Chase, Capital One, PayPal" },
-    { id: "last4", label: "Last 4 digits of the account or card", type: "last4" },
+    { id: "acct", label: "Full account or card number", type: "bank", help: "Encrypted when saved. Only staff with the bank-number permission can reveal it, and every view is logged." },
+    { id: "routing", label: "Routing number (9 digits)", type: "bank", show: is("kind", "Checking", "Savings"), help: "Printed at the bottom left of a check, or in online banking." },
     { id: "nickname", label: "What is it used for?", type: "text", placeholder: "e.g. Operating account, Payroll, Company card", optional: true },
     { id: "personal", label: "Is this account also used for personal spending?", type: YN, warn: "Mixing personal and business money makes the books harder (and costlier) and can weaken an LLC's liability protection. We recommend a separate business account.", warnWhen: "Yes" },
     { id: "access", label: "How will we get the statements?", type: "choice", options: ["Bank feed in the accounting software", "I'll upload statements each month", "Read-only access for MKB", "Not sure"] },

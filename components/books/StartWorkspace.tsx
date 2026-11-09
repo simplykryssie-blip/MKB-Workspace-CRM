@@ -70,7 +70,7 @@ export function StartWorkspace({ open, onClose, onCreated, intake }: { open: boo
     setReports(reportsFrom(a));
     if (a.system === "QuickBooks Online" && typeof a.legalName === "string") setQbo(a.legalName);
     const rows = rowsOf(a, "accounts");
-    if (rows.length) setAccounts(rows.map((r) => ({ name: r.nickname || r.kind || "Account", kind: ["Credit card", "Line of credit"].includes(r.kind) ? "credit_card" : "bank", mask: (r.last4 ?? "").slice(0, 4), institution: r.bank ?? "" })));
+    if (rows.length) setAccounts(rows.map((r) => ({ name: r.nickname || r.kind || "Account", kind: ["Credit card", "Line of credit"].includes(r.kind) ? "credit_card" : "bank", mask: (r.acct ?? r.last4 ?? "").replace(/\D/g, "").slice(-4), institution: r.bank ?? "" })));
   }, [intake]);
   const [reports, setReports] = useState<ReportType[]>(DEFAULT_REPORTS);
   const [bookkeeperId, setBookkeeperId] = useState(meId());

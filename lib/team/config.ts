@@ -116,6 +116,14 @@ export const SENSITIVE_GROUPS = [
       { key: "exp.exportSensitive", label: "Export sensitive information" },
     ],
   },
+  {
+    key: "books",
+    label: "Bookkeeping financial information",
+    dept: "books" as DeptKey,
+    perms: [
+      { key: "books.bank", label: "Full bank & card account numbers" },
+    ],
+  },
 ] as const;
 export const SENSITIVE_KEYS = SENSITIVE_GROUPS.flatMap((g) => g.perms.map((p) => p.key)) as string[];
 export const sensitiveLabel = (k: string) => {
@@ -123,7 +131,7 @@ export const sensitiveLabel = (k: string) => {
   return k;
 };
 /** Grants that count as high-impact (always need confirmation). */
-export const HIGH_IMPACT = new Set(["tax.revealSsn", "tax.editSsn", "exp.revealSsn", "exp.editSsn", "tax.exportSensitive", "exp.exportSensitive", "tax.downloadSensitive", "exp.downloadSensitive"]);
+export const HIGH_IMPACT = new Set(["books.bank", "tax.revealSsn", "tax.editSsn", "exp.revealSsn", "exp.editSsn", "tax.exportSensitive", "exp.exportSensitive", "tax.downloadSensitive", "exp.downloadSensitive"]);
 
 /** Owner-only and administrative capabilities (beyond the module matrix). */
 export const CAPABILITIES = [

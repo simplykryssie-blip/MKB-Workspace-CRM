@@ -9,7 +9,9 @@ import { fillLetter } from "@/lib/engagement/letters";
 import { feeWords, money } from "@/lib/fees/config";
 import { docsFor, type Answers } from "@/lib/tax/interview/engine";
 import { all, badRequest, HttpError, json, notFound, now, one, run, type AppEnv } from "./core";
-import { randomId } from "./crypto";
+import { decryptField, encryptField, randomId } from "./crypto";
+import { hasSensitivePerm } from "./identity";
+import { rateLimit } from "./core";
 import { CLIENT_SQL, canOpen, type ClientRow } from "./clients";
 import { sendTemplate } from "./email";
 import { letterVersion } from "./engagement";
@@ -152,4 +154,44 @@ export async function submitIntake(env: AppEnv, a: Actor, id: string, b: { answe
   await notify(env, { module: "books", exceptId: a.member.id }, { kind: "intake", title: `${bizName} submitted their bookkeeping intake`, body: `Recommended plan: ${plan.key}`, href: `/services/bookkeeping?intake=${id}` });
   await audit(env.DB, a, { action: "Record update", resource: `Bookkeeping intake ${id}`, meta: `Submitted; engagement letter v${l.version} accepted; ${docs.length} documents requested${to ? (emailed ? "; emailed" : "; email queued") : ""}` });
   return { intake: toIntake((await one<Row>(env.DB, `${SQL} WHERE i.id = ?`, id))!), plan, documents: docs, emailed };
+}
+
+/* ---------------------------------------------------------------- full account numbers */
+const SECURE_KEY = /^(accounts|loans)\.\d{1,2}\.(acct|routing)$/;
+/** ABA routing number checksum. */
+const validRouting = (d: string) => d.length === 9 && (3 * (+d[0] + +d[3] + +d[6]) + 7 * (+d[1] + +d[4] + +d[7]) + (+d[2] + +d[5] + +d[8])) % 10 === 0;
+
+/** Stores a full account or routing number encrypted. Returns the last four (all the answers keep). */
+export async function setIntakeSecure(env: AppEnv, a: Actor, id: string, b: { key?: unknown; value?: unknown }) {
+  requirePermission(a, "books", "edit");
+  requireStaff(a);
+  await row(env, a, id);
+  const key = typeof b.key === "string" ? b.key : "";
+  if (!SECURE_KEY.test(key)) throw badRequest("Unknown answer.");
+  const d = typeof b.value === "string" ? b.value.replace(/\D/g, "") : "";
+  if (key.endsWith(".routing") ? !validRouting(d) : d.length < 4 || d.length > 17) throw badRequest(key.endsWith(".routing") ? "That routing number isn't valid — check the 9 digits." : "Enter the full account number (4 to 17 digits).");
+  if (!env.ENCRYPTION_KEY) throw new HttpError(500, "Server encryption key is not configured.");
+  const e = await encryptField(env.ENCRYPTION_KEY, d, `books_intake:${id}:${key}`);
+  await run(env.DB, "INSERT INTO vault (owner_type, owner_id, field, ciphertext, iv, key_version, last4, kind, updated_at, updated_by) VALUES ('books_intake', ?, ?, ?, ?, ?, ?, 'bank', ?, ?) ON CONFLICT(owner_type, owner_id, field) DO UPDATE SET ciphertext = excluded.ciphertext, iv = excluded.iv, key_version = excluded.key_version, last4 = excluded.last4, updated_at = excluded.updated_at, updated_by = excluded.updated_by", id, key, e.ciphertext, e.iv, Number(env.ENCRYPTION_KEY_VERSION ?? 1), d.slice(-4), now(), a.member.id);
+  await audit(env.DB, a, { action: "Permission change", resource: `Bookkeeping intake ${id} — ${key.endsWith(".routing") ? "routing" : "account"} number saved`, meta: "Value not logged" });
+  return { last4: d.slice(-4) };
+}
+
+/** Shows a full number to staff with the bank-number permission (audited, rate-limited). */
+export async function revealIntakeSecure(env: AppEnv, a: Actor, id: string, b: { key?: unknown }) {
+  requirePermission(a, "books", "view");
+  requireStaff(a);
+  await row(env, a, id);
+  const key = typeof b.key === "string" ? b.key : "";
+  if (!SECURE_KEY.test(key)) throw badRequest("Unknown answer.");
+  if (!hasSensitivePerm(a, "books.bank")) {
+    await audit(env.DB, a, { action: "Sensitive reveal", resource: `Bookkeeping intake ${id} — ${key}`, meta: "Denied: needs the bank-number permission", success: false });
+    throw new HttpError(403, "Revealing full account numbers needs the Bookkeeping bank-number permission.", "forbidden");
+  }
+  if (!(await rateLimit(env.DB, `reveal:${a.member.id}`, 60, 60))) throw new HttpError(429, "Too many reveals in the last hour.", "rate_limited");
+  const v = await one<{ ciphertext: string; iv: string }>(env.DB, "SELECT ciphertext, iv FROM vault WHERE owner_type = 'books_intake' AND owner_id = ? AND field = ?", id, key);
+  if (!v) throw notFound("Not on file.");
+  const value = await decryptField(env.ENCRYPTION_KEY!, v, `books_intake:${id}:${key}`);
+  await audit(env.DB, a, { action: "Sensitive reveal", resource: `Bookkeeping intake ${id} — ${key}` });
+  return { value };
 }

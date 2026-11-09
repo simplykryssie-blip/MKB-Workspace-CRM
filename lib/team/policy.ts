@@ -35,6 +35,8 @@ export function hasSensitive(s: PolicyState, m: PolicyMember | undefined, key: s
   if (!m || m.status !== "active") return false;
   const r = roleOf(s.roles, m);
   if (!r || r.isClient) return false;
+  // The Owner holds every sensitive permission, including ones added later.
+  if (r.isOwner) return true;
   if (!r.sensitive.includes(key) && !m.grants.includes(key)) return false;
   const group = SENSITIVE_GROUPS.find((g) => key.startsWith(`${g.key}.`));
   // Sensitive tax / expungement information also requires that department.
