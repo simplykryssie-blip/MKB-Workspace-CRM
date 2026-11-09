@@ -11,7 +11,8 @@ import { SectionView } from "@/components/tax/TaxInterview";
 import { LetterView } from "@/components/engagement/LetterView";
 import { useClients } from "@/lib/store/clients-store";
 import { BACKEND, call, RemoteError } from "@/lib/sync/remote";
-import { BOOKS_INTAKE_VERSION, BOOKS_SECTIONS, recommendPlan } from "@/lib/books/intake";
+import { BOOKS_INTAKE_VERSION, BOOKS_SECTIONS, pickableAddOns, quoteFor } from "@/lib/books/intake";
+import type { BooksQuote } from "@/lib/fees/config";
 import { docsFor, display, missingIn, qVisible, rowsOf, sectionVisible, type Answers, type Row } from "@/lib/tax/interview/engine";
 import { applyPrefill, prefillFrom } from "@/lib/tax/interview/prefill";
 import { useLetters } from "@/lib/engagement/use-letters";
@@ -41,7 +42,9 @@ type Client = ReturnType<typeof useClients>["clients"][number];
 
 function Runner({ intake, client, reload }: { intake: Intake; client: Client; reload: () => void }) {
   const toast = useToast();
-  const sections = BOOKS_SECTIONS;
+  const F0 = useServiceFees();
+  // Add-on choices come from Settings → Fees.
+  const sections = useMemo(() => (F0.fees ? BOOKS_SECTIONS.map((s) => (s.id !== "goals" ? s : { ...s, questions: s.questions.map((q) => (q.id === "addons" ? { ...q, options: pickableAddOns(F0.fees!.books).map((x) => x.name) } : q)) })) : BOOKS_SECTIONS), [F0.fees]);
   const initial = useMemo(() => applyPrefill(sections, { ...intake.answers }, prefillFrom(client)), []); // eslint-disable-line react-hooks/exhaustive-deps
   const [answers, setAnswers] = useState<Answers>(initial.answers);
   const rev = useRef(intake.rev);
@@ -137,8 +140,9 @@ function Review({ intake, client, answers, rev, goTo, onSubmitted }: { intake: I
   const [busy, setBusy] = useState(false);
   const missing = BOOKS_SECTIONS.flatMap((s) => missingIn(s, answers).map((m) => ({ ...m, s })));
   const docs = docsFor(BOOKS_SECTIONS, answers);
-  const plan = F.fees ? recommendPlan(answers, F.fees.books.plans) : null;
-  const vars = { ...(F.fees ? feeWords(F.fees) : {}), clientName: sig.trim() || (answers.legalName as string) || client.name, date: new Date().toLocaleDateString("en-US", { dateStyle: "long" }), service: plan?.key ?? "", fee: plan ? money(plan.fee) : "" };
+  const quote = F.fees ? quoteFor(answers, F.fees.books) : null;
+  const plan = quote?.plan ?? null;
+  const vars = { ...(F.fees ? feeWords(F.fees) : {}), clientName: sig.trim() || (answers.legalName as string) || client.name, date: new Date().toLocaleDateString("en-US", { dateStyle: "long" }), service: plan?.key ?? "", fee: quote ? `${quote.monthly.some((l) => l.startingAt) ? "starting at " : ""}${money(quote.monthlyTotal)}` : "", planIncludes: plan?.includes.join("; ") ?? "", addOns: quote ? [...quote.monthly.slice(1), ...quote.oneTime, ...quote.quoted].map((l) => l.label).join("; ") || "none" : "" };
   const submit = async () => {
     if (!L.letters) return;
     setBusy(true);
@@ -160,7 +164,7 @@ function Review({ intake, client, answers, rev, goTo, onSubmitted }: { intake: I
             <ul className="mt-1.5 space-y-1">{missing.slice(0, 12).map((m, i) => <li key={i}><button onClick={() => goTo(m.s.id)} className="text-left text-[13px] text-accent hover:underline">{m.s.title}: {m.label}</button></li>)}</ul>
           </div>
         ) : <p className="mt-1 text-[13.5px] text-success-ink">Every question is answered.</p>}
-        {plan && <p className="mt-3 rounded-xl bg-accent-soft/40 px-3 py-2 text-[13.5px] text-ink">Recommended plan: <b>{plan.key}</b> — {money(plan.fee)}/month (up to {plan.transactions.toLocaleString()} transactions, {plan.accounts} accounts; {rowsOf(answers, "accounts").length} account{rowsOf(answers, "accounts").length === 1 ? "" : "s"} listed).</p>}
+        {quote && <QuoteView quote={quote} accounts={rowsOf(answers, "accounts").length} />}
       </Card>
       <Card className="p-5 sm:p-6">
         <h3 className="flex items-center gap-2 text-[15px] font-semibold text-ink"><FileUp size={16} className="text-accent" /> Documents we&rsquo;ll request ({docs.length})</h3>
@@ -193,13 +197,13 @@ function Submitted({ intake, client }: { intake: Intake; client: Client }) {
   const [starting, setStarting] = useState(false);
   const F = useServiceFees();
   const a = intake.answers;
-  const plan = F.fees ? recommendPlan(a, F.fees.books.plans) : null;
+  const quote = F.fees ? quoteFor(a, F.fees.books) : null;
   return (
     <div className="space-y-5">
       <Card className="p-5 sm:p-6">
         <h2 className="flex items-center gap-2 text-[19px] font-bold text-ink"><CheckCircle2 size={20} className="text-success" /> Intake submitted</h2>
         <p className="mt-1 text-[13.5px] text-muted">Submitted {intake.submittedAt ? fmtDate(intake.submittedAt) : ""}{intake.consentName ? ` · accepted by ${intake.consentName}` : ""}. The PDF copy and signed engagement letter are in the client&rsquo;s Documents.</p>
-        {plan && <p className="mt-2 text-[13.5px]">Recommended plan: <b>{plan.key}</b> ({money(plan.fee)}/month)</p>}
+        {quote && <QuoteView quote={quote} accounts={rowsOf(a, "accounts").length} />}
         <div className="mt-3 flex flex-wrap gap-2">
           {intake.workspaceId ? <Button variant="primary" href={`/services/bookkeeping/${intake.workspaceId}`}>Open bookkeeping workspace</Button> : <Button variant="primary" onClick={() => setStarting(true)}>Start bookkeeping from this intake</Button>}
           <Button href={`/clients/${client.id}#documents`}>Client documents</Button>
@@ -230,6 +234,25 @@ function Submitted({ intake, client }: { intake: Intake; client: Client }) {
         await call("PUT", `/api/books/intakes/${intake.id}`, { workspaceId: wsId, rev: intake.rev }).catch(() => {});
         window.location.assign(`/services/bookkeeping/${wsId}`);
       }} />}
+    </div>
+  );
+}
+
+/** The client's bookkeeping quote: plan, extras, add-ons, one-time and custom-quoted work. */
+function QuoteView({ quote, accounts }: { quote: BooksQuote; accounts: number }) {
+  const p = quote.plan;
+  const line = (l: BooksQuote["monthly"][number]) => (l.billing === "quote" ? "Custom quote" : `${l.startingAt ? "from " : ""}${money(l.amount)}`);
+  return (
+    <div className="mt-3 rounded-xl border border-accent/30 bg-accent-soft/30 p-3.5">
+      <p className="text-[13.5px] text-ink">Recommended plan: <b>{p.key}</b> — up to {p.transactions.toLocaleString()} transactions, {p.accounts} accounts, {p.locations} location{p.locations === 1 ? "" : "s"} ({accounts} account{accounts === 1 ? "" : "s"} listed).</p>
+      <table className="mt-2 w-full text-[13px]">
+        <tbody>
+          {quote.monthly.map((l) => <tr key={l.label}><td className="py-0.5 text-ink-2">{l.label}</td><td className="py-0.5 text-right tabular-nums">{line(l)}/mo</td></tr>)}
+          <tr className="border-t border-line font-semibold"><td className="py-1">Monthly total</td><td className="py-1 text-right tabular-nums">{quote.monthly.some((l) => l.startingAt) ? "from " : ""}{money(quote.monthlyTotal)}/mo</td></tr>
+          {quote.oneTime.map((l) => <tr key={l.label}><td className="py-0.5 text-ink-2">{l.label} <span className="text-muted">(one-time)</span></td><td className="py-0.5 text-right tabular-nums">{line(l)}</td></tr>)}
+          {quote.quoted.map((l) => <tr key={l.label}><td className="py-0.5 text-ink-2">{l.label}</td><td className="py-0.5 text-right text-muted">Custom quote</td></tr>)}
+        </tbody>
+      </table>
     </div>
   );
 }

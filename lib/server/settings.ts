@@ -9,13 +9,23 @@ export async function loadFees(env: AppEnv): Promise<ServiceFees & { updatedAt?:
   const r = await one<{ data: string; updated_at: string }>(env.DB, "SELECT data, updated_at FROM service_settings WHERE key = 'fees'").catch(() => null);
   if (!r) return DEFAULT_SERVICE_FEES;
   const s = json<Partial<ServiceFees>>(r.data, {});
-  return { books: { ...DEFAULT_SERVICE_FEES.books, ...s.books }, expunge: { ...DEFAULT_SERVICE_FEES.expunge, ...s.expunge }, taxPartners: { ...DEFAULT_SERVICE_FEES.taxPartners, ...s.taxPartners }, invoiceText: { ...DEFAULT_SERVICE_FEES.invoiceText, ...s.invoiceText }, late: { ...DEFAULT_SERVICE_FEES.late, ...s.late }, updatedAt: r.updated_at };
+  // Older saved fees: fill new plan fields (locations, lists) and add-ons from the defaults.
+  const books = { ...DEFAULT_SERVICE_FEES.books, ...s.books };
+  books.plans = books.plans.map((p) => {
+    const q = p as Partial<typeof p>;
+    const d = DEFAULT_SERVICE_FEES.books.plans.find((x) => x.key === p.key);
+    return { ...p, locations: q.locations ?? 1, includes: q.includes ?? d?.includes ?? [], excludes: q.excludes ?? d?.excludes ?? [], tagline: q.tagline ?? d?.tagline, description: q.description ?? d?.description, startingAt: q.startingAt ?? d?.startingAt };
+  });
+  if (!Array.isArray(books.addOns) || !books.addOns.length) books.addOns = DEFAULT_SERVICE_FEES.books.addOns;
+  return { books, expunge: { ...DEFAULT_SERVICE_FEES.expunge, ...s.expunge }, taxPartners: { ...DEFAULT_SERVICE_FEES.taxPartners, ...s.taxPartners }, invoiceText: { ...DEFAULT_SERVICE_FEES.invoiceText, ...s.invoiceText }, late: { ...DEFAULT_SERVICE_FEES.late, ...s.late }, updatedAt: r.updated_at };
 }
 
 export async function getFees(env: AppEnv, a: Actor) {
   requireStaff(a);
   return { fees: await loadFees(env) };
 }
+
+const lines = (v: unknown) => (Array.isArray(v) ? v : []).map((x) => String(x).trim().slice(0, 300)).filter(Boolean).slice(0, 30);
 
 export async function saveFees(env: AppEnv, a: Actor, b: { fees?: ServiceFees }) {
   requirePermission(a, "settings", "settings");
@@ -24,7 +34,8 @@ export async function saveFees(env: AppEnv, a: Actor, b: { fees?: ServiceFees })
   if (!f || typeof f !== "object") throw badRequest("Missing fees.");
   const clean: ServiceFees = {
     books: {
-      plans: (f.books?.plans ?? []).map((p) => ({ key: String(p.key ?? "").trim().slice(0, 40), fee: Number(p.fee), transactions: Math.round(Number(p.transactions)), accounts: Math.round(Number(p.accounts)) })),
+      plans: (f.books?.plans ?? []).map((p) => ({ key: String(p.key ?? "").trim().slice(0, 40), fee: Number(p.fee), startingAt: !!p.startingAt, transactions: Math.round(Number(p.transactions)), accounts: Math.round(Number(p.accounts)), locations: Math.round(Number(p.locations ?? 1)), tagline: String(p.tagline ?? "").slice(0, 200), description: String(p.description ?? "").slice(0, 1500), includes: lines(p.includes), excludes: lines(p.excludes) })),
+      addOns: (f.books?.addOns ?? []).slice(0, 40).map((x, i) => ({ key: String(x.key ?? "").trim().slice(0, 30) || `addon${i + 1}`, name: String(x.name ?? "").trim().slice(0, 120), billing: (["monthly", "one_time", "quote"] as const).includes(x.billing) ? x.billing : "monthly", price: Number(x.price) || 0, startingAt: !!x.startingAt, unit: String(x.unit ?? "").slice(0, 40), includes: lines(x.includes) })),
       overagePerTransaction: Number(f.books?.overagePerTransaction),
       overagePerAccount: Number(f.books?.overagePerAccount),
       upgradeAfterMonths: Math.round(Number(f.books?.upgradeAfterMonths)),

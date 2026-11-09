@@ -13,7 +13,7 @@ import { meId } from "@/lib/sample/clients";
 import { REPORT_TYPES, periodLabel, type ReportType } from "@/lib/books/config";
 import { DEFAULT_SERVICE_FEES } from "@/lib/fees/config";
 import { useServiceFees } from "@/lib/fees/use-fees";
-import { ENTITY_TO_WORKSPACE, recommendPlan, reportsFrom } from "@/lib/books/intake";
+import { ENTITY_TO_WORKSPACE, quoteFor, reportsFrom } from "@/lib/books/intake";
 import { rowsOf } from "@/lib/tax/interview/engine";
 import type { BooksIntake } from "@/lib/server/books-intake";
 
@@ -47,7 +47,7 @@ export function StartWorkspace({ open, onClose, onCreated, intake }: { open: boo
   const staff = useMemo(() => team.members.filter((m) => m.status === "active"), [team.members]);
   const months = useMemo(monthOptions, []);
   const F = useServiceFees();
-  const plans = useMemo(() => (F.fees?.books.plans ?? DEFAULT_SERVICE_FEES.books.plans).map((p) => ({ key: p.key, fee: p.fee, detail: `Up to ${p.transactions.toLocaleString()} transactions • ${p.accounts} financial accounts` })), [F.fees]);
+  const plans = useMemo(() => (F.fees?.books.plans ?? DEFAULT_SERVICE_FEES.books.plans).map((p) => ({ key: p.key, fee: p.fee, plus: !!(p as { startingAt?: boolean }).startingAt, detail: `Up to ${p.transactions.toLocaleString()} transactions • ${p.accounts} financial accounts • ${p.locations ?? 1} location${(p.locations ?? 1) === 1 ? "" : "s"}` })), [F.fees]);
   const [clientId, setClientId] = useState("");
   const client = clients.clients.find((c) => c.id === clientId);
   const [businessName, setBusinessName] = useState("");
@@ -57,8 +57,12 @@ export function StartWorkspace({ open, onClose, onCreated, intake }: { open: boo
   // When the saved prices arrive, start from the plan the intake recommends (or the first plan).
   useEffect(() => {
     if (!F.fees) return;
-    const p = intake ? recommendPlan(intake.answers, F.fees.books.plans) : F.fees.books.plans[0];
-    setPlan(p.key); setFee(p.fee);
+    if (intake) {
+      // Plan + extra accounts/locations + monthly add-ons from the intake's quote.
+      const q = quoteFor(intake.answers, F.fees.books);
+      setPlan(q.plan.key); setFee(q.monthlyTotal);
+      setExtras([...q.monthly.slice(1), ...q.oneTime, ...q.quoted].map((l) => l.label));
+    } else { setPlan(F.fees.books.plans[0].key); setFee(F.fees.books.plans[0].fee); }
   }, [F.fees]); // eslint-disable-line react-hooks/exhaustive-deps
   // Everything else the intake already answered.
   useEffect(() => {
@@ -79,6 +83,7 @@ export function StartWorkspace({ open, onClose, onCreated, intake }: { open: boo
   const [qbo, setQbo] = useState("");
   const [accounts, setAccounts] = useState<Acct[]>([{ name: "Business checking", kind: "bank", mask: "", institution: "" }]);
   const [err, setErr] = useState<string | null>(null);
+  const [extras, setExtras] = useState<string[]>([]);
 
   const pickClient = (id: string) => {
     setClientId(id);
@@ -91,7 +96,7 @@ export function StartWorkspace({ open, onClose, onCreated, intake }: { open: boo
     if (accounts.some((a) => !a.name.trim())) return setErr("Give every account a name (or remove it).");
     if (accounts.some((a) => a.mask && !/^\d{4}$/.test(a.mask))) return setErr("Account numbers: enter only the last 4 digits.");
     const enrollmentId = client.enrollments?.find((e) => e.service === "books")?.id;
-    const id = books.createWorkspace({ clientId: client.id, enrollmentId, businessName, entityType, plan, monthlyFee: fee, reports, includes: INCLUDES, bookkeeperId, reviewerId, accounts, firstPeriod: period, qboCompany: qbo });
+    const id = books.createWorkspace({ clientId: client.id, enrollmentId, businessName, entityType, plan, monthlyFee: fee, reports, includes: [...(F.fees?.books.plans.find((p) => p.key === plan)?.includes ?? INCLUDES), ...extras.map((x) => `Add-on: ${x}`)], bookkeeperId, reviewerId, accounts, firstPeriod: period, qboCompany: qbo });
     toast(`Bookkeeping started for ${businessName.trim()}`);
     onCreated(id);
   };
@@ -111,7 +116,7 @@ export function StartWorkspace({ open, onClose, onCreated, intake }: { open: boo
           <div className="grid gap-2 sm:grid-cols-2">
             {plans.map((p) => (
               <button key={p.key} type="button" onClick={() => { setPlan(p.key); setFee(p.fee); }} className={`rounded-xl border p-3 text-left ${plan === p.key ? "border-accent bg-accent-soft/50" : "border-line hover:bg-surface-hover"}`}>
-                <span className="block text-[14px] font-semibold text-ink">{p.key} · ${p.fee}/mo</span>
+                <span className="block text-[14px] font-semibold text-ink">{p.key} · ${p.fee}{p.plus ? "+" : ""}/mo</span>
                 <span className="block text-[12.5px] text-muted">{p.detail}</span>
               </button>
             ))}

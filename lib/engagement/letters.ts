@@ -37,6 +37,8 @@ export const PLACEHOLDERS: { key: string; label: string }[] = [
   { key: "booksOverage", label: "Bookkeeping overage rates (Settings → Fees)" },
   { key: "upgradeMonths", label: "Months over the limit before a plan change (Settings → Fees)" },
   { key: "expungeFee", label: "Expungement fee wording (Settings → Fees)" },
+  { key: "planIncludes", label: "What the client's bookkeeping plan includes" },
+  { key: "addOns", label: "Bookkeeping add-on services the client chose" },
 ];
 
 const T = (title: string, body: string) => ({ title, body: body.trim() });
@@ -197,7 +199,7 @@ Thank you for choosing MKB Financial Group LLC for your bookkeeping. This letter
 Unless we agree in writing, bookkeeping does not include payroll processing, sales tax filings, tax returns, catch-up or clean-up work for prior months, or financial statements prepared under CPA standards (audits, reviews or compilations). We are not a CPA firm.
 
 ## Fees
-Your plan is {{fee}} per month, billed monthly in advance.
+Your monthly fee is {{fee}}, billed monthly in advance. It includes your {{service}} plan ({{planIncludes}}) and these add-on services: {{addOns}}. One-time and custom-quoted services are billed separately as agreed.
 
 - Overage: in any month your transactions or accounts go over your plan's limits, you will receive an additional bill for the overage at {{booksOverage}}.
 - Plan change: if you are over your plan's limits for {{upgradeMonths}} months in a row, we will move you to the plan that fits your volume, starting with the next month's bill, and let you know when we do.

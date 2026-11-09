@@ -287,21 +287,59 @@ function FeesEditor() {
         <CardHeader icon={DollarSign} title="Bookkeeping plans" subtitle="Monthly price and what each plan includes. Clients over their limits get an overage bill; after the set number of months in a row they move up a plan." />
         <div className="space-y-3 px-5 pb-5 sm:px-6">
           {plans.map((p, i) => (
-            <div key={i} className="grid gap-3 rounded-xl border border-line p-3 sm:grid-cols-[1.3fr_1fr_1fr_1fr_auto] sm:items-end">
-              <div><label htmlFor={`bp-name-${i}`} className="mb-1 block text-[13px] font-medium text-ink-2">Plan name</label><input id={`bp-name-${i}`} disabled={ro} value={p.key} onChange={(e) => setPlan(i, { key: e.target.value })} className={`${input} h-10`} /></div>
-              <Num id={`bp-fee-${i}`} label="Price / month" prefix="$" value={p.fee} disabled={ro} onChange={(n) => setPlan(i, { fee: n })} />
-              <Num id={`bp-tx-${i}`} label="Transactions" suffix="/ mo" value={p.transactions} disabled={ro} onChange={(n) => setPlan(i, { transactions: n })} />
-              <Num id={`bp-acct-${i}`} label="Accounts" value={p.accounts} disabled={ro} onChange={(n) => setPlan(i, { accounts: n })} />
-              {canEdit && <button type="button" aria-label={`Remove ${p.key || "plan"}`} disabled={plans.length < 2} onClick={() => setF({ ...f, books: { ...f.books, plans: plans.filter((_, j) => j !== i) } })} className="grid h-10 w-10 place-items-center rounded-lg text-muted hover:bg-surface-hover disabled:opacity-40"><Trash2 size={16} /></button>}
-            </div>
+            <details key={i} className="rounded-xl border border-line p-3" open={i === 0}>
+              <summary className="cursor-pointer text-[14px] font-semibold text-ink">{p.key || "New plan"} · {money(p.fee)}{p.startingAt ? "+" : ""}/mo · {p.transactions.toLocaleString()} transactions · {p.accounts} accounts · {p.locations} location{p.locations === 1 ? "" : "s"}</summary>
+              <div className="mt-3 space-y-3">
+                <div className="grid gap-3 sm:grid-cols-[1.3fr_1fr_1fr_1fr_1fr_auto] sm:items-end">
+                  <div><label htmlFor={`bp-name-${i}`} className="mb-1 block text-[13px] font-medium text-ink-2">Plan name</label><input id={`bp-name-${i}`} disabled={ro} value={p.key} onChange={(e) => setPlan(i, { key: e.target.value })} className={`${input} h-10`} /></div>
+                  <Num id={`bp-fee-${i}`} label="Price / month" prefix="$" value={p.fee} disabled={ro} onChange={(n) => setPlan(i, { fee: n })} />
+                  <Num id={`bp-tx-${i}`} label="Transactions" suffix="/ mo" value={p.transactions} disabled={ro} onChange={(n) => setPlan(i, { transactions: n })} />
+                  <Num id={`bp-acct-${i}`} label="Accounts" value={p.accounts} disabled={ro} onChange={(n) => setPlan(i, { accounts: n })} />
+                  <Num id={`bp-loc-${i}`} label="Locations" value={p.locations} disabled={ro} onChange={(n) => setPlan(i, { locations: n })} />
+                  {canEdit && <button type="button" aria-label={`Remove ${p.key || "plan"}`} disabled={plans.length < 2} onClick={() => setF({ ...f, books: { ...f.books, plans: plans.filter((_, j) => j !== i) } })} className="grid h-10 w-10 place-items-center rounded-lg text-muted hover:bg-surface-hover disabled:opacity-40"><Trash2 size={16} /></button>}
+                </div>
+                <label className="flex items-center gap-2 text-[13px]"><input type="checkbox" disabled={ro} checked={!!p.startingAt} onChange={() => setPlan(i, { startingAt: !p.startingAt })} className="accent-[var(--accent)]" />Show price as &ldquo;starting at&rdquo; ({money(p.fee)}+)</label>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div><label htmlFor={`bp-tag-${i}`} className="mb-1 block text-[13px] font-medium text-ink-2">Tagline</label><input id={`bp-tag-${i}`} disabled={ro} value={p.tagline ?? ""} onChange={(e) => setPlan(i, { tagline: e.target.value })} className={`${input} h-10`} /></div>
+                  <div><label htmlFor={`bp-desc-${i}`} className="mb-1 block text-[13px] font-medium text-ink-2">Package overview</label><textarea id={`bp-desc-${i}`} disabled={ro} rows={2} value={p.description ?? ""} onChange={(e) => setPlan(i, { description: e.target.value })} className={`${input} py-2`} /></div>
+                  <div><label htmlFor={`bp-inc-${i}`} className="mb-1 block text-[13px] font-medium text-ink-2">What&rsquo;s included <span className="font-normal text-muted">(one per line)</span></label><textarea id={`bp-inc-${i}`} disabled={ro} rows={7} value={p.includes.join("\n")} onChange={(e) => setPlan(i, { includes: e.target.value.split("\n") })} className={`${input} py-2 text-[13px]`} /></div>
+                  <div><label htmlFor={`bp-exc-${i}`} className="mb-1 block text-[13px] font-medium text-ink-2">What&rsquo;s not included <span className="font-normal text-muted">(one per line)</span></label><textarea id={`bp-exc-${i}`} disabled={ro} rows={7} value={p.excludes.join("\n")} onChange={(e) => setPlan(i, { excludes: e.target.value.split("\n") })} className={`${input} py-2 text-[13px]`} /></div>
+                </div>
+              </div>
+            </details>
           ))}
-          {canEdit && <Button size="sm" icon={Plus} onClick={() => setF({ ...f, books: { ...f.books, plans: [...plans, { key: "", fee: 0, transactions: 0, accounts: 0 }] } })}>Add plan</Button>}
+          {canEdit && <Button size="sm" icon={Plus} onClick={() => setF({ ...f, books: { ...f.books, plans: [...plans, { key: "", fee: 0, transactions: 0, accounts: 0, locations: 1, includes: [...(plans[0]?.includes ?? [])], excludes: [...(plans[0]?.excludes ?? [])] }] } })}>Add plan</Button>}
           <div className="grid gap-4 border-t border-line pt-4 sm:grid-cols-3">
             <Num id="bo-tx" label="Overage per extra transaction" prefix="$" step={0.01} value={f.books.overagePerTransaction} disabled={ro} onChange={(n) => setF({ ...f, books: { ...f.books, overagePerTransaction: n } })} />
             <Num id="bo-acct" label="Overage per extra account" prefix="$" step={0.01} value={f.books.overagePerAccount} disabled={ro} onChange={(n) => setF({ ...f, books: { ...f.books, overagePerAccount: n } })} />
             <Num id="bo-up" label="Move up a plan after" suffix="months in a row over" value={f.books.upgradeAfterMonths} disabled={ro} onChange={(n) => setF({ ...f, books: { ...f.books, upgradeAfterMonths: n } })} />
           </div>
-          {!f.books.overagePerTransaction && !f.books.overagePerAccount && <p className="text-[12.5px] text-warning-ink">Set your overage prices — they&rsquo;re $0 until you do.</p>}
+          {!f.books.overagePerTransaction && <p className="text-[12.5px] text-muted">No per-transaction overage set — set one if you bill for transactions over a plan&rsquo;s limit.</p>}
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader icon={DollarSign} title="Bookkeeping add-on services" subtitle="Offered in the bookkeeping intake and added to the client's quote. Monthly add-ons go on the monthly fee; one-time ones are billed once; custom quotes are priced per client." />
+        <div className="space-y-3 px-5 pb-5 sm:px-6">
+          {(f.books.addOns ?? []).map((x, i) => {
+            const setAdd = (patch: Partial<typeof x>) => setF({ ...f, books: { ...f.books, addOns: f.books.addOns.map((y, j) => (j === i ? { ...y, ...patch } : y)) } });
+            return (
+              <details key={i} className="rounded-xl border border-line p-3">
+                <summary className="cursor-pointer text-[14px] font-semibold text-ink">{x.name || "New add-on"} · {x.billing === "quote" ? "Custom quote" : `${x.startingAt ? "Starting at " : ""}${money(x.price)}${x.billing === "monthly" ? "/month" : " one-time"}${x.unit ? ` ${x.unit}` : ""}`}</summary>
+                <div className="mt-3 grid gap-3 sm:grid-cols-[1.5fr_1fr_1fr_1fr_auto] sm:items-end">
+                  <div><label htmlFor={`ad-name-${i}`} className="mb-1 block text-[13px] font-medium text-ink-2">Name</label><input id={`ad-name-${i}`} disabled={ro} value={x.name} onChange={(e) => setAdd({ name: e.target.value })} className={`${input} h-10`} /></div>
+                  <div><label htmlFor={`ad-bill-${i}`} className="mb-1 block text-[13px] font-medium text-ink-2">Billed</label><select id={`ad-bill-${i}`} disabled={ro} value={x.billing} onChange={(e) => setAdd({ billing: e.target.value as typeof x.billing })} className={`${input} h-10`}><option value="monthly">Monthly</option><option value="one_time">One time</option><option value="quote">Custom quote</option></select></div>
+                  {x.billing !== "quote" ? <Num id={`ad-price-${i}`} label="Price" prefix="$" value={x.price} disabled={ro} onChange={(n) => setAdd({ price: n })} /> : <span />}
+                  <div><label htmlFor={`ad-unit-${i}`} className="mb-1 block text-[13px] font-medium text-ink-2">Per</label><input id={`ad-unit-${i}`} disabled={ro} value={x.unit} placeholder="e.g. per account" onChange={(e) => setAdd({ unit: e.target.value })} className={`${input} h-10`} /></div>
+                  {canEdit && <button type="button" aria-label={`Remove ${x.name || "add-on"}`} onClick={() => setF({ ...f, books: { ...f.books, addOns: f.books.addOns.filter((_, j) => j !== i) } })} className="grid h-10 w-10 place-items-center rounded-lg text-muted hover:bg-surface-hover"><Trash2 size={16} /></button>}
+                </div>
+                {x.billing !== "quote" && <label className="mt-2 flex items-center gap-2 text-[13px]"><input type="checkbox" disabled={ro} checked={x.startingAt} onChange={() => setAdd({ startingAt: !x.startingAt })} className="accent-[var(--accent)]" />Show as &ldquo;starting at&rdquo;</label>}
+                <div className="mt-2"><label htmlFor={`ad-inc-${i}`} className="mb-1 block text-[13px] font-medium text-ink-2">What it includes <span className="font-normal text-muted">(one per line)</span></label><textarea id={`ad-inc-${i}`} disabled={ro} rows={4} value={x.includes.join("\n")} onChange={(e) => setAdd({ includes: e.target.value.split("\n") })} className={`${input} py-2 text-[13px]`} /></div>
+              </details>
+            );
+          })}
+          {canEdit && <Button size="sm" icon={Plus} onClick={() => setF({ ...f, books: { ...f.books, addOns: [...(f.books.addOns ?? []), { key: `addon${Date.now() % 100000}`, name: "", billing: "monthly", price: 0, startingAt: false, unit: "", includes: [] }] } })}>Add add-on</Button>}
+          <p className="text-[12px] text-muted">&ldquo;Additional financial accounts&rdquo; and &ldquo;Additional locations&rdquo; are added to a client&rsquo;s quote automatically when they have more accounts or locations than their plan includes.</p>
         </div>
       </Card>
 

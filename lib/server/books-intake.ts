@@ -4,7 +4,7 @@
  * requests the documents the answers call for, emails the client and alerts
  * the bookkeeping team. Server-only.
  */
-import { BOOKS_SECTIONS, recommendPlan } from "@/lib/books/intake";
+import { BOOKS_SECTIONS, quoteFor } from "@/lib/books/intake";
 import { fillLetter } from "@/lib/engagement/letters";
 import { feeWords, money } from "@/lib/fees/config";
 import { docsFor, type Answers } from "@/lib/tax/interview/engine";
@@ -111,7 +111,9 @@ export async function submitIntake(env: AppEnv, a: Actor, id: string, b: { answe
   if (!l || !terms) throw badRequest("Accept the bookkeeping engagement letter to submit.");
   const c = await client(env, a, r.client_id);
   const fees = await loadFees(env);
-  const plan = recommendPlan(answers, fees.books.plans);
+  const quote = quoteFor(answers, fees.books);
+  const plan = quote.plan;
+  const monthlyText = `${quote.monthly.some((l) => l.startingAt) ? "starting at " : ""}${money(quote.monthlyTotal)}`;
   const t = now();
   const by = b.enteredBy === "client" ? "client" : "staff";
   const engagement = { version: l.version, termsVersion: terms.version, acceptedName: consent, acceptedAt: t, method: by === "client" ? "online" : "in_office" };
@@ -127,7 +129,7 @@ export async function submitIntake(env: AppEnv, a: Actor, id: string, b: { answe
   const safe = bizName.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
   const intakeFile = `MKB-Bookkeeping-Intake-${safe}.pdf`;
   await storeClientPdf(env, a, c.id, pdf, { name: `Bookkeeping intake (submitted ${longDate(t)})`, fileName: intakeFile, category: "Intake", service: "books", activity: "Saved a PDF copy of the bookkeeping intake to Documents" });
-  const vars = { ...feeWords(fees), clientName: bizName, date: longDate(t), service: plan.key, fee: money(plan.fee), taxYear: "" };
+  const vars = { ...feeWords(fees), clientName: bizName, date: longDate(t), service: plan.key, fee: monthlyText, taxYear: "", planIncludes: plan.includes.join("; "), addOns: [...quote.monthly.slice(1), ...quote.oneTime, ...quote.quoted].map((l) => `${l.label} (${l.billing === "quote" ? "custom quote" : `${l.startingAt ? "starting at " : ""}${money(l.amount)}${l.billing === "monthly" ? "/month" : " one-time"}`})`).join("; ") || "none" };
   const letterPdf = await buildLetterPdf({ clientName: bizName, parts: [{ title: fillLetter(l.title, vars), body: fillLetter(l.body, vars), version: l.version }, { title: fillLetter(terms.title, vars), body: fillLetter(terms.body, vars), version: terms.version }], acceptedName: consent, acceptedAt: t, method: engagement.method as "online" | "in_office" });
   const letterFile = `MKB-Bookkeeping-Engagement-Letter-${safe}.pdf`;
   await storeClientPdf(env, a, c.id, letterPdf, { name: `Bookkeeping engagement letter (accepted ${longDate(t)})`, fileName: letterFile, category: "Engagement letter", service: "books", activity: `Bookkeeping engagement letter accepted by ${consent}` });
@@ -147,13 +149,13 @@ export async function submitIntake(env: AppEnv, a: Actor, id: string, b: { answe
   const to = (typeof answers.email === "string" && answers.email) || c.email;
   if (to) {
     const contact = ((answers.owners as { name?: string }[] | undefined)?.[0]?.name || c.contact_name || c.name).trim().split(/\s+/)[0];
-    const out = await sendTemplate(env, "books_intake_received", { to, vars: { firstName: contact, businessName: bizName, date: longDate(t), plan: `${plan.key} (${money(plan.fee)}/month)` }, documents: docs, attachments: [{ filename: intakeFile, content: pdf }, { filename: letterFile, content: letterPdf }] });
+    const out = await sendTemplate(env, "books_intake_received", { to, vars: { firstName: contact, businessName: bizName, date: longDate(t), plan: `${plan.key} — ${monthlyText}/month${quote.oneTimeTotal ? ` plus ${money(quote.oneTimeTotal)} one-time` : ""}` }, documents: docs, attachments: [{ filename: intakeFile, content: pdf }, { filename: letterFile, content: letterPdf }] });
     emailed = out.sent;
   }
   await run(env.DB, "INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'intake', ?, ?, ?, ?)", randomId("x"), c.id, `Bookkeeping intake submitted — ${docs.length} document${docs.length === 1 ? "" : "s"} requested; recommended plan ${plan.key}`, by === "client" ? "client" : "staff", a.member.id, t);
   await notify(env, { module: "books", exceptId: a.member.id }, { kind: "intake", title: `${bizName} submitted their bookkeeping intake`, body: `Recommended plan: ${plan.key}`, href: `/services/bookkeeping?intake=${id}` });
   await audit(env.DB, a, { action: "Record update", resource: `Bookkeeping intake ${id}`, meta: `Submitted; engagement letter v${l.version} accepted; ${docs.length} documents requested${to ? (emailed ? "; emailed" : "; email queued") : ""}` });
-  return { intake: toIntake((await one<Row>(env.DB, `${SQL} WHERE i.id = ?`, id))!), plan, documents: docs, emailed };
+  return { intake: toIntake((await one<Row>(env.DB, `${SQL} WHERE i.id = ?`, id))!), plan, quote, documents: docs, emailed };
 }
 
 /* ---------------------------------------------------------------- full account numbers */

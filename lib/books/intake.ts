@@ -9,9 +9,12 @@
  */
 import type { DocSpec } from "@/lib/tax/config";
 import { all, has, is, not, rowsOf, yes, type Answers, type Q, type Section } from "@/lib/tax/interview/engine";
-import type { BooksPlan } from "@/lib/fees/config";
+import { DEFAULT_SERVICE_FEES, booksQuote, type BooksPlan, type ServiceFees } from "@/lib/fees/config";
 
 const YN = "yesno" as const;
+/** Add-ons a client can pick in the intake (frequency, extra accounts/locations, QuickBooks setup and catch-up are worked out from other answers). */
+export const pickableAddOns = (books: ServiceFees["books"]) => books.addOns.filter((x) => !["biweekly", "weekly", "accounts", "locations", "catchup", "qbo"].includes(x.key));
+const ADDON_OPTIONS = pickableAddOns(DEFAULT_SERVICE_FEES.books).map((x) => x.name);
 /** "••••1234" from a saved (masked) account number. */
 export const last4Of = (v?: string) => { const d = (v ?? "").replace(/\D/g, ""); return d.length >= 4 ? `••••${d.slice(-4)}` : ""; };
 const doc = (name: string, category: string, sensitive = false): DocSpec => ({ name, category, sensitive });
@@ -271,6 +274,8 @@ const goals: Section = {
   group: "What you need",
   covers: ["Monthly reports", "Review meetings", "Plan sizing"],
   questions: [
+    { id: "frequency", label: "How often would you like your books updated?", type: "choice", options: ["Monthly (included in every plan)", "Every two weeks", "Weekly"], help: "More frequent updates are an add-on. You'll see the price in your quote." },
+    { id: "addons", label: "Which add-on services would you like? (choose all that apply)", type: "multi", optional: true, options: ADDON_OPTIONS, help: "Optional. Prices are shown on your quote before you submit." },
     { id: "volume", label: "About how many transactions go through the business accounts each month?", type: "choice", options: ["Under 150", "150 – 400", "400 – 750", "750 – 1,500", "Over 1,500", "Not sure"], help: "Count every deposit, card swipe and payment across all accounts. A busy checking account plus one credit card is often 150–400." },
     { id: "reports", label: "Which reports do you want each month? (choose all that apply)", type: "multi", options: ["Profit and Loss", "Balance Sheet", "Cash Flow Statement", "Who owes us (A/R aging)", "Who we owe (A/P aging)", "Budget vs. actual", "Sales by customer", "Expenses by vendor", "Profit by job or location"] },
     { id: "review", label: "How would you like to go over your numbers?", type: "choice", options: ["Monthly review call", "Quarterly review call", "Email summary is fine"] },
@@ -294,12 +299,27 @@ const finish: Section = {
 
 export const BOOKS_SECTIONS: Section[] = [business, contact, people, software, status, accounts, debts, loans, income, spending, payroll, taxes, goals, finish];
 
-/** Plan that fits the stated volume and number of accounts (using the plan limits in Settings → Fees). */
+const TX: Record<string, number> = { "Under 150": 150, "150 – 400": 400, "400 – 750": 750, "750 – 1,500": 1500, "Over 1,500": 1501 };
+
+/** Add-on keys the answers call for: chosen add-ons, update frequency, QuickBooks setup and catch-up. */
+export function addOnKeysFrom(a: Answers, books: ServiceFees["books"]) {
+  const byName = new Map(books.addOns.map((x) => [x.name, x.key]));
+  const keys = new Set(((a.addons as string) ?? "").split("|").map((n) => byName.get(n)).filter((k): k is string => !!k));
+  if (a.frequency === "Every two weeks") keys.add("biweekly");
+  if (a.frequency === "Weekly") keys.add("weekly");
+  if (a.setupQbo === "Yes" || a.desktopMove === "Yes") keys.add("qbo");
+  if (typeof a.upToDate === "string" && !a.upToDate.startsWith("Current")) keys.add("catchup");
+  return [...keys];
+}
+
+/** The client's quote: best plan for their volume, extra accounts/locations, and add-ons (prices from Settings → Fees). */
+export function quoteFor(a: Answers, books: ServiceFees["books"]) {
+  return booksQuote(books, { transactions: TX[(a.volume as string) ?? ""] ?? 0, accounts: rowsOf(a, "accounts").length, locations: Math.max(1, Number(a.locations) || 1), addOnKeys: addOnKeysFrom(a, books) });
+}
+
+/** Plan only (older screens). */
 export function recommendPlan(a: Answers, plans: BooksPlan[]) {
-  const accts = rowsOf(a, "accounts").length;
-  const tx = ({ "Under 150": 150, "150 – 400": 400, "400 – 750": 750, "750 – 1,500": 1500, "Over 1,500": 1501 } as Record<string, number>)[(a.volume as string) ?? ""] ?? 0;
-  const sorted = [...plans].sort((x, y) => x.fee - y.fee);
-  return sorted.find((p) => p.transactions >= tx && p.accounts >= accts) ?? sorted[sorted.length - 1];
+  return quoteFor(a, { ...DEFAULT_SERVICE_FEES.books, plans }).plan;
 }
 
 /** Reports the workspace should produce, mapped from the intake answer. */
