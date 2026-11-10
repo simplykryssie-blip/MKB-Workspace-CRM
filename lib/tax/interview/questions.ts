@@ -17,6 +17,19 @@ const YN = "yesno" as const;
 const married = is("marital", "Married");
 const joint = all(married, is("mfj", "File jointly with my spouse"));
 const enterTotals = is("records", "I'll enter my totals here");
+/** Business sections: always on business returns; on individual returns only when the client works for themselves. */
+const hasBiz = any(form("1065", "1120-S", "1120"), yes("se"));
+const HO_ROOM = "A separate room used only for the business";
+const HO_PART = "A clearly marked-off part of a room used only for the business";
+const HO_SHARED = "A shared space also used for personal or family things (kitchen or dining table, living room, guest room)";
+const HO_STRUCT = "A separate building on my property (detached garage, studio, shed)";
+const HO_NONE = "None of these — I do most of my business work somewhere else, like a shop or office";
+const HO_DAYCARE = "I run a licensed daycare in my home";
+const HO_STORAGE = "I store inventory or product samples there, and have no other fixed business location";
+/** The space qualifies as a home office (IRS: regular and exclusive use + principal place of business, or the daycare/storage exceptions). */
+export const hoOk: Cond = (a) => a.hoUse === "Yes" && (
+  (!!a.hoSpace && a.hoSpace !== HO_SHARED && a.hoExclusive === "Yes" && a.hoRegular === "Yes" && !!a.hoWhy && a.hoWhy !== HO_NONE) ||
+  String(a.hoSpecial ?? "").split("|").some((x) => x === HO_DAYCARE || x === HO_STORAGE));
 const BIZ: TaxForm[] = ["1065", "1120-S", "1120"];
 const owners = (f: TaxForm) => (f === "1065" ? "partner" : "shareholder");
 
@@ -76,10 +89,11 @@ const you: Section = {
     { id: "moveDate", label: "Date you moved", type: "date", show: yes("moved") },
     { id: "blind", label: "Are you legally blind?", type: YN },
     { id: "dependentOfOther", label: "Can someone else (like a parent) claim you as a dependent?", type: YN },
-    { id: "ippin", label: "Did the IRS give you an Identity Protection PIN (IP PIN)?", type: YN, help: "A 6-digit number the IRS mails each year (letter CP01A) to prevent identity theft.", docs: [doc("IRS IP PIN letter (CP01A)", "Identity", true)] },
+    { id: "ippin", label: "Did the IRS give you an Identity Protection PIN (IP PIN)?", type: YN, help: "A 6-digit number the IRS issues to protect your tax account from identity theft. A new one is issued every year. If you have one, your return can't be e-filed without it." },
+    { id: "ipPinNum", label: "Your 6-digit IP PIN for this filing season", type: "ippin", optional: true, show: yes("ippin"), help: "Use the newest IP PIN — they change every year. It's encrypted as soon as you save it.", warn: "Don't have it handy? Sign in to your IRS Online Account to see your current IP PIN, then come back and enter it — or give it to your preparer before we file.", warnWhen: "", link: { href: "https://www.irs.gov/ippin", label: "Get your IP PIN from your IRS Online Account" } },
     { id: "mkbBefore", label: "Did MKB prepare your tax return last year?", type: YN, help: "This is only about who prepared last year's return — not about amending a return.", docsWhen: "No", docs: [doc("Last year's tax return (federal and state)", "Prior returns")] },
     { id: "priorAgi", label: "Last year's adjusted gross income (AGI), if you know it", type: "money", optional: true, help: "Used to verify your identity when e-filing. It's on line 11 of last year's Form 1040." },
-    { id: "photoId", label: "Can you upload a photo ID (driver's license or state ID)?", type: YN, docs: [doc("Photo ID — taxpayer", "Identity", true)], help: "Many states ask for ID details to process e-filed returns." },
+    { id: "photoId", label: "Can you upload a photo ID (driver's license or state ID)?", type: YN, docs: [doc("Government photo ID", "Identity", true)], help: "Many states ask for ID details to process e-filed returns." },
   ],
 };
 
@@ -111,8 +125,9 @@ const spouse: Section = {
     { id: "sdob", label: "Spouse's date of birth", type: "date" },
     { id: "soccupation", label: "Spouse's occupation", type: "text" },
     { id: "sblind", label: "Is your spouse legally blind?", type: YN },
-    { id: "sippin", label: "Did the IRS give your spouse an IP PIN?", type: YN, docs: [doc("IRS IP PIN letter (CP01A) — spouse", "Identity", true)] },
-    { id: "sphotoId", label: "Can you upload your spouse's photo ID?", type: YN, show: joint, docs: [doc("Photo ID — spouse", "Identity", true)] },
+    { id: "sippin", label: "Did the IRS give your spouse an IP PIN?", type: YN },
+    { id: "sIpPinNum", label: "Your spouse's 6-digit IP PIN for this filing season", type: "ippin", optional: true, show: yes("sippin"), help: "Each spouse has their own IP PIN. It's encrypted as soon as you save it.", warn: "Your spouse can sign in to their own IRS Online Account to see their current IP PIN — or give it to your preparer before we file.", warnWhen: "", link: { href: "https://www.irs.gov/ippin", label: "Get your IP PIN from your IRS Online Account" } },
+    { id: "sphotoId", label: "Can you upload your spouse's photo ID?", type: YN, show: joint, docs: [doc("Government photo ID — spouse", "Identity", true)] },
   ],
 };
 
@@ -162,14 +177,14 @@ const dependents: Section = {
     { id: "dname", label: "Full name", type: "text" },
     { id: "dssn", label: "SSN, ITIN or ATIN", type: "ssn" },
     { id: "ddob", label: "Date of birth", type: "date" },
-    { id: "drel", label: "Relationship to you", type: "choice", options: ["Son or daughter", "Stepchild", "Foster child", "Grandchild", "Brother or sister", "Niece or nephew", "Parent", "Other relative", "Not related"] },
+    { id: "drel", label: "Relationship to you", type: "choice", options: ["Son", "Daughter", "Stepchild", "Foster child", "Grandchild", "Brother or sister", "Niece or nephew", "Parent", "Other relative", "Not related"] },
     { id: "dmonths", label: "How many months did they live with you this year?", type: "number", help: "Count temporary absences (school, hospital) as time at home." },
     { id: "dstudent", label: "Full-time student for at least 5 months of the year?", type: YN },
     { id: "ddisabled", label: "Permanently and totally disabled?", type: YN },
     { id: "dselfSupport", label: "Did they pay more than half of their own living costs?", type: YN },
     { id: "dincome", label: "Their own gross income for the year (if any)", type: "money", optional: true, show: is("drel", "Parent", "Other relative", "Not related") },
     { id: "dmarried", label: "Are they married and filing a joint return?", type: YN, optional: true },
-    { id: "dcustody", label: "Is another parent claiming this child this year (custody agreement or Form 8332)?", type: YN, show: is("drel", "Son or daughter", "Stepchild"), docs: [doc("Form 8332 or custody agreement", "Dependents")] },
+    { id: "dcustody", label: "Is another parent claiming this child this year (custody agreement or Form 8332)?", type: YN, show: is("drel", "Son", "Daughter", "Son or daughter", "Stepchild"), docs: [doc("Form 8332 or custody agreement", "Dependents")] },
   ],
 };
 
@@ -180,8 +195,8 @@ const incomeScreen: Section = {
   intro: "Answer yes to everything that applies to you (and your spouse if filing jointly). We'll ask for details next.",
   covers: ["Form 1040 lines 1–8 — income types", "Form 1040 — digital asset question"],
   questions: [
-    { id: "w2", label: "Worked as an employee and received a W-2?", type: YN },
-    { id: "se", label: "Self-employment, freelance, gig or side-business income (1099-NEC, 1099-K, cash or apps)?", type: YN, show: form("1040", "1040-X"), help: "If yes, your return needs Schedule C — we'll let your preparer know." },
+    { id: "w2", label: "Worked as an employee and received a W-2?", type: YN, help: "Your employer withheld taxes from your paychecks and sends you a Form W-2 by January 31." },
+    { id: "se", label: "Did you work for yourself — self-employment, freelance, contract, gig or side-business income?", type: YN, help: "Money you earned working for yourself rather than as an employee: freelance or contract work (often paid on a Form 1099-NEC), gig apps like Uber, DoorDash or Instacart, selling products or services, or cash and app payments for a side business. If yes, we'll ask about your business next (Schedule C)." },
     { id: "unemp", label: "Unemployment benefits (1099-G)?", type: YN, docs: [doc("Form 1099-G (unemployment)", "Income")] },
     { id: "interest", label: "Bank interest or dividends (1099-INT, 1099-DIV)?", type: YN },
     { id: "invest", label: "Sold stocks, bonds, mutual funds or other investments (1099-B)?", type: YN },
@@ -416,18 +431,18 @@ const schC: Section = {
   id: "schc",
   title: "Your business",
   group: "Your business",
-  show: form("1040 + Sch C"),
+  show: yes("se"),
   intro: "Schedule C reports a business you own by yourself — a sole proprietorship or a single-member LLC that hasn't elected to be taxed as a corporation.",
   covers: ["Schedule C header — business name, EIN, activity code", "Schedule C line F — accounting method", "Schedule C line G — material participation"],
   questions: [
     { id: "bizName", label: "Business name (or your name if you don't use one)", type: "text", prefill: "bizName" },
-    { id: "bizStructure", label: "How is the business set up?", type: "choice", options: ["Sole proprietor (no LLC)", "Single-member LLC", "LLC with more than one owner", "LLC or corporation that elected S-corp status"], help: "The last two need a different return — we'll let your preparer know." },
-    { id: "bizEinYn", label: "Does the business have its own EIN?", type: YN },
+    { id: "bizStructure", label: "How is the business set up?", type: "choice", options: ["Sole proprietor (no LLC)", "Single-member LLC", "LLC with more than one owner", "LLC or corporation that elected S-corp status"], help: "Sole proprietor: you just started working for yourself and never formed an LLC with the state. The last two need a different return — we'll let your preparer know.", docsWhen: "Single-member LLC", docs: [doc("LLC formation documents (articles of organization)", "Business")] },
+    { id: "bizEinYn", label: "Does the business have its own EIN?", type: YN, help: "An Employer Identification Number is a 9-digit number from the IRS for your business (like XX-XXXXXXX). Many sole proprietors don't have one and use their SSN instead.", docs: [doc("IRS EIN confirmation letter (CP 575 or 147C)", "Business")] },
     { id: "bizEin", label: "Business EIN", type: "ein", show: yes("bizEinYn"), prefill: "ein" },
     { id: "bizWhat", label: "What does the business do?", type: "text", prefill: "activity", placeholder: "e.g. landscaping, hair stylist, rideshare driver" },
     { id: "bizStarted", label: "Did the business start this year?", type: YN },
-    { id: "bizMethod", label: "How do you track income and expenses?", type: "choice", options: ["Cash (when money comes in or goes out)", "Accrual (when invoiced or billed)", "Not sure"] },
-    { id: "bizHours", label: "Did you work in the business regularly — more than 500 hours this year?", type: YN },
+    { id: "bizMethod", label: "How do you track income and expenses?", type: "choice", options: ["Cash (when money comes in or goes out)", "Accrual (when invoiced or billed)", "Not sure"], help: "Most small businesses use cash: income counts when you're paid and expenses when you pay them. Accrual counts income when you send an invoice and expenses when you receive a bill, even before money changes hands. If you're not sure, it's probably cash." },
+    { id: "bizHours", label: "Did you work in the business regularly — more than 500 hours this year?", type: YN, help: "About 10 hours a week. Answer Yes if you run the business yourself day to day. Answer No if you mostly invested money and someone else runs it." },
     { id: "bizState", label: "Main state where the business operates", type: "state", prefill: "bizState" },
     { id: "bizMore", label: "Do you have another self-employment business?", type: YN, help: "Each business needs its own Schedule C." },
   ],
@@ -438,16 +453,16 @@ const bizIncome: Section = {
   id: "bizIncome",
   title: "Income",
   group: "Income & expenses",
-  show: form("1040 + Sch C", ...BIZ),
+  show: hasBiz,
   covers: ["Schedule C Part I / business return page 1 — gross receipts", "Form 1099-K / 1099-NEC reconciliation"],
   questions: [
-    { id: "records", label: "How will you give us the year's income and expenses?", type: "choice", options: ["MKB keeps my books", "I'll upload a profit & loss report and bank statements", "I'll enter my totals here"] },
+    { id: "records", label: "How will you give us the year's income and expenses?", type: "choice", options: ["MKB keeps my books", "I'll upload a profit & loss report and bank statements", "I'll enter my totals here"], help: "Choose whatever is easiest. If you enter totals here, we'll also ask you to upload the records that back them up (receipts, statements or a spreadsheet).", docsWhen: "I'll enter my totals here", docs: [doc("Business income records — sales reports, invoices or deposit records", "Business"), doc("Business expense records — receipts, bank/credit card statements or a spreadsheet", "Business")] },
     { id: "plDocs", label: "Upload your year-end profit & loss and every business bank and credit card statement", type: YN, show: is("records", "I'll upload a profit & loss report and bank statements"), docs: [doc("Year-end profit & loss report", "Business"), doc("Business bank and credit card statements (all 12 months)", "Business")] },
-    { id: "gross", label: "Total sales / gross receipts", type: "money", show: enterTotals },
-    { id: "refunds", label: "Refunds and returns given to customers", type: "money", show: enterTotals, optional: true },
-    { id: "nec", label: "Did you receive 1099-NEC forms from customers?", type: YN, docs: [doc("Forms 1099-NEC received", "Business")] },
-    { id: "k1099", label: "Received 1099-K forms (card processors, PayPal, Venmo, Square, Etsy, Uber…)?", type: YN, docs: [doc("Forms 1099-K", "Business")] },
-    { id: "cashInc", label: "Any cash or payment-app income not on a 1099?", type: YN, warn: "All business income is taxable, even without a 1099. Leaving out cash or app income is one of the most common reasons for IRS notices.", warnWhen: "No" },
+    { id: "gross", label: "Total sales / gross receipts", type: "money", show: enterTotals, help: "Everything customers paid you during the year for your products or services, before you subtract any expenses. Include cash, checks, card and app payments, and the amounts on any 1099-NEC or 1099-K forms." },
+    { id: "refunds", label: "Refunds and returns given to customers", type: "money", show: enterTotals, optional: true, help: "Money you gave back to customers — for returned items, refunds or discounts given after the sale. Don't include your business expenses here. Leave blank if none." },
+    { id: "nec", label: "Did you receive 1099-NEC forms from customers?", type: YN, help: "A business that paid you $600 or more for your work (when you weren't their employee) sends you a Form 1099-NEC.", docs: [doc("Forms 1099-NEC received", "Business")] },
+    { id: "k1099", label: "Received 1099-K forms (card processors, PayPal, Venmo, Square, Etsy, Uber…)?", type: YN, help: "Form 1099-K reports card and app payments you received for business. It shows the total before fees, refunds and returns — your preparer adjusts for those.", docs: [doc("Forms 1099-K", "Business")] },
+    { id: "cashInc", label: "Any cash or payment-app income not on a 1099?", type: YN, help: "Payments by cash, check, Zelle, Cash App or Venmo that didn't come with a 1099 form.", warn: "All business income is taxable, even without a 1099. Leaving out cash or app income is one of the most common reasons for IRS notices.", warnWhen: "No" },
     { id: "cashAmt", label: "About how much cash or payment-app income wasn't on a 1099?", type: "money", show: yes("cashInc") },
     { id: "salesChannels", label: "Where do you sell?", type: "multi", optional: true, options: ["In person / storefront", "My own website", "Online marketplaces (Etsy, Amazon, eBay…)", "Social media / payment apps", "Wholesale to other businesses", "Services only — no products"] },
     { id: "salesTax", label: "Did you collect sales tax from customers?", type: YN, help: "Sales tax you collected and paid to the state isn't income — we'll back it out.", show: (a) => !String(a.salesChannels ?? "").startsWith("Services only") },
@@ -460,14 +475,14 @@ const cogs: Section = {
   id: "cogs",
   title: "Products and inventory",
   group: "Income & expenses",
-  show: form("1040 + Sch C", ...BIZ),
+  show: hasBiz,
   covers: ["Schedule C Part III / Form 1125-A — cost of goods sold"],
   questions: [
-    { id: "inventory", label: "Do you sell products or keep inventory?", type: YN },
-    { id: "invBegin", label: "Inventory value at the start of the year", type: "money", show: yes("inventory") },
+    { id: "inventory", label: "Do you sell products or keep inventory?", type: YN, help: "Products you buy or make to sell. Answer No if you only sell services." },
+    { id: "invBegin", label: "Inventory value at the start of the year", type: "money", show: yes("inventory"), help: "What the products you had on hand on January 1 cost you — not what you'd sell them for." },
     { id: "invPurchases", label: "Inventory purchased during the year", type: "money", show: all(yes("inventory"), enterTotals) },
-    { id: "invEnd", label: "Inventory value at the end of the year (count or estimate)", type: "money", show: yes("inventory"), docs: [] },
-    { id: "invMethod", label: "How do you value inventory?", type: "choice", options: ["Cost", "Lower of cost or market", "Not sure"], show: yes("inventory") },
+    { id: "invEnd", label: "Inventory value at the end of the year (count or estimate)", type: "money", show: yes("inventory"), docs: [], help: "What the products you still had on December 31 cost you." },
+    { id: "invMethod", label: "How do you value inventory?", type: "choice", options: ["Cost", "Lower of cost or market", "Not sure"], show: yes("inventory"), help: "Most small businesses use Cost — what you paid for the products. If you're not sure, choose Not sure." },
     { id: "invMaterials", label: "Materials and supplies used to make your products", type: "money", optional: true, show: all(yes("inventory"), enterTotals) },
     { id: "invLabor", label: "Labor paid to make products (not your own pay)", type: "money", optional: true, show: all(yes("inventory"), enterTotals) },
     { id: "invShipping", label: "Shipping and freight to get products to you", type: "money", optional: true, show: all(yes("inventory"), enterTotals) },
@@ -478,22 +493,22 @@ const cogs: Section = {
   ],
 };
 
-const EXPENSES: [string, string][] = [
-  ["exAdvertising", "Advertising and marketing"],
-  ["exContract", "Contract labor (1099 workers)"],
-  ["exInsurance", "Business insurance (not health)"],
-  ["exInterest", "Interest on business loans and cards"],
-  ["exLegal", "Legal and professional fees"],
+const EXPENSES: [string, string, string?][] = [
+  ["exAdvertising", "Advertising and marketing", "Ads, business cards, website costs, social media promotion."],
+  ["exContract", "Contract labor (1099 workers)", "People or companies who did work for you but aren't employees — often sent a Form 1099-NEC."],
+  ["exInsurance", "Business insurance (not health)", "Liability, business property or professional insurance. Health insurance is asked about later."],
+  ["exInterest", "Interest on business loans and cards", "Only the interest — not the loan payments themselves."],
+  ["exLegal", "Legal and professional fees", "Lawyers, accountants and bookkeepers for the business."],
   ["exOffice", "Office expenses and supplies"],
-  ["exRentEquip", "Rent — vehicles, machinery, equipment"],
-  ["exRentPlace", "Rent — office, shop or storage"],
-  ["exRepairs", "Repairs and maintenance"],
-  ["exSupplies", "Materials and supplies"],
-  ["exTaxes", "Business taxes and licenses"],
-  ["exTravel", "Travel (airfare, hotel)"],
-  ["exMeals", "Business meals"],
-  ["exUtilities", "Utilities"],
-  ["exPhone", "Phone and internet"],
+  ["exRentEquip", "Rent — vehicles, machinery, equipment", "Renting or leasing equipment or a vehicle for the business."],
+  ["exRentPlace", "Rent — office, shop or storage", "Rent for a business location outside your home. Home office is asked about later."],
+  ["exRepairs", "Repairs and maintenance", "Fixing or maintaining business equipment or property — not upgrades or new purchases."],
+  ["exSupplies", "Materials and supplies", "Items used up in your work — not products you resell."],
+  ["exTaxes", "Business taxes and licenses", "Business licenses and permits, and the employer share of payroll taxes. Not your income tax."],
+  ["exTravel", "Travel (airfare, hotel)", "Overnight business trips away from home. Daily driving goes under vehicles."],
+  ["exMeals", "Business meals", "Meals with clients or while traveling for business — usually 50% deductible. Keep the receipt and note who and why."],
+  ["exUtilities", "Utilities", "For a business location outside your home. Home utilities are asked about under home office."],
+  ["exPhone", "Phone and internet", "The business share only, if you also use them personally."],
   ["exSoftware", "Software and subscriptions"],
   ["exFees", "Bank and merchant fees"],
   ["exTraining", "Education and training"],
@@ -503,11 +518,11 @@ const expenses: Section = {
   id: "expenses",
   title: "Expenses",
   group: "Income & expenses",
-  show: all(form("1040 + Sch C", ...BIZ), enterTotals),
+  show: all(hasBiz, enterTotals),
   intro: "Enter yearly totals. Leave any that don't apply blank. Payroll, vehicles, home office and big purchases come next.",
   covers: ["Schedule C Part II / business return page 1 — deductions"],
   questions: [
-    ...EXPENSES.map(([id, label]): Q => ({ id, label, type: "money", optional: true })),
+    ...EXPENSES.map(([id, label, help]): Q => ({ id, label, type: "money", optional: true, help })),
     { id: "exOther", label: "Other expenses (describe and give amounts)", type: "textarea", optional: true },
     { id: "exReceipts", label: "Can you back these up with receipts or statements if asked?", type: YN },
   ],
@@ -517,7 +532,7 @@ const people: Section = {
   id: "people",
   title: "Employees and contractors",
   group: "Income & expenses",
-  show: form("1040 + Sch C", ...BIZ),
+  show: hasBiz,
   covers: ["Wages and payroll taxes", "Form 1099-NEC filing for contractors", "Schedule C lines I–J / Schedule B — 1099 filing questions"],
   questions: [
     { id: "employees", label: "Did the business have employees (W-2 payroll)?", type: YN },
@@ -534,7 +549,7 @@ const vehicleQ: Section = {
   id: "vehicleQ",
   title: "Vehicles",
   group: "Assets",
-  show: form("1040 + Sch C", ...BIZ),
+  show: hasBiz,
   covers: ["Form 4562 Part V — listed property (vehicles)", "Schedule C Part IV — vehicle information"],
   questions: [{ id: "usesVehicle", label: "Did you use a car, truck or van for the business (other than commuting)?", type: YN }],
 };
@@ -542,7 +557,7 @@ const vehicles: Section = {
   id: "vehicles",
   title: "Vehicle details",
   group: "Assets",
-  show: all(form("1040 + Sch C", ...BIZ), yes("usesVehicle")),
+  show: all(hasBiz, yes("usesVehicle")),
   intro: "Add each vehicle used for business.",
   covers: ["Form 4562 Part V — business-use percentage", "Standard mileage or actual expenses"],
   repeat: { noun: "vehicle", rowTitle: (r, i) => r.vdesc || `Vehicle ${i + 1}`, rowDocs: (r) => (r.vlog === "Yes" ? [doc(`Mileage log — ${r.vdesc || "vehicle"}`, "Business")] : []) },
@@ -550,7 +565,7 @@ const vehicles: Section = {
     { id: "vdesc", label: "Year, make and model", type: "text" },
     { id: "vowner", label: "Who owns it?", type: "choice", options: ["Me personally", "The business", "Leased"] },
     { id: "vdate", label: "Date you first used it for business", type: "date" },
-    { id: "vbiz", label: "Business miles this year", type: "number" },
+    { id: "vbiz", label: "Business miles this year", type: "number", help: "Driving to clients, job sites, the bank or supply runs. Not your daily drive between home and your regular workplace." },
     { id: "vtotal", label: "Total miles this year (all use)", type: "number" },
     { id: "vcommute", label: "Commuting miles (home to regular workplace)", type: "number", optional: true },
     { id: "vmethod", label: "How do you want to deduct it?", type: "choice", options: ["Standard mileage rate", "Actual expenses (gas, repairs, insurance…)", "Not sure — let my preparer decide"] },
@@ -563,16 +578,23 @@ const homeOffice: Section = {
   id: "homeOffice",
   title: "Home office",
   group: "Assets",
-  show: form("1040 + Sch C"),
-  covers: ["Form 8829 — business use of home", "Simplified home office method"],
+  show: yes("se"),
+  intro: "Only part of a home that meets the IRS rules can be deducted. These questions check that first.",
+  covers: ["Form 8829 — business use of home", "Simplified home office method", "Pub. 587 — regular and exclusive use, principal place of business"],
   questions: [
-    { id: "ho", label: "Do you use part of your home regularly and only for the business?", type: YN },
-    { id: "hoSqft", label: "Square footage of the office space", type: "number", show: yes("ho") },
-    { id: "hoTotal", label: "Total square footage of the home", type: "number", show: yes("ho") },
-    { id: "hoOwnRent", label: "Do you rent or own?", type: "choice", options: ["Rent", "Own"], show: yes("ho") },
-    { id: "hoRent", label: "Total rent paid this year", type: "money", show: all(yes("ho"), is("hoOwnRent", "Rent")) },
-    { id: "hoUtilities", label: "Total utilities for the home", type: "money", show: yes("ho"), optional: true },
-    { id: "hoInsurance", label: "Homeowner's / renter's insurance", type: "money", show: yes("ho"), optional: true },
+    { id: "hoUse", label: "Do you use any part of your home for the business?", type: YN, help: "Your house, apartment, condo or mobile home — or a separate building on the property, like a detached garage or studio." },
+    { id: "hoSpace", label: "Which best describes the space?", type: "choice", options: [HO_ROOM, HO_PART, HO_SHARED, HO_STRUCT], show: yes("hoUse"), warn: "A shared space — like a kitchen or dining table, living room or guest room — doesn't qualify as a home office, even if you work there every day. The IRS requires a space used only for the business. (Two exceptions are asked below: a home daycare, or storing inventory.)", warnWhen: HO_SHARED },
+    { id: "hoExclusive", label: "Is that space used ONLY for the business — no personal, family or guest use at any time during the year?", type: YN, show: all(yes("hoUse"), not(is("hoSpace", HO_SHARED))), help: "Exclusive use means nothing personal happens there: no family computer or homework, TV, guest bed, exercise equipment or storage of personal things.", warn: "If the space is also used for personal things, it doesn't qualify as a home office — even if you work there every day.", warnWhen: "No" },
+    { id: "hoRegular", label: "Do you use it for the business regularly — not just once in a while?", type: YN, show: all(yes("hoUse"), not(is("hoSpace", HO_SHARED))), warn: "Occasional or incidental use doesn't qualify as a home office.", warnWhen: "No" },
+    { id: "hoWhy", label: "Which is true about the space?", type: "choice", options: ["It's my main place of business — I run the business from there and have no other fixed office", "I meet clients or customers there as a normal part of the business", "It's a separate building I use for the business", HO_NONE], show: all(yes("hoUse"), not(is("hoSpace", HO_SHARED))), help: "Doing your admin work there — billing, scheduling, bookkeeping — counts as your main place of business if you have no other fixed location where you do that work.", warn: "If you mainly work somewhere else, the space usually doesn't qualify unless you meet clients there or it's a separate building. Your preparer will confirm.", warnWhen: HO_NONE },
+    { id: "hoSpecial", label: "Do either of these apply? (choose all that apply)", type: "multi", optional: true, options: [HO_DAYCARE, HO_STORAGE], show: yes("hoUse"), help: "These are the only cases where the space doesn't have to be used only for the business. If neither applies, leave this blank." },
+    { id: "hoSqft", label: "Square footage of the office space", type: "number", show: hoOk, help: "Measure only the space used for the business (length × width in feet)." },
+    { id: "hoTotal", label: "Total square footage of the home", type: "number", show: hoOk },
+    { id: "hoOwnRent", label: "Do you rent or own?", type: "choice", options: ["Rent", "Own"], show: hoOk },
+    { id: "hoRent", label: "Total rent paid this year", type: "money", show: all(hoOk, is("hoOwnRent", "Rent")) },
+    { id: "hoUtilities", label: "Total utilities for the home", type: "money", show: hoOk, optional: true, help: "Electric, gas, water, trash and internet for the whole home — your preparer works out the business share." },
+    { id: "hoInsurance", label: "Homeowner's / renter's insurance", type: "money", show: hoOk, optional: true },
+    { id: "hoRecords", label: "Can you upload your home expense records?", type: YN, show: hoOk, help: "Your lease or mortgage interest statement (Form 1098), utility bills and insurance statement.", docs: [doc("Home office records — lease or mortgage interest statement (Form 1098), utility bills, insurance", "Business")] },
   ],
 };
 
@@ -580,15 +602,15 @@ const assets: Section = {
   id: "assets",
   title: "Equipment and large purchases",
   group: "Assets",
-  show: form("1040 + Sch C", ...BIZ),
+  show: hasBiz,
   covers: ["Form 4562 — depreciation and section 179", "Form 4797 — sale of business property"],
   questions: [
-    { id: "bought", label: "Bought equipment, furniture, computers, machinery or improvements costing more than $2,500 each?", type: YN },
+    { id: "bought", label: "Bought equipment, furniture, computers, machinery or improvements costing more than $2,500 each?", type: YN, help: "Things that last more than a year — tools, computers, machinery, furniture, or improvements to a business property." },
     { id: "boughtList", label: "List each item, purchase date and cost", type: "textarea", show: yes("bought"), docs: [] },
     { id: "boughtReceipts", label: "Can you upload receipts or invoices for them?", type: YN, show: yes("bought"), docs: [doc("Receipts for equipment and large purchases", "Business")] },
     { id: "sold", label: "Sold, traded in or disposed of any business equipment or vehicles?", type: YN },
     { id: "soldList", label: "What, when, and for how much?", type: "textarea", show: yes("sold") },
-    { id: "assetList", label: "Do you have last year's depreciation schedule?", type: YN, optional: true, show: form(...BIZ, "1040 + Sch C") },
+    { id: "assetList", label: "Do you have last year's depreciation schedule?", type: YN, optional: true },
   ],
 };
 
@@ -596,7 +618,7 @@ const schCOther: Section = {
   id: "schcOther",
   title: "Health insurance and retirement",
   group: "Assets",
-  show: form("1040 + Sch C"),
+  show: yes("se"),
   covers: ["Schedule SE — self-employment tax", "Schedule 1 — self-employed health insurance", "Schedule 1 — SEP, SIMPLE and solo 401(k)"],
   questions: [
     { id: "seHealth", label: "Did you pay for your own health insurance (not through a job or the Marketplace)?", type: YN },
@@ -777,6 +799,8 @@ export function flagsFor(f: TaxForm, a: Answers): string[] {
   const out: string[] = [];
   const rows = (id: string) => (Array.isArray(a[id]) ? (a[id] as Row[]) : []);
   if (f === "1040" && a.se === "Yes") out.push("Self-employment income reported — this return probably needs Schedule C (change the return to 1040 + Sch C).");
+  if (f === "1040 + Sch C" && a.se === "No") out.push("Return is set up with Schedule C, but the client said they didn't work for themselves — check before preparing.");
+  if (a.hoUse === "Yes" && !hoOk(a)) out.push("Client uses part of their home for the business, but their answers say it doesn't qualify as a home office — confirm before taking any deduction.");
   if (f === "1040 + Sch C" && a.bizStructure === "LLC with more than one owner") out.push("Multi-member LLC — usually files a partnership return (Form 1065), not Schedule C.");
   if (f === "1040 + Sch C" && a.bizStructure === "LLC or corporation that elected S-corp status") out.push("S-corp election — the business files Form 1120-S; the owner's return reports the K-1.");
   if (f === "1040 + Sch C" && a.bizMore === "Yes") out.push("Client has another business — an additional Schedule C is needed.");
@@ -824,8 +848,8 @@ export function returnNeeds(f: TaxForm, a: Answers): { label: string; code?: str
     if (a.contractors === "Yes" && a.filed1099 === "No — I'd like MKB to file them") add("1099-NEC filing for contractors", "PAY", 1);
     return out;
   }
-  if (f === "1040 + Sch C") { add("Schedule C", "SCHC"); add("Schedule SE"); }
-  if (a.ho === "Yes") add("Form 8829 (home office)");
+  if (f === "1040 + Sch C" || a.se === "Yes") { add("Schedule C", "SCHC"); add("Schedule SE"); }
+  if (hoOk(a)) add("Form 8829 (home office)");
   if (a.bought === "Yes" || a.usesVehicle === "Yes") add("Form 4562 (depreciation)");
   const rentalsN = rows("rentals").length;
   if (rentalsN) add(`Schedule E — ${rentalsN} propert${rentalsN > 1 ? "ies" : "y"}`, "SCHE", rentalsN);

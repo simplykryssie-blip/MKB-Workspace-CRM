@@ -18,7 +18,7 @@ import { useServiceFees } from "@/lib/fees/use-fees";
 import { feeWords } from "@/lib/fees/config";
 import { LetterView } from "@/components/engagement/LetterView";
 import { SignaturePad } from "@/components/ui/SignaturePad";
-import { display, docsFor, invalidReason, maskLast4, missingIn, needsFix, progress, qVisible, rowsOf, sectionVisible, type Answers, type Q, type Row, type Section } from "@/lib/tax/interview/engine";
+import { display, docsFor, invalidReason, maskLast4, missingIn, needsFix, progress, qVisible, rowsOf, sectionVisible, type Answers, type Q, type Row, type Section, type SecureKind } from "@/lib/tax/interview/engine";
 import { INTERVIEW_VERSION, sectionsFor } from "@/lib/tax/interview/questions";
 import { applyPrefill, prefillFrom } from "@/lib/tax/interview/prefill";
 import { US_STATES, formatPhone } from "@/lib/validation";
@@ -131,7 +131,7 @@ function Runner({ r, clientName, by, prefillSource }: { r: TaxReturn; clientName
           </div>
 
           {cur.key === "followups" && <FollowUpStep r={r} by={by} onDone={() => go(step + 1)} />}
-          {sec && <SectionView s={sec} a={a} prefilled={initial.ids} showErrors={!!tried[sec.id]} setVal={setVal} setRows={setRows} secure={BACKEND ? (key, kind, value) => call("PUT", `/api/tax/returns/${r.id}/secure`, { key, kind, value }) : undefined} reveal={BACKEND && by === "staff" ? (key) => call<{ value: string }>("POST", `/api/tax/returns/${r.id}/secure`, { key }).then((x) => x.value) : undefined} />}
+          {sec && <SectionView s={sec} a={a} prefilled={initial.ids} original={initial.answers} showErrors={!!tried[sec.id]} setVal={setVal} setRows={setRows} secure={BACKEND ? (key, kind, value) => call("PUT", `/api/tax/returns/${r.id}/secure`, { key, kind, value }) : undefined} reveal={BACKEND && by === "staff" ? (key) => call<{ value: string }>("POST", `/api/tax/returns/${r.id}/secure`, { key }).then((x) => x.value) : undefined} />}
           {cur.key === "review" && (submitted ? <Submitted r={r} by={by} /> : <Review r={r} sections={visible} a={a} by={by} answers={answers} goTo={(sid) => go(steps.findIndex((x) => x.key === sid))} />)}
 
           {cur.key !== "review" && cur.key !== "followups" && (
@@ -152,10 +152,11 @@ const StepIcon = ({ done }: { done: boolean }) => (done ? <CheckCircle2 size={15
 
 /* ------------------------------------------------------------------ */
 
-export type SecureSave = (key: string, kind: "ssn" | "ein" | "bank", value: string) => Promise<unknown>;
+export type SecureSave = (key: string, kind: SecureKind, value: string) => Promise<unknown>;
 /** Staff only: fetches the full number from the vault (permission-checked and audited on the server). */
 type SecureReveal = (key: string) => Promise<string>;
-export function SectionView({ s, a, prefilled, showErrors, setVal, setRows, secure, reveal }: { s: Section; a: Answers; prefilled: Set<string>; showErrors: boolean; setVal: (id: string, v: string) => void; setRows: (sid: string, rows: Row[]) => void; secure?: SecureSave; reveal?: SecureReveal }) {
+/** `original`: the answers as pre-filled from the profile — changing one shows a "this will change your profile" warning. */
+export function SectionView({ s, a, prefilled, showErrors, setVal, setRows, secure, reveal, original }: { s: Section; a: Answers; prefilled: Set<string>; showErrors: boolean; setVal: (id: string, v: string) => void; setRows: (sid: string, rows: Row[]) => void; secure?: SecureSave; reveal?: SecureReveal; original?: Answers }) {
   const rows = rowsOf(a, s.id);
   return (
     <Card className="p-5 sm:p-6">
@@ -180,7 +181,7 @@ export function SectionView({ s, a, prefilled, showErrors, setVal, setRows, secu
         </div>
       ) : (
         <div className="mt-5 space-y-5">
-          {s.questions.filter((q) => qVisible(q, a)).map((q) => <Field key={q.id} q={q} idp={s.id} secureKey={`${s.id}.${q.id}`} secure={secure} reveal={reveal} value={(a[q.id] as string) ?? ""} prefilled={prefilled.has(q.id) && a[q.id] !== ""} err={(showErrors && needsFix(q, a[q.id] as string)) || !!invalidReason(q, a[q.id] as string)} onChange={(v) => setVal(q.id, v)} />)}
+          {s.questions.filter((q) => qVisible(q, a)).map((q) => <Field key={q.id} q={q} idp={s.id} secureKey={`${s.id}.${q.id}`} secure={secure} reveal={reveal} value={(a[q.id] as string) ?? ""} prefilled={prefilled.has(q.id) && a[q.id] !== ""} changed={!!original && prefilled.has(q.id) && !!original[q.id] && (a[q.id] ?? "") !== original[q.id]} err={(showErrors && needsFix(q, a[q.id] as string)) || !!invalidReason(q, a[q.id] as string)} onChange={(v) => setVal(q.id, v)} />)}
         </div>
       )}
     </Card>
@@ -189,14 +190,16 @@ export function SectionView({ s, a, prefilled, showErrors, setVal, setRows, secu
 
 const inputCls = (err?: boolean) => `h-11 w-full rounded-xl border bg-surface px-3 text-[15px] text-ink placeholder:text-faint focus:outline-none focus:ring-4 ${err ? "border-danger focus:ring-danger/15" : "border-line focus:border-accent focus:ring-accent/15"}`;
 
-function Field({ q, idp, value, onChange, err, prefilled, row, secure, reveal, secureKey }: { q: Q; idp: string; value: string; onChange: (v: string) => void; err?: boolean; prefilled?: boolean; row?: Row; secure?: SecureSave; reveal?: SecureReveal; secureKey?: string }) {
+function Field({ q, idp, value, onChange, err, prefilled, changed, row, secure, reveal, secureKey }: { q: Q; idp: string; value: string; onChange: (v: string) => void; err?: boolean; prefilled?: boolean; changed?: boolean; row?: Row; secure?: SecureSave; reveal?: SecureReveal; secureKey?: string }) {
   const id = `iv-${idp}-${q.id}`;
   const pill = (on: boolean) => `rounded-xl border px-4 py-2.5 text-left text-[14px] font-medium transition-colors ${on ? "border-accent bg-accent-soft text-accent-ink" : "border-line bg-surface text-ink-2 hover:border-line-strong"}`;
   const label = (
     <div className="mb-2">
       <label htmlFor={id} id={`${id}-l`} className="block text-[15px] font-semibold text-ink">{q.label}{q.optional && <span className="ml-1.5 text-[12px] font-normal text-muted">(optional)</span>}</label>
       {q.help && <p className="mt-0.5 whitespace-pre-line text-[12.5px] text-muted">{q.help}</p>}
-      {prefilled && <p className="mt-0.5 text-[12px] font-medium text-success-ink">From your MKB profile — change it if it&rsquo;s out of date.</p>}
+      {q.link && !q.warn && <a href={q.link.href} target="_blank" rel="noopener noreferrer" className="mt-0.5 inline-block text-[12.5px] font-semibold text-accent underline">{q.link.label} ↗</a>}
+      {prefilled && !changed && <p className="mt-0.5 text-[12px] font-medium text-success-ink">From your MKB profile — change it if it&rsquo;s out of date.</p>}
+      {changed && <p role="note" className="mt-1 flex items-start gap-1.5 rounded-lg border-l-4 border-warning bg-warning-soft px-2.5 py-1.5 text-[12.5px] font-semibold text-warning-ink"><AlertTriangle size={14} className="mt-0.5 shrink-0" />This is different from what&rsquo;s on file — submitting will update this on your MKB profile ({q.label.replace(/\s*\(.*\)$/, "")}). MKB will be notified of the change.</p>}
     </div>
   );
   let input: React.ReactNode;
@@ -254,7 +257,8 @@ function Field({ q, idp, value, onChange, err, prefilled, row, secure, reveal, s
     case "ein":
     case "tin":
     case "bank":
-      input = <SecureNumber id={id} q={q} value={value} onChange={onChange} err={err} save={secure && secureKey ? (kind, v) => secure(secureKey, kind, v) : undefined} reveal={reveal && secureKey ? () => reveal(secureKey) : undefined} kind={q.type === "tin" ? (row?.okind && row.okind !== "Individual" ? "ein" : row?.okind === "Individual" ? "ssn" : "ein") : q.type} />;
+    case "ippin":
+      input = <SecureNumber id={id} q={q} value={value} onChange={onChange} err={err} save={secure && secureKey ? (kind, v) => secure(secureKey, kind, v) : undefined} reveal={reveal && secureKey ? () => reveal(secureKey) : undefined} kind={q.type === "tin" ? (row?.okind && row.okind !== "Individual" ? "ein" : row?.okind === "Individual" ? "ssn" : "ein") : q.type === "ippin" ? "pin" : q.type} />;
       break;
     default:
       input = <input id={id} type={q.type === "email" ? "email" : "text"} value={value} placeholder={q.placeholder} onChange={(e) => onChange(e.target.value)} className={inputCls(err)} />;
@@ -268,7 +272,7 @@ function Field({ q, idp, value, onChange, err, prefilled, row, secure, reveal, s
       {showWarn && (
         <div role="note" className="mt-2.5 flex gap-2.5 rounded-xl border-l-4 border-warning bg-warning-soft px-3 py-2.5">
           <AlertTriangle size={18} className="mt-0.5 shrink-0 text-warning-ink" />
-          <p className="text-[13.5px] font-semibold leading-snug text-warning-ink">{q.warn}</p>
+          <div><p className="text-[13.5px] font-semibold leading-snug text-warning-ink">{q.warn}</p>{q.link && <a href={q.link.href} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-[13px] font-semibold text-accent underline">{q.link.label} ↗</a>}</div>
         </div>
       )}
       {err && <p className="mt-1.5 flex items-center gap-1 text-[12.5px] font-semibold text-danger-ink"><AlertTriangle size={13} /> Please answer this question.</p>}
@@ -278,7 +282,7 @@ function Field({ q, idp, value, onChange, err, prefilled, row, secure, reveal, s
 
 /** Sensitive numbers: entered once, kept as the last four digits only (production: full value goes straight to the encrypted vault). */
 /** With the backend on, the full number is sent once to the server's encrypted vault; only the last four stay here. */
-function SecureNumber({ id, value, onChange, err, kind, save, reveal }: { id: string; q: Q; value: string; onChange: (v: string) => void; err?: boolean; kind: "ssn" | "ein" | "bank"; save?: (kind: "ssn" | "ein" | "bank", value: string) => Promise<unknown>; reveal?: () => Promise<string> }) {
+function SecureNumber({ id, value, onChange, err, kind, save, reveal }: { id: string; q: Q; value: string; onChange: (v: string) => void; err?: boolean; kind: SecureKind; save?: (kind: SecureKind, value: string) => Promise<unknown>; reveal?: () => Promise<string> }) {
   const [shown, setShown] = useState<string | null>(null);
   const [revealErr, setRevealErr] = useState<string | null>(null);
   useEffect(() => { if (!shown) return; const t = setTimeout(() => setShown(null), 30_000); return () => clearTimeout(t); }, [shown]);
@@ -289,7 +293,7 @@ function SecureNumber({ id, value, onChange, err, kind, save, reveal }: { id: st
   const [peek, setPeek] = useState(false);
   const [editing, setEditing] = useState(!value);
   useEffect(() => { if (!value) setEditing(true); }, [value]);
-  const need = kind === "bank" ? 4 : 9;
+  const need = kind === "bank" ? 4 : kind === "pin" ? 6 : 9;
   const digits = draft.replace(/\D/g, "");
   if (!editing && value)
     return (
@@ -303,7 +307,7 @@ function SecureNumber({ id, value, onChange, err, kind, save, reveal }: { id: st
     );
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <input id={id} type={peek ? "text" : "password"} autoComplete="off" autoCorrect="off" spellCheck={false} inputMode="numeric" value={draft} onChange={(e) => setDraft(e.target.value.replace(/[^\d-]/g, "").slice(0, kind === "bank" ? 17 : 11))} placeholder={kind === "ssn" ? "•••-••-••••" : kind === "ein" ? "••-•••••••" : "Digits only"} className={`${inputCls(err)} max-w-[240px] tabular-nums`} />
+      <input id={id} type={peek ? "text" : "password"} autoComplete="off" autoCorrect="off" spellCheck={false} inputMode="numeric" value={draft} onChange={(e) => setDraft(e.target.value.replace(/[^\d-]/g, "").slice(0, kind === "bank" ? 17 : kind === "pin" ? 6 : 11))} placeholder={kind === "ssn" ? "•••-••-••••" : kind === "ein" ? "••-•••••••" : kind === "pin" ? "6 digits" : "Digits only"} className={`${inputCls(err)} max-w-[240px] tabular-nums`} />
       <Button size="sm" disabled={busy || (kind === "bank" ? digits.length < need : digits.length !== need)} onClick={async () => {
         if (save) {
           setBusy(true); setSaveErr(null);

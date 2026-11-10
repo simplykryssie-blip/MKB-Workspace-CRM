@@ -8,7 +8,7 @@ import { LogoMark } from "@/components/brand/Logo";
 import { SignaturePad } from "@/components/ui/SignaturePad";
 import { LetterView } from "@/components/engagement/LetterView";
 import { SectionView } from "./TaxInterview";
-import { docsFor, missingIn, sectionVisible, type Answers, type Row } from "@/lib/tax/interview/engine";
+import { docsFor, missingIn, sectionVisible, type Answers, type Row, type SecureKind } from "@/lib/tax/interview/engine";
 import { sectionsFor } from "@/lib/tax/interview/questions";
 import type { TaxForm } from "@/lib/tax/config";
 
@@ -141,7 +141,7 @@ function Runner({ data, api, reload, onDone, onGone }: { data: Loaded; api: Api;
   };
   const setVal = (qid: string, v: string) => { dirty.current = true; setAnswers((x) => ({ ...x, [qid]: v })); };
   const setRows = (sid: string, rows: Row[]) => { dirty.current = true; setAnswers((x) => ({ ...x, [sid]: rows })); };
-  const secure = async (key: string, kind: "ssn" | "ein" | "bank", value: string) => {
+  const secure = async (key: string, kind: SecureKind, value: string) => {
     try { return await api("PUT", "/secure", { key, kind, value }); } catch (e) { if (e instanceof LinkError && (e.status === 410 || e.status === 404)) onGone(e); throw e; }
   };
 
@@ -156,7 +156,7 @@ function Runner({ data, api, reload, onDone, onGone }: { data: Loaded; api: Api;
       <select aria-label="Interview step" value={step} onChange={(e) => go(Number(e.target.value))} className="h-11 w-full rounded-xl border border-line bg-surface px-3 text-[14px] text-ink">
         {steps.map((s, i) => <option key={s.key} value={i}>{i + 1}. {s.title}</option>)}
       </select>
-      {sec && <SectionView s={sec} a={a} prefilled={prefilled} showErrors={!!tried[sec.id]} setVal={setVal} setRows={setRows} secure={secure} />}
+      {sec && <SectionView s={sec} a={a} prefilled={prefilled} original={data.answers} showErrors={!!tried[sec.id]} setVal={setVal} setRows={setRows} secure={secure} />}
       {cur.key === "review" && <Review data={data} sections={sections} a={a} answers={answers} rev={rev} api={api} flush={persist} goTo={(sid) => go(steps.findIndex((x) => x.key === sid))} onDone={onDone} onErr={handleErr} />}
       {cur.key !== "review" && (
         <div className="flex items-center gap-2">

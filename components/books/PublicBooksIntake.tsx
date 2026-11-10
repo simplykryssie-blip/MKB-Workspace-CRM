@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { LogoMark } from "@/components/brand/Logo";
 import { SectionView } from "@/components/tax/TaxInterview";
 import { BOOKS_SECTIONS } from "@/lib/books/intake";
-import { docsFor, missingIn, sectionVisible, type Answers, type Row } from "@/lib/tax/interview/engine";
+import { docsFor, missingIn, sectionVisible, type Answers, type Row, type SecureKind } from "@/lib/tax/interview/engine";
 import { SignaturePad } from "@/components/ui/SignaturePad";
 
 /**
@@ -162,7 +162,7 @@ function Runner({ data, api, reload, onDone, onGone }: { data: Loaded; api: Api;
   const setVal = (qid: string, v: string) => { dirty.current = true; setAnswers((x) => ({ ...x, [qid]: v })); };
   const setRows = (sid: string, rows: Row[]) => { dirty.current = true; setAnswers((x) => ({ ...x, [sid]: rows })); };
   // Full numbers go straight to encrypted storage. Nothing here can read them back.
-  const secure = async (key: string, _kind: "ssn" | "ein" | "bank", value: string) => {
+  const secure = async (key: string, _kind: SecureKind, value: string) => {
     try { return await api("PUT", "/secure", { key, value }); } catch (e) { if (e instanceof LinkError && (e.status === 410 || e.status === 404)) onGone(e); throw e; }
   };
 

@@ -10,8 +10,8 @@ import { canDo, clientAccess } from "@/lib/team/policy";
 import type { ServiceKey } from "@/lib/types";
 import { all, badRequest, forbidden, HttpError, json, notFound, now, one, rateLimit, run, str, type AppEnv, type Db } from "./core";
 import { decryptField, encryptField } from "./crypto";
-import { audit, hasSensitivePerm, requirePermission, sendEmail, type Actor } from "./identity";
-import { assignmentSets, setIdentifier } from "./clients";
+import { audit, hasSensitivePerm, requirePermission, sendEmail, type Actor, type LinkActor } from "./identity";
+import { aad as vaultAad, assignmentSets, vaultKey, type VaultField } from "./clients";
 import { notify } from "./notifications";
 import { sendTemplate } from "./email";
 import { buildIntakePdf, buildLetterPdf } from "./intake-pdf";
@@ -291,8 +291,8 @@ export async function saveFees(env: AppEnv, a: Actor, fees: FeeItem[]) {
 }
 
 /* ---------------------------------------------------------------- sensitive interview answers */
-type SecureKind = "ssn" | "ein" | "bank";
-const REVEAL: Record<SecureKind, string> = { ssn: "tax.revealSsn", ein: "tax.ein", bank: "tax.bank" };
+type SecureKind = "ssn" | "ein" | "bank" | "pin";
+const REVEAL: Record<SecureKind, string> = { ssn: "tax.revealSsn", ein: "tax.ein", bank: "tax.bank", pin: "tax.revealSsn" };
 const validKey = (k: string) => /^[A-Za-z0-9_.-]{1,120}$/.test(k);
 
 /** Stores a full SSN/EIN/bank number from the interview, encrypted. Only the last four stay in the answers. */
@@ -302,7 +302,7 @@ export async function setSecureAnswer(env: AppEnv, a: Actor, id: string, key: st
   await load(env, a, id);
   if (!validKey(key) || !(kind in REVEAL)) throw badRequest("Unknown answer.");
   const d = value.replace(/\D/g, "");
-  if (kind === "bank" ? d.length < 4 || d.length > 17 : d.length !== 9) throw badRequest(kind === "bank" ? "Enter the full account or routing number." : "Enter all 9 digits.");
+  if (kind === "bank" ? d.length < 4 || d.length > 17 : d.length !== (kind === "pin" ? 6 : 9)) throw badRequest(kind === "bank" ? "Enter the full account or routing number." : kind === "pin" ? "Enter all 6 digits of the IP PIN." : "Enter all 9 digits.");
   if (!env.ENCRYPTION_KEY) throw new HttpError(500, "Server encryption key is not configured.");
   const e = await encryptField(env.ENCRYPTION_KEY, d, `tax_return:${id}:${key}`);
   await run(env.DB, "INSERT INTO vault (owner_type, owner_id, field, ciphertext, iv, key_version, last4, kind, updated_at, updated_by) VALUES ('tax_return', ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(owner_type, owner_id, field) DO UPDATE SET ciphertext = excluded.ciphertext, iv = excluded.iv, last4 = excluded.last4, kind = excluded.kind, updated_at = excluded.updated_at, updated_by = excluded.updated_by", id, key, e.ciphertext, e.iv, Number(env.ENCRYPTION_KEY_VERSION ?? 1), d.slice(-4), kind, now(), a.member.id);
@@ -393,39 +393,91 @@ export async function syncProfileFromReturn(env: AppEnv, a: Actor, id: string) {
   requirePermission(a, "tax", "edit");
   if (a.kind !== "staff") throw forbidden();
   const r = await load(env, a, id);
+  // Same permission rules as editing the profile: identifiers need the sensitive "edit" grant, contact details need client edit.
+  const ids = r.kind === "individual" ? hasSensitivePerm(a, "tax.editSsn") || hasSensitivePerm(a, "exp.editSsn") : hasSensitivePerm(a, "tax.ein");
+  const out = await applyInterviewToProfile(env, r, { actor: a, memberId: a.member.id, byClient: r.organizer?.interview?.enteredBy === "client", identifiers: ids, contact: canDo(a.policy, a.member, "crm", "edit") });
+  return { updated: out.updated, skipped: out.skipped, changed: out.changed };
+}
+
+type ProfileChange = { label: string; kind: "added" | "changed"; from?: string; to: string };
+const digitsOf = (v: string) => v.replace(/\D/g, "");
+
+/**
+ * Copies what the client confirmed in the interview onto their profile — the
+ * FULL SSN/ITIN or EIN (decrypted from the interview's vault entry and
+ * re-encrypted into the client's), date of birth, and for individuals phone,
+ * email and home address. Values already on the profile that the interview
+ * changes are listed (masked), logged on the client's timeline and audited;
+ * when the client made them through their link, the tax team gets a bell.
+ */
+export async function applyInterviewToProfile(env: AppEnv, r: TaxReturn, o: { actor: Actor | LinkActor; memberId: string | null; byClient: boolean; identifiers: boolean; contact: boolean }) {
   const ans = (r.organizer?.interview?.answers ?? {}) as Record<string, unknown>;
   const val = (k: string) => (typeof ans[k] === "string" ? (ans[k] as string).trim() : "");
   const updated: string[] = [];
   const skipped: string[] = [];
-  const fromVault = async (key: string) => {
-    const v = await one<{ ciphertext: string; iv: string; kind: SecureKind }>(env.DB, "SELECT ciphertext, iv, kind FROM vault WHERE owner_type = 'tax_return' AND owner_id = ? AND field = ?", id, key);
-    return v ? decryptField(env.ENCRYPTION_KEY!, v, `tax_return:${id}:${key}`) : null;
+  const changes: ProfileChange[] = [];
+  const t = now();
+  const by = o.memberId ?? (o.actor.kind === "link" ? `link:${o.actor.linkId}` : "system");
+  const { key, version } = vaultKey(env);
+  const fromInterview = async (field: string) => {
+    const v = await one<{ ciphertext: string; iv: string }>(env.DB, "SELECT ciphertext, iv FROM vault WHERE owner_type = 'tax_return' AND owner_id = ? AND field = ?", r.id, field);
+    return v ? decryptField(key, v, `tax_return:${r.id}:${field}`) : null;
   };
-  const copy = async (label: string, run: () => Promise<unknown>) => {
-    try { await run(); updated.push(label); } catch (e) { skipped.push(`${label}: ${e instanceof Error ? e.message : "not saved"}`); }
+  const onProfile = async (field: VaultField) => {
+    const v = await one<{ ciphertext: string; iv: string }>(env.DB, "SELECT ciphertext, iv FROM vault WHERE owner_type = 'client' AND owner_id = ? AND field = ?", r.clientId, field);
+    return v ? decryptField(key, v, vaultAad(r.clientId, field)).catch(() => null) : null;
   };
+  const store = async (field: VaultField, value: string, last4: string | null, kind: string | null) => {
+    const e = await encryptField(key, value, vaultAad(r.clientId, field));
+    await run(env.DB, "INSERT INTO vault (owner_type, owner_id, field, ciphertext, iv, key_version, last4, kind, updated_at, updated_by) VALUES ('client', ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(owner_type, owner_id, field) DO UPDATE SET ciphertext = excluded.ciphertext, iv = excluded.iv, key_version = excluded.key_version, last4 = excluded.last4, kind = excluded.kind, updated_at = excluded.updated_at, updated_by = excluded.updated_by", r.clientId, field, e.ciphertext, e.iv, version, last4, kind, t, by);
+    if (field === "dob") await run(env.DB, "INSERT INTO vault (owner_type, owner_id, field, ciphertext, iv, key_version, last4, kind, updated_at, updated_by) VALUES ('client', ?, 'dob_year', '', '', 0, ?, NULL, ?, ?) ON CONFLICT(owner_type, owner_id, field) DO UPDATE SET last4 = excluded.last4, updated_at = excluded.updated_at", r.clientId, value.slice(0, 4), t, by);
+  };
+  const ident = async (label: string, field: VaultField, value: string, kind: string | null, mask: (v: string) => string) => {
+    if (!o.identifiers) return skipped.push(`${label}: your role can't change identifiers`);
+    const cur = await onProfile(field);
+    if (cur && digitsOf(cur) === digitsOf(value)) return;
+    await store(field, value, field === "dob" ? null : digitsOf(value).slice(-4), kind);
+    updated.push(label);
+    changes.push({ label, kind: cur ? "changed" : "added", from: cur ? mask(cur) : undefined, to: mask(value) });
+  };
+  const ssnMask = (v: string) => `ending ${digitsOf(v).slice(-4)}`;
   if (r.kind === "individual") {
-    const ssn = await fromVault("you.ssn");
-    if (ssn) await copy("SSN/ITIN", () => setIdentifier(env, a, r.clientId, "tax_id", ssn, ssn.startsWith("9") ? "ITIN" : "SSN"));
-    if (/^\d{4}-\d{2}-\d{2}$/.test(val("dob"))) await copy("date of birth", () => setIdentifier(env, a, r.clientId, "dob", val("dob")));
-    // Contact details the client confirmed (only fields they actually answered).
-    const cur = await one<{ phone: string | null; email: string | null; address: string | null; rev: number }>(env.DB, "SELECT phone, email, address, rev FROM clients WHERE id = ?", r.clientId);
+    const ssn = await fromInterview("you.ssn");
+    if (ssn && digitsOf(ssn).length === 9) { const d = digitsOf(ssn); await ident("SSN/ITIN", "tax_id", `${d.slice(0, 3)}-${d.slice(3, 5)}-${d.slice(5)}`, d.startsWith("9") ? "ITIN" : "SSN", ssnMask); }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(val("dob")) && !isNaN(Date.parse(val("dob")))) await ident("date of birth", "dob", val("dob"), null, (v) => new Date(`${v}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }));
+    const cur = await one<{ phone: string | null; email: string | null; address: string | null }>(env.DB, "SELECT phone, email, address FROM clients WHERE id = ?", r.clientId);
     if (cur) {
-      const address = val("street") && val("city") && val("state") ? JSON.stringify({ line1: val("street"), city: val("city"), state: val("state"), zip: val("zip") }) : cur.address;
-      const phone = val("phone") || cur.phone;
-      const email = (val("email") || cur.email || "").toLowerCase();
-      if (phone !== cur.phone || email !== cur.email || address !== cur.address) {
-        if (!canDo(a.policy, a.member, "crm", "edit")) skipped.push("contact details: your role can't edit client details");
+      const addrNow = json<Record<string, string>>(cur.address, {});
+      const addrNew = val("street") && val("city") && val("state") ? { line1: val("street"), city: val("city"), state: val("state"), zip: val("zip") } : null;
+      const fmtAddr = (x: Record<string, string>) => [x.line1, x.city, [x.state, x.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+      const phone = val("phone"), email = val("email").toLowerCase();
+      const diffs: ProfileChange[] = [];
+      if (phone && digitsOf(phone) !== digitsOf(cur.phone ?? "")) diffs.push({ label: "phone", kind: cur.phone ? "changed" : "added", from: cur.phone || undefined, to: phone });
+      if (email && email !== (cur.email ?? "").toLowerCase()) diffs.push({ label: "email", kind: cur.email ? "changed" : "added", from: cur.email || undefined, to: email });
+      if (addrNew && fmtAddr(addrNew).toLowerCase() !== fmtAddr(addrNow).toLowerCase()) diffs.push({ label: "home address", kind: fmtAddr(addrNow) ? "changed" : "added", from: fmtAddr(addrNow) || undefined, to: fmtAddr(addrNew) });
+      if (diffs.length) {
+        if (!o.contact) skipped.push("contact details: your role can't edit client details");
         else {
-          await run(env.DB, "UPDATE clients SET phone = ?, email = ?, address = ?, rev = rev + 1, updated_at = ? WHERE id = ?", phone, email, address, now(), r.clientId);
+          await run(env.DB, "UPDATE clients SET phone = ?, email = ?, address = ?, rev = rev + 1, updated_at = ? WHERE id = ?", phone || cur.phone, email || cur.email, addrNew ? JSON.stringify(addrNew) : cur.address, t, r.clientId);
           updated.push("contact details");
+          changes.push(...diffs);
         }
       }
     }
   } else {
-    const ein = await fromVault("entity.ein");
-    if (ein) await copy("EIN", () => setIdentifier(env, a, r.clientId, "ein", ein));
+    const ein = await fromInterview("entity.ein");
+    if (ein && digitsOf(ein).length === 9) { const d = digitsOf(ein); await ident("EIN", "ein", `${d.slice(0, 2)}-${d.slice(2)}`, null, ssnMask); }
   }
-  if (updated.length) await audit(env.DB, a, { action: "Record update", resource: `Client ${r.clientId}`, department: "tax", meta: `Profile updated from tax intake ${id}: ${updated.join(", ")}` });
-  return { updated, skipped };
+  const changed = changes.filter((c) => c.kind === "changed");
+  if (changes.length) {
+    const text = (c: ProfileChange) => c.kind === "changed" ? `${c.label} changed (was ${c.from}, now ${c.to})` : `${c.label} added (${c.to})`;
+    const who = o.byClient ? "the client" : "staff";
+    await run(env.DB, "INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'status', ?, ?, ?, ?)", randomId("x"), r.clientId, `Profile updated from the ${r.taxYear} tax interview by ${who}: ${changes.map(text).join("; ")}`, o.byClient ? "client" : "staff", o.memberId, t);
+    await audit(env.DB, o.actor, { action: "Record update", resource: `Client ${r.clientId}`, department: "tax", meta: `Profile updated from tax interview ${r.id}: ${changes.map((c) => `${c.label} ${c.kind}`).join(", ")} (values not logged)` });
+    if (o.byClient && changed.length) {
+      const c = await one<{ name: string }>(env.DB, "SELECT name FROM clients WHERE id = ?", r.clientId);
+      await notify(env, { module: "tax" }, { kind: "intake", title: `${c?.name ?? "A client"} changed information already on their profile`, body: `In the ${r.taxYear} tax interview: ${changed.map(text).join("; ")}`, href: `/clients/${r.clientId}#activity` });
+    }
+  }
+  return { updated, skipped, changed: changes };
 }

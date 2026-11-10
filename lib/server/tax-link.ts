@@ -25,7 +25,7 @@ import { loadFees } from "./settings";
 import { sendTemplate } from "./email";
 import { notify } from "./notifications";
 import { buildIntakePdf, buildLetterPdf } from "./intake-pdf";
-import { storeClientPdfAs, loadReturn, toReturn, type TaxRow } from "./tax";
+import { applyInterviewToProfile, storeClientPdfAs, loadReturn, toReturn, type TaxRow } from "./tax";
 import { sha256Bytes, signatureFrom } from "./signature";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -145,10 +145,10 @@ export async function publicSecureTaxInterview(env: AppEnv, token: string, ip: s
   const { r, actor } = await fromLink(env, token, ip);
   if (!(await rateLimit(env.DB, `linksecure:${actor.linkId}`, 60, 60))) throw new HttpError(429, "Too many changes in the last hour. Please try again later.", "rate_limited");
   const key = typeof b.key === "string" ? b.key : "";
-  const kind = b.kind === "ssn" || b.kind === "ein" || b.kind === "bank" ? b.kind : null;
+  const kind = b.kind === "ssn" || b.kind === "ein" || b.kind === "bank" || b.kind === "pin" ? b.kind : null;
   if (!/^[A-Za-z0-9_.-]{1,120}$/.test(key) || !kind) throw badRequest("Unknown answer.");
   const d = typeof b.value === "string" ? b.value.replace(/\D/g, "") : "";
-  if (kind === "bank" ? d.length < 4 || d.length > 17 : d.length !== 9) throw badRequest(kind === "bank" ? "Enter the full account or routing number." : "Enter all 9 digits.");
+  if (kind === "bank" ? d.length < 4 || d.length > 17 : d.length !== (kind === "pin" ? 6 : 9)) throw badRequest(kind === "bank" ? "Enter the full account or routing number." : kind === "pin" ? "Enter all 6 digits of the IP PIN." : "Enter all 9 digits.");
   if (!env.ENCRYPTION_KEY) throw new HttpError(500, "Server encryption key is not configured.");
   const e = await encryptField(env.ENCRYPTION_KEY, d, `tax_return:${r.id}:${key}`);
   await run(env.DB, "INSERT INTO vault (owner_type, owner_id, field, ciphertext, iv, key_version, last4, kind, updated_at, updated_by) VALUES ('tax_return', ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(owner_type, owner_id, field) DO UPDATE SET ciphertext = excluded.ciphertext, iv = excluded.iv, last4 = excluded.last4, kind = excluded.kind, updated_at = excluded.updated_at, updated_by = excluded.updated_by", r.id, key, e.ciphertext, e.iv, Number(env.ENCRYPTION_KEY_VERSION ?? 1), d.slice(-4), kind, now(), `link:${actor.linkId}`);
@@ -205,6 +205,9 @@ export async function publicSubmitTaxInterview(env: AppEnv, token: string, ip: s
   if (!res.meta.changes) throw new HttpError(409, "Your interview was updated somewhere else. We loaded the latest version.", "conflict");
   await useLink(env, l.id);
   await run(env.DB, "UPDATE clients SET module_data = ?, rev = rev + 1, updated_at = ? WHERE id = ?", JSON.stringify(md), t, c.id);
+  // Copy what they confirmed onto their profile: full SSN/EIN, date of birth, contact details (changes are flagged to staff).
+  const fresh = toReturn((await one<TaxRow>(env.DB, "SELECT * FROM tax_returns WHERE id = ?", r.id))!);
+  const profile = await applyInterviewToProfile(env, fresh, { actor, memberId: null, byClient: true, identifiers: true, contact: true }).catch((e) => { console.error("profile sync", e instanceof Error ? e.message : e); return null; });
   // Keep the client's Tax Preparation engagement in step with the return.
   if (moving && r.enrollmentId) await run(env.DB, "UPDATE client_enrollments SET stage = 'Awaiting Documents', status = 'waiting_on_client', progress = ? WHERE id = ?", Math.round((STAGES.tax.indexOf("Awaiting Documents") / (STAGES.tax.length - 1)) * 100), r.enrollmentId);
   await env.FILES.put(`clients/${c.id}/signatures/${r.id}-interview.png`, sigPng, { httpMetadata: { contentType: "image/png" }, customMetadata: { taxReturn: r.id, signedBy: consent, signedAt: t, sha256: await sha256Bytes(sigPng) } });
@@ -234,5 +237,5 @@ export async function publicSubmitTaxInterview(env: AppEnv, token: string, ip: s
   const lead = c.status === "prospect";
   await notify(env, { module: "tax" }, { kind: "intake", title: `${c.name} submitted their ${r.taxYear} tax interview`, body: lead ? "A lead (not a client yet) — review it, then accept or decline on the lead" : `${requested.length} document${requested.length === 1 ? "" : "s"} requested · ready for your review`, href: lead ? `/leads/${(await one<{ lead_id: string | null }>(env.DB, "SELECT lead_id FROM clients WHERE id = ?", c.id))?.lead_id ?? ""}` : `/services/tax-preparation/returns/${r.id}`, ...{} });
   await audit(env.DB, actor, { action: "Record update", resource: `Tax return ${r.id}`, department: "tax", meta: `Interview submitted online and signed (drawn)${letterParts ? `; engagement letter v${engagement.version} signed` : ""}; ${requested.length} documents requested${to ? (emailed ? "; emailed" : "; email queued") : ""}` });
-  return { submitted: true, documents: outstanding, emailed };
+  return { submitted: true, documents: outstanding, emailed, profileUpdated: profile?.updated ?? [] };
 }

@@ -11,7 +11,7 @@ import { SectionView } from "@/components/tax/TaxInterview";
 import { useClients } from "@/lib/store/clients-store";
 import { BACKEND, call, RemoteError } from "@/lib/sync/remote";
 import { BOOKS_INTAKE_VERSION, BOOKS_SECTIONS, pickableAddOns } from "@/lib/books/intake";
-import { docsFor, display, missingIn, qVisible, rowsOf, sectionVisible, type Answers, type Row } from "@/lib/tax/interview/engine";
+import { docsFor, display, missingIn, qVisible, rowsOf, sectionVisible, type Answers, type Row, type SecureKind } from "@/lib/tax/interview/engine";
 import { applyPrefill, prefillFrom } from "@/lib/tax/interview/prefill";
 import { useServiceFees } from "@/lib/fees/use-fees";
 import { fmtDate } from "@/lib/format";
@@ -84,7 +84,7 @@ function Runner({ intake, client, reload }: { intake: Intake; client: Client; re
   const setRows = (sid: string, rows: Row[]) => setAnswers((x) => ({ ...x, [sid]: rows }));
   // Full numbers go straight to encrypted storage; only the last 4 stay in the answers.
   // EIN → the client's vault; bank account / routing numbers → this intake's vault.
-  const secure = async (key: string, kind: "ssn" | "ein" | "bank", value: string) => {
+  const secure = async (key: string, kind: SecureKind, value: string) => {
     if (kind === "ein") return call("PUT", `/api/clients/${client.id}/identifiers/ein`, { value });
     if (kind === "bank") return call("PUT", `/api/books/intakes/${intake.id}/secure`, { key, value });
     throw new Error("Not collected here.");

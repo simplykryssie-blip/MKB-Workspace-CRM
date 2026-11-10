@@ -41,7 +41,11 @@ export type QType =
   /** SSN or EIN depending on the owner type — last four only. */
   | "tin"
   /** Bank routing / account — last four only. */
-  | "bank";
+  | "bank"
+  /** IRS Identity Protection PIN (6 digits) — encrypted like an SSN, last four only. */
+  | "ippin";
+/** Kinds of numbers that go straight to the encrypted vault. */
+export type SecureKind = "ssn" | "ein" | "bank" | "pin";
 
 export type Q = {
   id: string;
@@ -60,6 +64,8 @@ export type Q = {
   /** Firm warning shown prominently (always, or only when the answer equals `warnWhen`). */
   warn?: string;
   warnWhen?: string;
+  /** A helpful outside link shown with the help or warning (opens in a new tab). */
+  link?: { href: string; label: string };
 };
 
 export type Section = {
@@ -181,9 +187,9 @@ export function display(q: Q, v?: string) {
 }
 
 /** Keep only the last four digits of a sensitive number. */
-export const maskLast4 = (raw: string, kind: "ssn" | "ein" | "bank") => {
+export const maskLast4 = (raw: string, kind: SecureKind) => {
   const d = raw.replace(/\D/g, "");
   if (d.length < 4) return "";
   const l4 = d.slice(-4);
-  return kind === "ssn" ? `•••-••-${l4}` : kind === "ein" ? `••-•••${l4}` : `••••${l4}`;
+  return kind === "ssn" ? `•••-••-${l4}` : kind === "ein" ? `••-•••${l4}` : kind === "pin" ? `••${l4}` : `••••${l4}`;
 };
