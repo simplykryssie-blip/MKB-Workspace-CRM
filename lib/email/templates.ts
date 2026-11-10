@@ -6,7 +6,7 @@
  * document contents in an email.
  */
 
-export type TemplateKey = "tax_intake_received" | "tax_document_reminder" | "tax_document_request" | "tax_extension_filed" | "invoice_sent" | "books_intake_received" | "books_intake_link";
+export type TemplateKey = "tax_intake_received" | "tax_document_reminder" | "tax_document_request" | "tax_extension_filed" | "invoice_sent" | "books_intake_received" | "books_intake_link" | "books_proposal" | "books_proposal_signed";
 
 export type EmailWording = {
   subject: string;
@@ -70,14 +70,42 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
   books_intake_received: {
     key: "books_intake_received",
     name: "Bookkeeping intake received",
-    when: "Sent right after a bookkeeping intake is submitted. The PDF copy is attached.",
-    placeholders: ["firstName", "businessName", "date", "plan"],
+    when: "Sent right after a bookkeeping intake is submitted. The signed PDF copy is attached. No price yet — MKB reviews it first and sends the proposal.",
+    placeholders: ["firstName", "businessName", "date"],
     subject: "We received your bookkeeping intake — here's what happens next",
-    heading: "Thank you, {{firstName}} — we're getting {{businessName}} set up.",
-    intro: "We received your bookkeeping intake on {{date}}. A copy is attached and saved in your client portal. Recommended plan: {{plan}}.",
+    heading: "Thank you, {{firstName}} — we received {{businessName}}'s intake.",
+    intro: "We received your signed bookkeeping intake on {{date}}. A copy is attached. Our team is reviewing your answers to put together the right plan and price for you.",
     docsTitle: "What we need from you",
-    docsNote: "Upload these in your portal. Please don't email bank statements or tax documents.",
-    steps: "Invite MKB to your accounting software (we'll send instructions if you need them).\nWe connect your accounts and review your books, including any catch-up months.\nWe confirm your plan and your first monthly close date.\nEach month you get your reports and a list of anything we need from you.",
+    docsNote: "Upload these in your client portal. Please don't email bank statements or tax documents.",
+    steps: "We review your answers and confirm the right plan and price.\nWe email you your proposal and engagement letter to review and sign online.\nOnce you sign, we connect your accounts and set your first monthly close date.\nEach month you get your reports and a list of anything we need from you.",
+    button: "Open your client portal",
+    closing: "Questions? Reply through your portal or call us at 833-379-3320.",
+  },
+  books_proposal: {
+    key: "books_proposal",
+    name: "Bookkeeping proposal",
+    when: "Sent when staff send the reviewed proposal. The button opens the client's private link to review the price and sign the engagement letter.",
+    placeholders: ["firstName", "businessName", "expires", "staffName"],
+    subject: "Your MKB bookkeeping proposal is ready to review and sign",
+    heading: "Hi {{firstName}}, your proposal for {{businessName}} is ready.",
+    intro: "{{staffName}} reviewed your intake and prepared your bookkeeping proposal. Open your private link to see your plan and price, read the engagement letter and sign it online — no account or password needed.",
+    docsTitle: "",
+    docsNote: "",
+    steps: "Review your plan and price.\nRead the engagement letter.\nSign with your finger or mouse and submit.",
+    button: "Review and sign",
+    closing: "This link is just for you — please don't forward it. It expires on {{expires}}. Questions about your price? Call us at 833-379-3320 before you sign.",
+  },
+  books_proposal_signed: {
+    key: "books_proposal_signed",
+    name: "Bookkeeping proposal signed",
+    when: "Sent when the client signs the bookkeeping proposal and engagement letter. The signed PDF is attached.",
+    placeholders: ["firstName", "businessName", "date", "plan"],
+    subject: "Your signed MKB bookkeeping engagement letter",
+    heading: "Welcome aboard, {{firstName}}!",
+    intro: "Thank you for signing your bookkeeping proposal and engagement letter on {{date}}. A signed copy is attached. Your plan: {{plan}}.",
+    docsTitle: "",
+    docsNote: "",
+    steps: "We connect your accounts and review your books, including any catch-up months.\nWe confirm your first monthly close date.\nEach month you get your reports and a list of anything we need from you.",
     button: "Open your client portal",
     closing: "Questions? Reply through your portal or call us at 833-379-3320.",
   },
@@ -88,10 +116,10 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
     placeholders: ["firstName", "businessName", "expires", "days", "staffName"],
     subject: "Your MKB bookkeeping intake — private link inside",
     heading: "Hi {{firstName}}, let's get {{businessName}} set up.",
-    intro: "{{staffName}} at MKB Financial Group sent you a private link to complete your bookkeeping intake on your phone or computer — no account or password needed. Your answers save as you go, so you can stop and come back. At the end you'll review our engagement letter, sign it online and submit.",
+    intro: "{{staffName}} at MKB Financial Group sent you a private link to complete your bookkeeping intake on your phone or computer — no account or password needed. Your answers save as you go, so you can stop and come back. At the end you'll sign and submit. We then review your answers and email you your proposal and engagement letter.",
     docsTitle: "",
     docsNote: "",
-    steps: "Answer the questions about your business, accounts and goals.\nReview the engagement letter, sign it with your finger or mouse, and submit.\nWe'll email you a copy, your recommended plan and the list of documents to upload in your client portal.",
+    steps: "Answer the questions about your business, accounts and goals.\nSign with your finger or mouse and submit.\nWe review your answers and email you your proposal and engagement letter to sign.",
     button: "Start my intake",
     closing: "This link is just for you — please don't forward it. It expires on {{expires}} ({{days}} days) and stops working once you submit. Didn't expect this email or need a new link? Call us at 833-379-3320.",
   },

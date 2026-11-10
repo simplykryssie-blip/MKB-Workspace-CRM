@@ -69,7 +69,7 @@ export function IntakeLinkPanel({ intake, defaultEmail, beforeSend, reload }: { 
           <Button size="sm" variant={active ? "secondary" : "primary"} icon={Mail} onClick={() => { setEmail(defaultEmail || link?.email || ""); setOpen(true); }}>{link ? "Send a new link" : "Send intake link"}</Button>
         </div>
       </Card>
-      <Modal open={open} onClose={close} title="Send intake link" description="The client fills in this intake on their phone or computer, accepts the engagement letter online and submits — no portal login."
+      <Modal open={open} onClose={close} title="Send intake link" description="The client fills in this intake on their phone or computer, signs and submits — no portal login. You then review the price and send the proposal."
         footer={sentUrl ? <Button variant="primary" onClick={close}>Done</Button> : <><Button onClick={close}>Cancel</Button><Button variant="primary" icon={Mail} disabled={busy || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())} onClick={send}>{busy ? "Sending…" : "Email the link"}</Button></>}>
         {sentUrl ? (
           <div className="space-y-3 text-[13.5px] text-ink-2">

@@ -1,31 +1,29 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, CheckCircle2, FileSignature, FileUp, Lock, Send } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, FileUp, Lock, Send } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { LogoMark } from "@/components/brand/Logo";
 import { SectionView } from "@/components/tax/TaxInterview";
-import { LetterView } from "@/components/engagement/LetterView";
-import { BOOKS_SECTIONS, pickableAddOns, quoteFor } from "@/lib/books/intake";
-import { feeWords, money, type ServiceFees } from "@/lib/fees/config";
-import type { Letter } from "@/lib/engagement/letters";
-import { docsFor, missingIn, rowsOf, sectionVisible, type Answers, type Row } from "@/lib/tax/interview/engine";
-import { QuoteView } from "./QuoteView";
+import { BOOKS_SECTIONS } from "@/lib/books/intake";
+import { docsFor, missingIn, sectionVisible, type Answers, type Row } from "@/lib/tax/interview/engine";
 import { SignaturePad } from "@/components/ui/SignaturePad";
 
 /**
  * The client's own bookkeeping intake, opened from the private link MKB emailed
  * them — no portal login. Same questions, engagement letter and submission as
- * the staff screen. Full EIN / bank numbers are sent once to encrypted storage
+ * the staff screen, but no price: MKB reviews the answers and sends the
+ * proposal and engagement letter to sign afterwards. Full EIN / bank numbers are sent once to encrypted storage
  * and never read back here: after saving, only the last 4 digits are shown.
  */
 type Loaded = {
   intake: { status: string; answers: Answers; step: number; rev: number; businessName: string; firstName: string };
   expiresAt: string;
-  letters: { books: Letter; terms: Letter };
-  fees: ServiceFees;
+  /** Add-on names to choose from (no prices — MKB sends the price after reviewing). */
+  addOnOptions: string[];
 };
+type Done = { documents: string[]; emailed: boolean };
 class LinkError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
@@ -43,7 +41,7 @@ export function PublicBooksIntake({ token }: { token: string }) {
   }, [base]);
   const [data, setData] = useState<Loaded | null>(null);
   const [err, setErr] = useState<LinkError | null>(null);
-  const [done, setDone] = useState<{ documents: string[]; emailed: boolean; plan: string } | null>(null);
+  const [done, setDone] = useState<Done | null>(null);
   const [gen, setGen] = useState(0);
   const load = useCallback(() => api<Loaded>("GET").then((d) => { setData(d); setGen((g) => g + 1); }).catch((e) => setErr(e instanceof LinkError ? e : new LinkError(0, "Something went wrong."))), [api]);
   useEffect(() => { void load(); }, [load]);
@@ -78,11 +76,11 @@ function Gone({ err }: { err: LinkError }) {
   );
 }
 
-function Thanks({ done, name }: { done: { documents: string[]; emailed: boolean; plan: string }; name: string }) {
+function Thanks({ done, name }: { done: Done; name: string }) {
   return (
     <Card className="p-6 sm:p-8">
       <h1 className="flex items-center gap-2 text-[22px] font-bold text-ink"><CheckCircle2 size={24} className="text-success" /> Thank you{name ? `, ${name}` : ""} — your intake is in.</h1>
-      <p className="mt-2 text-[14.5px] text-ink-2">We received your bookkeeping intake and your accepted engagement letter. {done.emailed ? "A copy is on its way to your email." : "We'll email you a copy shortly."} Recommended plan: <b>{done.plan}</b>.</p>
+      <p className="mt-2 text-[14.5px] text-ink-2">We received your signed bookkeeping intake. {done.emailed ? "A copy is on its way to your email." : "We'll email you a copy shortly."} Next, our team reviews your answers and emails you your proposal — your plan and price — with the engagement letter to sign.</p>
       {done.documents.length > 0 && (
         <div className="mt-4 rounded-xl border border-line bg-surface-2 p-4">
           <p className="text-[14px] font-semibold text-ink">Please upload these in your client portal</p>
@@ -97,10 +95,9 @@ function Thanks({ done, name }: { done: { documents: string[]; emailed: boolean;
 
 type Api = <T>(method: "GET" | "PUT" | "POST", path?: string, body?: unknown) => Promise<T>;
 
-function Runner({ data, api, reload, onDone, onGone }: { data: Loaded; api: Api; reload: () => void; onDone: (d: { documents: string[]; emailed: boolean; plan: string }) => void; onGone: (e: LinkError) => void }) {
-  const fees = data.fees;
-  // Add-on choices come from MKB's current price list.
-  const sections = useMemo(() => BOOKS_SECTIONS.map((s) => (s.id !== "goals" ? s : { ...s, questions: s.questions.map((q) => (q.id === "addons" ? { ...q, options: pickableAddOns(fees.books).map((x) => x.name) } : q)) })), [fees]);
+function Runner({ data, api, reload, onDone, onGone }: { data: Loaded; api: Api; reload: () => void; onDone: (d: Done) => void; onGone: (e: LinkError) => void }) {
+  // Add-on choices come from MKB's current list (names only).
+  const sections = useMemo(() => BOOKS_SECTIONS.map((s) => (s.id !== "goals" ? s : { ...s, questions: s.questions.map((q) => (q.id === "addons" ? { ...q, options: data.addOnOptions } : q)) })), [data.addOnOptions]);
   const [answers, setAnswers] = useState<Answers>(data.intake.answers);
   const rev = useRef(data.intake.rev);
   const dirty = useRef(false);
@@ -194,23 +191,18 @@ function Runner({ data, api, reload, onDone, onGone }: { data: Loaded; api: Api;
   );
 }
 
-function Review({ data, sections, answers, rev, api, flush, goTo, onDone, onErr }: { data: Loaded; sections: typeof BOOKS_SECTIONS; answers: Answers; rev: React.MutableRefObject<number>; api: Api; flush: () => Promise<void>; goTo: (sid: string) => void; onDone: (d: { documents: string[]; emailed: boolean; plan: string }) => void; onErr: (e: unknown) => void }) {
+function Review({ data, sections, answers, rev, api, flush, goTo, onDone, onErr }: { data: Loaded; sections: typeof BOOKS_SECTIONS; answers: Answers; rev: React.MutableRefObject<number>; api: Api; flush: () => Promise<void>; goTo: (sid: string) => void; onDone: (d: Done) => void; onErr: (e: unknown) => void }) {
   const [agree, setAgree] = useState(false);
-  const [accepted, setAccepted] = useState(false);
   const [sig, setSig] = useState("");
   const [drawn, setDrawn] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const missing = sections.flatMap((s) => (sectionVisible(s, answers) ? missingIn(s, answers).map((m) => ({ ...m, s })) : []));
   const docs = docsFor(sections, answers);
-  const quote = quoteFor(answers, data.fees.books);
-  const plan = quote.plan;
-  const L = data.letters;
-  const vars = { ...feeWords(data.fees), clientName: sig.trim() || data.intake.businessName, date: new Date().toLocaleDateString("en-US", { dateStyle: "long" }), service: plan.key, fee: `${quote.monthly.some((l) => l.startingAt) ? "starting at " : ""}${money(quote.monthlyTotal)}`, planIncludes: plan.includes.join("; "), addOns: [...quote.monthly.slice(1), ...quote.oneTime, ...quote.quoted].map((l) => l.label).join("; ") || "none" };
   const submit = async () => {
     setBusy(true);
     try {
       await flush();
-      const r = await api<{ documents: string[]; emailed: boolean; plan: string }>("POST", "/submit", { answers, rev: rev.current, consentName: sig.trim(), engagement: { version: L.books.version, termsVersion: L.terms.version }, signature: drawn });
+      const r = await api<Done>("POST", "/submit", { answers, rev: rev.current, consentName: sig.trim(), signature: drawn });
       onDone(r);
     } catch (e) { onErr(e); setBusy(false); }
   };
@@ -224,7 +216,7 @@ function Review({ data, sections, answers, rev, api, flush, goTo, onDone, onErr 
             <ul className="mt-1.5 space-y-1">{missing.slice(0, 12).map((m, i) => <li key={i}><button onClick={() => goTo(m.s.id)} className="text-left text-[13px] text-accent hover:underline">{m.s.title}: {m.label}</button></li>)}</ul>
           </div>
         ) : <p className="mt-1 text-[13.5px] text-success-ink">Every question is answered.</p>}
-        <QuoteView quote={quote} accounts={rowsOf(answers, "accounts").length} />
+        <p className="mt-3 text-[13.5px] text-ink-2">After you submit, our team reviews your answers and emails you your proposal — your plan and price — with the engagement letter to review and sign.</p>
       </Card>
       {docs.length > 0 && (
         <Card className="p-5 sm:p-6">
@@ -233,21 +225,13 @@ function Review({ data, sections, answers, rev, api, flush, goTo, onDone, onErr 
           <ul className="mt-2 grid gap-1 sm:grid-cols-2">{docs.map((d) => <li key={d.name} className="text-[13px] text-ink-2">• {d.name}</li>)}</ul>
         </Card>
       )}
-      <Card className="p-5 sm:p-6">
-        <h3 className="flex items-center gap-2 text-[15px] font-semibold text-ink"><FileSignature size={16} className="text-accent" /> Bookkeeping engagement letter</h3>
-        <div tabIndex={0} aria-label="Engagement letter text" className="scrollbar-thin mt-3 max-h-[380px] space-y-6 overflow-y-auto rounded-xl border border-line bg-bg p-4">
-          <LetterView title={L.books.title} body={L.books.body} version={L.books.version} vars={vars} />
-          <LetterView title={L.terms.title} body={L.terms.body} version={L.terms.version} vars={vars} />
-        </div>
-        <label className="mt-3 flex items-start gap-2 text-[14px] text-ink"><input type="checkbox" checked={accepted} onChange={() => setAccepted(!accepted)} className="mt-0.5 h-5 w-5 accent-[var(--accent)]" />I read the bookkeeping engagement letter and standard terms, and I agree to them.</label>
-      </Card>
       <Card className="space-y-3 p-5 sm:p-6">
-        <label className="flex items-start gap-2 text-[14px] text-ink"><input type="checkbox" checked={agree} onChange={() => setAgree(!agree)} className="mt-0.5 h-5 w-5 accent-[var(--accent)]" />My answers are complete and accurate to the best of my knowledge.</label>
+        <label className="flex items-start gap-2 text-[14px] text-ink"><input type="checkbox" checked={agree} onChange={() => setAgree(!agree)} className="mt-0.5 h-5 w-5 accent-[var(--accent)]" />My answers are complete and accurate to the best of my knowledge, and MKB may use them to prepare my bookkeeping proposal.</label>
         <div className="max-w-sm"><label htmlFor="pi-sig" className="mb-1 block text-[13px] font-medium text-ink-2">Your full name (printed)</label><input id="pi-sig" autoComplete="name" value={sig} onChange={(e) => setSig(e.target.value)} className="h-11 w-full rounded-xl border border-line bg-surface px-3 text-[15px] text-ink" /></div>
         <div className="max-w-lg"><SignaturePad label="Sign here with your finger or mouse" onChange={setDrawn} /></div>
-        <Button variant="primary" icon={Send} disabled={busy || !agree || !accepted || sig.trim().length < 3 || !drawn || missing.length > 0} onClick={submit}>{busy ? "Submitting…" : "Sign and submit"}</Button>
-        {!drawn && missing.length === 0 && <p className="text-[12px] text-muted">Draw your signature in the box to submit.</p>}
+        <Button variant="primary" icon={Send} disabled={busy || !agree || sig.trim().length < 3 || !drawn || missing.length > 0} onClick={submit}>{busy ? "Submitting…" : "Sign and submit"}</Button>
         {missing.length > 0 && <p className="text-[12px] text-muted">Answer the remaining questions to submit.</p>}
+        {!drawn && missing.length === 0 && <p className="text-[12px] text-muted">Draw your signature in the box to submit.</p>}
         <p className="text-[12px] text-muted">Once you submit, this link closes. To change something afterwards, call us at 833-379-3320.</p>
       </Card>
     </div>

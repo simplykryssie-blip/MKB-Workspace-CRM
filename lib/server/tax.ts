@@ -140,7 +140,10 @@ export async function saveReturn(env: AppEnv, a: Actor, id: string, next: Return
   const rules = await loadTaxRules(env);
   const efAt = STATUS_PATH.indexOf("Ready to E-file");
   const fromI = STATUS_PATH.indexOf(cur.status), toI = STATUS_PATH.indexOf(next.status);
-  if (rules.requireOwnerApproval && !next.ownerApproval && ((toI >= efAt && fromI < efAt && fromI >= 0) || next.efile.length > cur.efile.length)) throw badRequest("This return needs the Owner's final approval before it can be e-filed.");
+  // Two sign-offs before anything goes to the IRS: the reviewer's sign-off, then the Owner's final approval.
+  const toEfile = (toI >= efAt && fromI < efAt && fromI >= 0) || next.efile.length > cur.efile.length;
+  if (toEfile && !next.reviewSignoff) throw badRequest("This return needs the reviewer's sign-off before it can be e-filed.");
+  if (toEfile && rules.requireOwnerApproval && !next.ownerApproval) throw badRequest("This return needs the Owner's final approval before it can be e-filed.");
   const rest: (keyof TaxReturn)[] = ["form", "filingStatus", "states", "status", "dueAt", "extension", "approvalSignatureId", "clientApprovedAt", "organizer", "checklist", "pricing", "statusHistory", "notes", "completedAt", "enrollmentId", "dueDiligence", "extensionOnly"];
   const other = rest.filter((k) => !same(k));
   if (other.length) { need("edit", "edit returns"); changed.push(...other.map(String)); }

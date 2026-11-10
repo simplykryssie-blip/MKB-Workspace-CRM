@@ -4,7 +4,8 @@
  * requests the documents the answers call for, emails the client and alerts
  * the bookkeeping team. Server-only.
  */
-import { BOOKS_SECTIONS, quoteFor } from "@/lib/books/intake";
+import { BOOKS_SECTIONS, pickableAddOns, quoteFor } from "@/lib/books/intake";
+import { proposalAsText, proposalFromQuote, proposalLetterVars, proposalTotals, type Proposal, type ProposalBilling, type ProposalLine } from "@/lib/books/proposal";
 import { fillLetter } from "@/lib/engagement/letters";
 import { feeWords, money } from "@/lib/fees/config";
 import { docsFor, type Answers } from "@/lib/tax/interview/engine";
@@ -27,9 +28,9 @@ import { publicAssetOrigin } from "./email";
 import { loadFees } from "./settings";
 import { storeClientPdfAs } from "./tax";
 
-type Row = { id: string; client_id: string; status: "in_progress" | "submitted"; answers: string; step: number; entered_by: string; consent_name: string | null; engagement: string | null; submitted_at: string | null; workspace_id: string | null; history: string; created_at: string; updated_at: string; rev: number; c_name?: string };
-export type BooksIntake = { id: string; clientId: string; clientName: string; status: Row["status"]; answers: Answers; step: number; enteredBy: string; consentName?: string; engagement?: { version: number; termsVersion: number; acceptedName: string; acceptedAt: string; method: string; signature?: { key: string; sha256: string; bytes: number } }; submittedAt?: string; workspaceId?: string; history: { at: string; by: string; text: string }[]; createdAt: string; updatedAt: string; rev: number; /** The latest private link sent for this intake (never the link itself). */ link?: LinkInfo | null };
-const toIntake = (r: Row): BooksIntake => ({ id: r.id, clientId: r.client_id, clientName: r.c_name ?? "", status: r.status, answers: json(r.answers, {}), step: r.step, enteredBy: r.entered_by, consentName: r.consent_name ?? undefined, engagement: r.engagement ? json(r.engagement, undefined) : undefined, submittedAt: r.submitted_at ?? undefined, workspaceId: r.workspace_id ?? undefined, history: json(r.history, []), createdAt: r.created_at, updatedAt: r.updated_at, rev: r.rev });
+type Row = { id: string; client_id: string; status: "in_progress" | "submitted"; answers: string; step: number; entered_by: string; consent_name: string | null; engagement: string | null; submitted_at: string | null; workspace_id: string | null; history: string; created_at: string; updated_at: string; rev: number; proposal: string | null; c_name?: string };
+export type BooksIntake = { id: string; clientId: string; clientName: string; status: Row["status"]; answers: Answers; step: number; enteredBy: string; consentName?: string; engagement?: { version: number; termsVersion: number; acceptedName: string; acceptedAt: string; method: string; signature?: { key: string; sha256: string; bytes: number } }; submittedAt?: string; workspaceId?: string; history: { at: string; by: string; text: string }[]; createdAt: string; updatedAt: string; rev: number; /** The latest private link sent for this intake (never the link itself). */ link?: LinkInfo | null; /** MKB's reviewed price (staff only until it is sent). */ proposal?: Proposal | null; /** The latest proposal link (never the link itself). */ proposalLink?: LinkInfo | null };
+const toIntake = (r: Row): BooksIntake => ({ id: r.id, clientId: r.client_id, clientName: r.c_name ?? "", status: r.status, answers: json(r.answers, {}), step: r.step, enteredBy: r.entered_by, consentName: r.consent_name ?? undefined, engagement: r.engagement ? json(r.engagement, undefined) : undefined, submittedAt: r.submitted_at ?? undefined, workspaceId: r.workspace_id ?? undefined, history: json(r.history, []), createdAt: r.created_at, updatedAt: r.updated_at, rev: r.rev, proposal: r.proposal ? json<Proposal | null>(r.proposal, null) : null });
 const SQL = "SELECT i.*, c.name AS c_name FROM books_intakes i JOIN clients c ON c.id = i.client_id";
 const hist = (h: string, by: string, text: string) => JSON.stringify([{ at: now(), by, text }, ...json<unknown[]>(h, [])].slice(0, 200));
 const MAX = 200_000;
@@ -51,14 +52,14 @@ export async function listIntakes(env: AppEnv, a: Actor) {
   requireStaff(a);
   const rows = await all<Row>(env.DB, `${SQL} ORDER BY i.updated_at DESC`);
   const out: BooksIntake[] = [];
-  for (const r of rows) { const c = await one<ClientRow>(env.DB, `${CLIENT_SQL} WHERE c.id = ?`, r.client_id); if (c && (await canOpen(env, a, c))) out.push({ ...toIntake(r), link: await latestLink(env, "books_intake", r.id) }); }
+  for (const r of rows) { const c = await one<ClientRow>(env.DB, `${CLIENT_SQL} WHERE c.id = ?`, r.client_id); if (c && (await canOpen(env, a, c))) out.push({ ...toIntake(r), link: await latestLink(env, "books_intake", r.id), proposalLink: await latestLink(env, "books_proposal", r.id) }); }
   return { intakes: out };
 }
 
 export async function getIntake(env: AppEnv, a: Actor, id: string) {
   requirePermission(a, "books", "view");
   const r = await row(env, a, id);
-  return { intake: { ...toIntake(r), link: await latestLink(env, "books_intake", r.id) } };
+  return { intake: { ...toIntake(r), link: await latestLink(env, "books_intake", r.id), proposalLink: await latestLink(env, "books_proposal", r.id) } };
 }
 
 /** Starts an intake for a client (one open intake at a time). */
@@ -127,44 +128,37 @@ async function completeSubmit(env: AppEnv, who: Submitter, r: Row, c: ClientRow,
   if (Number(b.rev) !== r.rev) throw new HttpError(409, "This intake was updated somewhere else. Reloading the latest version.", "conflict");
   const answers = cleanAnswers(b.answers);
   const consent = typeof b.consentName === "string" ? b.consentName.trim().slice(0, 120) : "";
-  if (consent.length < 2) throw badRequest(who.kind === "link" ? "Type your full name to accept and submit." : "Type the client's full name to confirm and accept.");
-  const [l, terms] = await Promise.all([letterVersion(env, "books", Number(b.engagement?.version)), letterVersion(env, "terms", Number(b.engagement?.termsVersion))]);
-  if (!l || !terms) throw badRequest("Accept the bookkeeping engagement letter to submit.");
-  // The client's drawn signature (required) — kept privately with their files and printed on the PDFs.
+  if (consent.length < 2) throw badRequest(who.kind === "link" ? "Type your full name to sign and submit." : "Type the client's full name.");
+  // The client's drawn signature confirming the answers (required) — kept privately and printed on the intake PDF.
   const sigPng = signatureFrom(b.signature);
-  const fees = await loadFees(env);
-  const quote = quoteFor(answers, fees.books);
-  const plan = quote.plan;
-  const monthlyText = `${quote.monthly.some((l) => l.startingAt) ? "starting at " : ""}${money(quote.monthlyTotal)}`;
   const t = now();
   const by = who.kind === "link" ? "client" : who.enteredBy;
   // Who did it, for the records: the staff member, or the client on their link (credited to nobody on staff).
   const staffId = who.kind === "staff" ? who.a.member.id : null;
   const histBy = staffId ?? "client (secure link)";
   const auditActor = who.kind === "staff" ? who.a : who.actor;
-  const sigKey = `clients/${c.id}/signatures/${id}-${randomId("sig")}.png`;
-  const engagement = { version: l.version, termsVersion: terms.version, acceptedName: consent, acceptedAt: t, method: by === "client" ? "online" : "in_office", signature: { key: sigKey, sha256: await sha256Bytes(sigPng), bytes: sigPng.length } };
+  // No price goes to the client now. The automatic quote becomes a draft for MKB's review;
+  // the reviewed proposal and the engagement letter are sent for signature afterwards.
+  const fees = await loadFees(env);
+  const draft = proposalFromQuote(quoteFor(answers, fees.books), t);
+  const sigKey = `clients/${c.id}/signatures/${id}-intake.png`;
   // Document names come from the answers on the server — not from the browser.
   const docs = docsFor(BOOKS_SECTIONS, answers).map((d) => d.name).slice(0, 60);
   const bizName = (typeof answers.legalName === "string" && answers.legalName.trim()) || c.name;
 
-  const res = await run(env.DB, "UPDATE books_intakes SET status = 'submitted', answers = ?, consent_name = ?, engagement = ?, entered_by = ?, submitted_at = ?, history = ?, updated_at = ?, rev = rev + 1 WHERE id = ? AND rev = ? AND status = 'in_progress'", JSON.stringify(answers), consent, JSON.stringify(engagement), by, t, hist(r.history, histBy, `Submitted (${who.kind === "link" ? "by the client through their secure link" : by === "client" ? "by the client" : "with staff"})`), t, id, r.rev);
+  const res = await run(env.DB, "UPDATE books_intakes SET status = 'submitted', answers = ?, consent_name = ?, entered_by = ?, submitted_at = ?, proposal = ?, history = ?, updated_at = ?, rev = rev + 1 WHERE id = ? AND rev = ? AND status = 'in_progress'", JSON.stringify(answers), consent, by, t, JSON.stringify(draft), hist(r.history, histBy, `Submitted and signed by ${consent} (${who.kind === "link" ? "online through their secure link" : by === "client" ? "by the client" : "with staff"}) — ready for review`), t, id, r.rev);
   if (!res.meta.changes) throw new HttpError(409, "This intake was updated somewhere else. Reloading the latest version.", "conflict");
-  await env.FILES.put(sigKey, sigPng, { httpMetadata: { contentType: "image/png" }, customMetadata: { intake: id, signedBy: consent, signedAt: t } });
+  await env.FILES.put(sigKey, sigPng, { httpMetadata: { contentType: "image/png" }, customMetadata: { intake: id, signedBy: consent, signedAt: t, sha256: await sha256Bytes(sigPng) } });
   // A submitted intake can't be opened by a link any more.
   if (who.kind === "staff") await run(env.DB, "UPDATE secure_links SET revoked_at = ?, revoked_by = ? WHERE purpose = 'books_intake' AND target_id = ? AND revoked_at IS NULL AND used_at IS NULL", t, `submitted:${who.a.member.id}`, id);
 
-  // PDF copy of the answers and the signed engagement letter, saved to Documents.
-  const pdf = await buildIntakePdf({ clientName: bizName, taxYear: new Date().getFullYear(), form: "1065", returnId: id, answers, submittedAt: t, enteredBy: by, consentName: consent, documents: docs, sections: BOOKS_SECTIONS, title: "Bookkeeping Intake", engagement: { title: l.title, version: l.version, acceptedName: consent, acceptedAt: t }, signaturePng: sigPng });
+  // PDF copy of the answers (with the signature), saved to Documents.
+  const pdf = await buildIntakePdf({ clientName: bizName, taxYear: new Date().getFullYear(), form: "1065", returnId: id, answers, submittedAt: t, enteredBy: by, consentName: consent, documents: docs, sections: BOOKS_SECTIONS, title: "Bookkeeping Intake", signaturePng: sigPng });
   const safe = bizName.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
   const intakeFile = `MKB-Bookkeeping-Intake-${safe}.pdf`;
-  await storeClientPdfAs(env, staffId, c.id, pdf, { name: `Bookkeeping intake (submitted ${longDate(t)})`, fileName: intakeFile, category: "Intake", service: "books", activity: "Saved a PDF copy of the bookkeeping intake to Documents" });
-  const vars = { ...feeWords(fees), clientName: bizName, date: longDate(t), service: plan.key, fee: monthlyText, taxYear: "", planIncludes: plan.includes.join("; "), addOns: [...quote.monthly.slice(1), ...quote.oneTime, ...quote.quoted].map((l) => `${l.label} (${l.billing === "quote" ? "custom quote" : `${l.startingAt ? "starting at " : ""}${money(l.amount)}${l.billing === "monthly" ? "/month" : " one-time"}`})`).join("; ") || "none" };
-  const letterPdf = await buildLetterPdf({ clientName: bizName, parts: [{ title: fillLetter(l.title, vars), body: fillLetter(l.body, vars), version: l.version }, { title: fillLetter(terms.title, vars), body: fillLetter(terms.body, vars), version: terms.version }], acceptedName: consent, acceptedAt: t, method: engagement.method as "online" | "in_office", signaturePng: sigPng });
-  const letterFile = `MKB-Bookkeeping-Engagement-Letter-${safe}.pdf`;
-  await storeClientPdfAs(env, staffId, c.id, letterPdf, { name: `Bookkeeping engagement letter (accepted ${longDate(t)})`, fileName: letterFile, category: "Engagement letter", service: "books", activity: `Bookkeeping engagement letter accepted by ${consent}${who.kind === "link" ? " online (secure link)" : ""}` });
+  await storeClientPdfAs(env, staffId, c.id, pdf, { name: `Bookkeeping intake (submitted ${longDate(t)})`, fileName: intakeFile, category: "Intake", service: "books", activity: "Saved a PDF copy of the signed bookkeeping intake to Documents" });
 
-  // Request the documents (shown on the client's Documents tab as outstanding).
+  // Request the documents (shown on the client's Documents tab as outstanding) — they can upload while MKB reviews.
   if (docs.length) {
     const cur = await one<{ module_data: string | null }>(env.DB, "SELECT module_data FROM clients WHERE id = ?", c.id);
     const md = json<Record<string, { name?: string; service?: string; status?: string }[]>>(cur?.module_data, {});
@@ -179,13 +173,13 @@ async function completeSubmit(env: AppEnv, who: Submitter, r: Row, c: ClientRow,
   const to = (typeof answers.email === "string" && answers.email) || c.email;
   if (to) {
     const contact = ((answers.owners as { name?: string }[] | undefined)?.[0]?.name || c.contact_name || c.name).trim().split(/\s+/)[0];
-    const out = await sendTemplate(env, "books_intake_received", { to, vars: { firstName: contact, businessName: bizName, date: longDate(t), plan: `${plan.key} — ${monthlyText}/month${quote.oneTimeTotal ? ` plus ${money(quote.oneTimeTotal)} one-time` : ""}` }, documents: docs, attachments: [{ filename: intakeFile, content: pdf }, { filename: letterFile, content: letterPdf }] });
+    const out = await sendTemplate(env, "books_intake_received", { to, vars: { firstName: contact, businessName: bizName, date: longDate(t) }, documents: docs, attachments: [{ filename: intakeFile, content: pdf }] });
     emailed = out.sent;
   }
-  await run(env.DB, "INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'intake', ?, ?, ?, ?)", randomId("x"), c.id, `Bookkeeping intake submitted${who.kind === "link" ? " by the client (secure link)" : ""} — ${docs.length} document${docs.length === 1 ? "" : "s"} requested; recommended plan ${plan.key}`, by === "client" ? "client" : "staff", staffId, t);
-  await notify(env, { module: "books", exceptId: staffId ?? undefined }, { kind: "intake", title: `${bizName} submitted their bookkeeping intake`, body: `Recommended plan: ${plan.key}${who.kind === "link" ? " · completed online by the client" : ""}`, href: `/services/bookkeeping?intake=${id}` });
-  await audit(env.DB, auditActor, { action: "Record update", resource: `Bookkeeping intake ${id}`, meta: `Submitted${who.kind === "link" ? " through secure link" : ""}; engagement letter v${l.version} accepted; ${docs.length} documents requested${to ? (emailed ? "; emailed" : "; email queued") : ""}` });
-  return { intake: toIntake((await one<Row>(env.DB, `${SQL} WHERE i.id = ?`, id))!), plan, quote, documents: docs, emailed };
+  await run(env.DB, "INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'intake', ?, ?, ?, ?)", randomId("x"), c.id, `Bookkeeping intake submitted${who.kind === "link" ? " by the client (secure link)" : ""} — ${docs.length} document${docs.length === 1 ? "" : "s"} requested; waiting for MKB's price review`, by === "client" ? "client" : "staff", staffId, t);
+  await notify(env, { module: "books", exceptId: staffId ?? undefined }, { kind: "intake", title: `${bizName} submitted their bookkeeping intake`, body: `Ready for review — check the price and send the proposal${who.kind === "link" ? " · completed online by the client" : ""}`, href: `/services/bookkeeping/intake/${id}` });
+  await audit(env.DB, auditActor, { action: "Record update", resource: `Bookkeeping intake ${id}`, meta: `Submitted${who.kind === "link" ? " through secure link" : ""}; signed (drawn); ${docs.length} documents requested${to ? (emailed ? "; emailed" : "; email queued") : ""}; proposal draft ${draft.plan} for review` });
+  return { intake: toIntake((await one<Row>(env.DB, `${SQL} WHERE i.id = ?`, id))!), documents: docs, emailed };
 }
 
 /* ---------------------------------------------------------------- full account numbers */
@@ -297,15 +291,14 @@ export async function publicIntake(env: AppEnv, token: string, ip: string) {
     await run(env.DB, "INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'intake', ?, 'client', NULL, ?)", randomId("x"), c.id, "Client opened their bookkeeping intake link", now());
     await audit(env.DB, actor, { action: "Record update", resource: `Bookkeeping intake ${r.id}`, meta: "Secure link opened for the first time" });
   }
-  const [letters, fees] = await Promise.all([currentLetters(env), loadFees(env)]);
+  const fees = await loadFees(env);
   const answers = json<Answers>(r.answers, {});
   const firstName = ((answers.owners as { name?: string }[] | undefined)?.[0]?.name || c.contact_name || c.name).trim().split(/\s+/)[0];
-  // Only what the form needs — no internal history, staff names, client id or vault data.
+  // Only what the form needs — no prices, internal history, staff names, client id or vault data.
   return {
     intake: { status: r.status, answers, step: r.step, rev: r.rev, businessName: (typeof answers.legalName === "string" && answers.legalName.trim()) || c.name, firstName },
     expiresAt: l.expiresAt,
-    letters: { books: letters.books, terms: letters.terms },
-    fees: { ...fees, updatedAt: undefined },
+    addOnOptions: pickableAddOns(fees.books).map((x) => x.name),
   };
 }
 
@@ -357,5 +350,184 @@ export async function publicSubmitIntake(env: AppEnv, token: string, ip: string,
   const out = await completeSubmit(env, { kind: "link", actor, sentBy: l.createdBy }, r, c, b);
   await useLink(env, l.id);
   // Only what the thank-you screen needs.
-  return { submitted: true, documents: out.documents, emailed: out.emailed, plan: out.plan.key };
+  return { submitted: true, documents: out.documents, emailed: out.emailed };
+}
+
+/* ================================================================ review → proposal → signature
+ * After submission MKB reviews the price (starting from the automatic quote),
+ * then emails the client a private link to the proposal and the engagement
+ * letter, which they sign with a drawn signature. Raising (or lowering) the
+ * price after it was sent or signed creates a new version that must be signed
+ * again; the earlier signed letter stays in Documents.
+ */
+const BILLINGS: ProposalBilling[] = ["monthly", "one_time", "quote"];
+const proposalOf = (r: Row) => (r.proposal ? json<Proposal | null>(r.proposal, null) : null);
+
+function cleanProposal(b: { plan?: unknown; lines?: unknown; message?: unknown }, plans: string[]): Pick<Proposal, "plan" | "lines" | "message"> {
+  const plan = typeof b.plan === "string" ? b.plan.trim() : "";
+  if (!plans.includes(plan)) throw badRequest("Choose one of the bookkeeping plans.");
+  if (!Array.isArray(b.lines) || !b.lines.length || b.lines.length > 40) throw badRequest("Add the plan and any add-ons (up to 40 lines).");
+  const lines: ProposalLine[] = b.lines.map((x, i) => {
+    const l = (x ?? {}) as Record<string, unknown>;
+    const label = typeof l.label === "string" ? l.label.trim().slice(0, 140) : "";
+    const billing = BILLINGS.includes(l.billing as ProposalBilling) ? (l.billing as ProposalBilling) : null;
+    const amount = billing === "quote" ? 0 : Math.round(Number(l.amount) * 100) / 100;
+    if (!label) throw badRequest(`Line ${i + 1} needs a description.`);
+    if (!billing) throw badRequest(`Line ${i + 1}: choose monthly, one-time or custom quote.`);
+    if (!Number.isFinite(amount) || amount < 0 || amount > 1_000_000) throw badRequest(`Line ${i + 1}: enter an amount between $0 and $1,000,000.`);
+    return { id: typeof l.id === "string" && /^[\w-]{1,40}$/.test(l.id) ? l.id : randomId("pl"), label, billing, amount, startingAt: l.startingAt === true || undefined };
+  });
+  if (!lines.some((l) => l.billing === "monthly" && l.amount > 0)) throw badRequest("The proposal needs a monthly price.");
+  const message = typeof b.message === "string" ? b.message.trim().slice(0, 1500) : "";
+  return { plan, lines, message: message || undefined };
+}
+const sameTerms = (x: Pick<Proposal, "plan" | "lines" | "message">, y: Pick<Proposal, "plan" | "lines" | "message">) => JSON.stringify([x.plan, x.lines.map((l) => [l.label, l.billing, l.amount, !!l.startingAt]), x.message ?? ""]) === JSON.stringify([y.plan, y.lines.map((l) => [l.label, l.billing, l.amount, !!l.startingAt]), y.message ?? ""]);
+
+/** { plan, lines, message, rev } — saves MKB's reviewed price. Changing a sent or signed proposal starts a new version. */
+export async function saveProposal(env: AppEnv, a: Actor, id: string, b: { plan?: unknown; lines?: unknown; message?: unknown; rev?: unknown }) {
+  requirePermission(a, "books", "edit");
+  requireStaff(a);
+  const r = await row(env, a, id);
+  if (r.status !== "submitted") throw badRequest("The client needs to submit the intake first.");
+  if (r.workspace_id) throw badRequest("Bookkeeping has already started from this intake — change the plan in the workspace.");
+  if (Number(b.rev) !== r.rev) throw new HttpError(409, "Someone else updated this intake. Reloading the latest version.", "conflict");
+  const fees = await loadFees(env);
+  const next = cleanProposal(b, fees.books.plans.map((p) => p.key));
+  const cur = proposalOf(r) ?? proposalFromQuote(quoteFor(json<Answers>(r.answers, {}), fees.books), now());
+  if (sameTerms(cur, next)) return { intake: { ...toIntake(r), proposalLink: await latestLink(env, "books_proposal", id) }, unchanged: true };
+  const t = now();
+  const t0 = proposalTotals(cur), t1 = proposalTotals({ lines: next.lines });
+  let p: Proposal;
+  let note: string;
+  if (cur.status === "draft") {
+    p = { ...cur, ...next, updatedAt: t, updatedBy: a.member.id };
+    note = `Price reviewed: ${next.plan}, ${money(t1.monthly)}/month${t1.oneTime ? ` + ${money(t1.oneTime)} one-time` : ""}`;
+  } else {
+    // A sent or signed proposal changed: new version, the client must sign again.
+    const previous = cur.status === "signed" && cur.signedAt ? [...(cur.previous ?? []), { version: cur.version, signedAt: cur.signedAt, signedName: cur.signedName ?? "", monthlyTotal: t0.monthly, oneTimeTotal: t0.oneTime }] : cur.previous;
+    p = { version: cur.version + 1, status: "draft", ...next, suggested: cur.suggested, updatedAt: t, updatedBy: a.member.id, previous };
+    note = `Proposal revised to version ${p.version} (${money(t0.monthly)} → ${money(t1.monthly)}/month)${cur.status === "signed" ? " — the client must sign the new version" : ""}`;
+    await cancelLinks(env, "books_proposal", id, a.member.id);
+  }
+  const res = await run(env.DB, "UPDATE books_intakes SET proposal = ?, history = ?, updated_at = ?, rev = rev + 1 WHERE id = ? AND rev = ?", JSON.stringify(p), hist(r.history, a.member.id, note), t, id, r.rev);
+  if (!res.meta.changes) throw new HttpError(409, "Someone else updated this intake. Reloading the latest version.", "conflict");
+  await audit(env.DB, a, { action: "Record update", resource: `Bookkeeping intake ${id}`, meta: note });
+  return { intake: { ...toIntake((await one<Row>(env.DB, `${SQL} WHERE i.id = ?`, id))!), proposalLink: await latestLink(env, "books_proposal", id) } };
+}
+
+/** { email } — emails the client a private link to the reviewed proposal and the engagement letter to sign. */
+export async function sendProposal(env: AppEnv, a: Actor, id: string, b: { email?: unknown }) {
+  requirePermission(a, "books", "edit");
+  requireStaff(a);
+  const r = await row(env, a, id);
+  const p = proposalOf(r);
+  if (r.status !== "submitted" || !p) throw badRequest("Review the price before sending the proposal.");
+  if (p.status === "signed") throw badRequest("The client already signed this proposal. Change the price to send a new version.");
+  if (!p.updatedBy) throw badRequest("Review the price and save it before sending — the automatic quote is only a starting point.");
+  const c = await client(env, a, r.client_id);
+  const email = typeof b.email === "string" ? b.email.trim().toLowerCase().slice(0, 200) : "";
+  if (!EMAIL_RE.test(email)) throw badRequest("Enter the client's email address.");
+  if (!(await rateLimit(env.DB, `proposallink:${id}`, 10, 60))) throw new HttpError(429, "Too many proposals sent for this intake in the last hour.", "rate_limited");
+  const { token, info } = await createLink(env, { purpose: "books_proposal", targetId: id, clientId: c.id, email, memberId: a.member.id });
+  const url = `${linkOrigin(env)}/i/p/${token}`;
+  const answers = json<Answers>(r.answers, {});
+  const bizName = (typeof answers.legalName === "string" && answers.legalName.trim()) || c.name;
+  const firstName = ((answers.owners as { name?: string }[] | undefined)?.[0]?.name || c.contact_name || c.name).trim().split(/\s+/)[0];
+  const out = await sendTemplate(env, "books_proposal", { to: email, buttonUrl: url, vars: { firstName, businessName: bizName, expires: longDate(info.expiresAt), staffName: a.member.name } });
+  const t = now();
+  const next: Proposal = { ...p, status: "sent", sentAt: t, sentTo: email };
+  const text = `Proposal v${p.version} and engagement letter emailed to ${email} for signature${out.sent ? "" : " — email queued"}`;
+  await run(env.DB, "UPDATE books_intakes SET proposal = ?, history = ?, updated_at = ?, rev = rev + 1 WHERE id = ?", JSON.stringify(next), hist(r.history, a.member.id, text), t, id);
+  await run(env.DB, "INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'message', ?, 'staff', ?, ?)", randomId("x"), c.id, `Bookkeeping: ${text}`, a.member.id, t);
+  await audit(env.DB, a, { action: "Record update", resource: `Bookkeeping intake ${id}`, meta: `Proposal v${p.version} sent to ${email}; ${money(proposalTotals(p).monthly)}/month` });
+  return { intake: { ...toIntake((await one<Row>(env.DB, `${SQL} WHERE i.id = ?`, id))!), proposalLink: info }, emailed: out.sent, url };
+}
+
+/** Cancels the proposal link (it stops working). The proposal goes back to draft. */
+export async function cancelProposalLink(env: AppEnv, a: Actor, id: string) {
+  requirePermission(a, "books", "edit");
+  requireStaff(a);
+  const r = await row(env, a, id);
+  const n = await cancelLinks(env, "books_proposal", id, a.member.id);
+  const p = proposalOf(r);
+  if (p?.status === "sent") {
+    await run(env.DB, "UPDATE books_intakes SET proposal = ?, history = ?, updated_at = ?, rev = rev + 1 WHERE id = ?", JSON.stringify({ ...p, status: "draft" }), hist(r.history, a.member.id, "Proposal link cancelled"), now(), id);
+    await audit(env.DB, a, { action: "Record update", resource: `Bookkeeping intake ${id}`, meta: "Proposal link cancelled" });
+  }
+  return { cancelled: n > 0, intake: { ...toIntake((await one<Row>(env.DB, `${SQL} WHERE i.id = ?`, id))!), proposalLink: await latestLink(env, "books_proposal", id) } };
+}
+
+async function fromProposalLink(env: AppEnv, token: string, ip: string, touch = false) {
+  const l = await openLink(env, "books_proposal", token, ip, { touch });
+  const r = await one<Row>(env.DB, `${SQL} WHERE i.id = ?`, l.targetId);
+  const p = r ? proposalOf(r) : null;
+  if (!r || r.client_id !== l.clientId || !p) throw new HttpError(404, "This link isn't valid.", "not_found");
+  if (p.status === "signed") throw new HttpError(410, "This proposal is already signed — thank you. A copy was emailed to you.", "used");
+  if (p.status !== "sent") throw new HttpError(410, "This proposal is being updated. MKB Financial Group will send you the new version.", "cancelled");
+  const actor: LinkActor = { kind: "link", ip, clientId: l.clientId, linkId: l.id };
+  return { l, r, p, actor };
+}
+
+/** What the proposal link shows: the reviewed price and the engagement letter (filled in with it). */
+export async function publicProposal(env: AppEnv, token: string, ip: string) {
+  const { l, r, p, actor } = await fromProposalLink(env, token, ip, true);
+  const c = await one<ClientRow>(env.DB, `${CLIENT_SQL} WHERE c.id = ?`, r.client_id);
+  if (!c) throw new HttpError(404, "This link isn't valid.", "not_found");
+  if (l.firstOpen) {
+    await run(env.DB, "INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'intake', ?, 'client', NULL, ?)", randomId("x"), c.id, "Client opened their bookkeeping proposal", now());
+    await audit(env.DB, actor, { action: "Record update", resource: `Bookkeeping intake ${r.id}`, meta: "Proposal link opened for the first time" });
+  }
+  const [letters, fees] = await Promise.all([currentLetters(env), loadFees(env)]);
+  const answers = json<Answers>(r.answers, {});
+  const bizName = (typeof answers.legalName === "string" && answers.legalName.trim()) || c.name;
+  const firstName = ((answers.owners as { name?: string }[] | undefined)?.[0]?.name || c.contact_name || c.name).trim().split(/\s+/)[0];
+  const plan = fees.books.plans.find((x) => x.key === p.plan);
+  const vars = { ...feeWords(fees), clientName: bizName, date: longDate(now()), taxYear: "", ...proposalLetterVars(p, plan?.includes ?? []) };
+  return {
+    businessName: bizName, firstName, expiresAt: l.expiresAt,
+    proposal: { version: p.version, plan: p.plan, lines: p.lines.map(({ label, billing, amount, startingAt }) => ({ label, billing, amount, startingAt })), message: p.message, planIncludes: plan?.includes ?? [] },
+    letters: { books: { ...letters.books, title: fillLetter(letters.books.title, vars), body: fillLetter(letters.books.body, vars) }, terms: { ...letters.terms, title: fillLetter(letters.terms.title, vars), body: fillLetter(letters.terms.body, vars) } },
+  };
+}
+
+/** { name, signature, version, engagement: { version, termsVersion } } — the client signs the proposal and engagement letter. */
+export async function publicSignProposal(env: AppEnv, token: string, ip: string, b: { name?: unknown; signature?: unknown; version?: unknown; engagement?: { version?: unknown; termsVersion?: unknown } }) {
+  const { l, r, p, actor } = await fromProposalLink(env, token, ip);
+  if (Number(b.version) !== p.version) throw new HttpError(409, "MKB updated this proposal. Please reload to see the latest version.", "conflict");
+  const name = typeof b.name === "string" ? b.name.trim().slice(0, 120) : "";
+  if (name.length < 2) throw badRequest("Type your full name to sign.");
+  const sigPng = signatureFrom(b.signature);
+  const [lt, terms] = await Promise.all([letterVersion(env, "books", Number(b.engagement?.version)), letterVersion(env, "terms", Number(b.engagement?.termsVersion))]);
+  if (!lt || !terms) throw new HttpError(409, "The engagement letter was updated. Please reload to see the latest version.", "conflict");
+  const c = await one<ClientRow>(env.DB, `${CLIENT_SQL} WHERE c.id = ?`, r.client_id);
+  if (!c) throw new HttpError(404, "This link isn't valid.", "not_found");
+  const t = now();
+  const fees = await loadFees(env);
+  const answers = json<Answers>(r.answers, {});
+  const bizName = (typeof answers.legalName === "string" && answers.legalName.trim()) || c.name;
+  const plan = fees.books.plans.find((x) => x.key === p.plan);
+  const vars = { ...feeWords(fees), clientName: bizName, date: longDate(t), taxYear: "", ...proposalLetterVars(p, plan?.includes ?? []) };
+  const sigKey = `clients/${c.id}/signatures/${r.id}-proposal-v${p.version}.png`;
+  const signed: Proposal = { ...p, status: "signed", signedAt: t, signedName: name, signature: { key: sigKey, sha256: await sha256Bytes(sigPng), bytes: sigPng.length }, letter: { version: lt.version, termsVersion: terms.version } };
+  const engagement = { version: lt.version, termsVersion: terms.version, acceptedName: name, acceptedAt: t, method: "online", signature: signed.signature, proposalVersion: p.version };
+  const res = await run(env.DB, "UPDATE books_intakes SET proposal = ?, engagement = ?, history = ?, updated_at = ?, rev = rev + 1 WHERE id = ? AND proposal = ?", JSON.stringify(signed), JSON.stringify(engagement), hist(r.history, "client (secure link)", `Proposal v${p.version} and engagement letter signed by ${name} (drawn signature)`), t, r.id, r.proposal);
+  if (!res.meta.changes) throw new HttpError(409, "MKB updated this proposal. Please reload to see the latest version.", "conflict");
+  await env.FILES.put(sigKey, sigPng, { httpMetadata: { contentType: "image/png" }, customMetadata: { intake: r.id, proposalVersion: String(p.version), signedBy: name, signedAt: t } });
+  await useLink(env, l.id);
+  // Signed letter: the reviewed proposal, the bookkeeping letter and the standard terms, with the signature.
+  const letterPdf = await buildLetterPdf({ clientName: bizName, parts: [{ title: `Your bookkeeping proposal — ${p.plan}`, body: proposalAsText(p), version: p.version }, { title: fillLetter(lt.title, vars), body: fillLetter(lt.body, vars), version: lt.version }, { title: fillLetter(terms.title, vars), body: fillLetter(terms.body, vars), version: terms.version }], acceptedName: name, acceptedAt: t, method: "online", signaturePng: sigPng });
+  const safe = bizName.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const letterFile = `MKB-Bookkeeping-Engagement-Letter-${safe}${p.version > 1 ? `-v${p.version}` : ""}.pdf`;
+  await storeClientPdfAs(env, null, c.id, letterPdf, { name: `Bookkeeping proposal & engagement letter${p.version > 1 ? ` v${p.version}` : ""} (signed ${longDate(t)})`, fileName: letterFile, category: "Engagement letter", service: "books", activity: `Bookkeeping proposal v${p.version} and engagement letter signed by ${name} online` });
+  const to = l.email || (typeof answers.email === "string" && answers.email) || c.email;
+  let emailed = false;
+  if (to) {
+    const tt = proposalTotals(p);
+    const out = await sendTemplate(env, "books_proposal_signed", { to, vars: { firstName: name.split(/\s+/)[0], businessName: bizName, date: longDate(t), plan: `${p.plan} — ${tt.startingAt ? "starting at " : ""}${money(tt.monthly)}/month${tt.oneTime ? ` plus ${money(tt.oneTime)} one-time` : ""}` }, attachments: [{ filename: letterFile, content: letterPdf }] });
+    emailed = out.sent;
+  }
+  await run(env.DB, "INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'intake', ?, 'client', NULL, ?)", randomId("x"), c.id, `Signed the bookkeeping proposal (${p.plan}) and engagement letter online`, t);
+  await notify(env, { module: "books" }, { kind: "intake", title: `${bizName} signed their bookkeeping proposal`, body: `${p.plan} · ${money(proposalTotals(p).monthly)}/month — ready to start bookkeeping`, href: `/services/bookkeeping/intake/${r.id}` });
+  await audit(env.DB, actor, { action: "Record update", resource: `Bookkeeping intake ${r.id}`, meta: `Proposal v${p.version} + engagement letter v${lt.version} signed (drawn) by ${name}${emailed ? "; copy emailed" : ""}` });
+  return { signed: true, emailed };
 }

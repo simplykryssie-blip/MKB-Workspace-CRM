@@ -1,5 +1,6 @@
 "use client";
 
+import { booksStage, STAGE_LABEL } from "@/lib/books/proposal";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { BookOpen, ClipboardList, Mail, Plus } from "lucide-react";
@@ -37,8 +38,9 @@ function useClientBooks(c: Client) {
   const [busy, setBusy] = useState(false);
   const can = team.can("books", "edit");
   const open = intakes?.find((i) => i.status === "in_progress");
-  // A submitted intake that hasn't been turned into a workspace yet — setup starts from its answers.
+  // A submitted intake that hasn't been turned into a workspace yet — setup starts from its reviewed price.
   const ready = intakes?.find((i) => i.status === "submitted" && !i.workspaceId);
+  const signed = ready?.proposal?.status === "signed";
   /** Starts (or reopens) the client's intake and opens it; `send` opens the Send intake link window. */
   const startIntake = async (send = false) => {
     setBusy(true);
@@ -47,15 +49,14 @@ function useClientBooks(c: Client) {
       window.location.assign(intakeHref(r.intake.id) + (send ? "?send=1" : ""));
     } catch (e) { toast(e instanceof Error ? e.message : "Couldn't start the intake", "info"); setBusy(false); }
   };
-  return { workspaces, intakes, open, ready, can, busy, startIntake };
+  return { workspaces, intakes, open, ready, signed, can, busy, startIntake };
 }
 
-const intakeBadge = (i: BooksIntake) =>
-  i.workspaceId ? <Badge tone="success">Bookkeeping started</Badge>
-  : i.status === "submitted" ? <Badge tone="info">Submitted — ready to set up</Badge>
-  : i.link?.state === "active" ? <Badge tone="info">{i.link.openedAt ? "Client filling in" : "Link sent"}</Badge>
-  : i.link?.state === "expired" ? <Badge tone="warning">Link expired</Badge>
-  : <Badge tone="warning">In progress</Badge>;
+const intakeBadge = (i: BooksIntake) => {
+  const st = booksStage(i);
+  if (st === "in_progress") return i.link?.state === "active" ? <Badge tone="info">{i.link.openedAt ? "Client filling in" : "Link sent"}</Badge> : i.link?.state === "expired" ? <Badge tone="warning">Link expired</Badge> : <Badge tone="warning">In progress</Badge>;
+  return <Badge tone={st === "started" || st === "signed" ? "success" : st === "in_review" ? "warning" : "info"}>{STAGE_LABEL[st]}</Badge>;
+};
 
 const progressOf = (i: BooksIntake) => { const v = BOOKS_SECTIONS.filter((s) => sectionVisible(s, i.answers)); return `${v.filter((s) => !missingIn(s, i.answers).length).length} of ${v.length} sections`; };
 
@@ -72,7 +73,8 @@ function Actions({ c, b, onSetup, size = "sm" }: { c: Client; b: ReturnType<type
           <Button size={size} icon={Mail} disabled={b.busy || !c.email} title={c.email ? undefined : "Add the client's email first"} onClick={() => b.startIntake(true)}>Send intake link</Button>
         </>
       ))}
-      {!b.workspaces.length && <Button size={size} variant={b.ready ? "primary" : "secondary"} icon={Plus} onClick={onSetup}>{b.ready ? "Set up bookkeeping from intake" : "Set up bookkeeping"}</Button>}
+      {b.ready && !b.signed && <Button size={size} variant="primary" icon={ClipboardList} href={intakeHref(b.ready.id)}>{b.ready.proposal?.status === "sent" ? "View proposal" : "Review price & send proposal"}</Button>}
+      {!b.workspaces.length && <Button size={size} variant={b.signed ? "primary" : "secondary"} icon={Plus} onClick={onSetup}>{b.signed ? "Set up bookkeeping (signed)" : "Set up bookkeeping"}</Button>}
     </div>
   );
 }
@@ -129,7 +131,7 @@ export function BooksEnrollmentActions({ c }: { c: Client }) {
   const [setup, setSetup] = useState(false);
   return (
     <>
-      <span className="mr-auto text-[12px] text-muted">{b.ready ? "Intake submitted — set up their bookkeeping." : b.open ? "Intake in progress." : "Start with the intake, then set up their bookkeeping."}</span>
+      <span className="mr-auto text-[12px] text-muted">{b.signed ? "Proposal signed — set up their bookkeeping." : b.ready ? (b.ready.proposal?.status === "sent" ? "Proposal sent — waiting for the client's signature." : "Intake submitted — review the price and send the proposal.") : b.open ? "Intake in progress." : "Start with the intake, then review the price and send the proposal."}</span>
       <Actions c={c} b={b} onSetup={() => setSetup(true)} />
       <Setup c={c} b={b} open={setup} onClose={() => setSetup(false)} />
     </>

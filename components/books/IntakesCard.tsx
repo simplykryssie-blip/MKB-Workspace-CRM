@@ -1,5 +1,6 @@
 "use client";
 
+import { booksStage, STAGE_LABEL } from "@/lib/books/proposal";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ClipboardList, Plus } from "lucide-react";
@@ -37,14 +38,14 @@ export function IntakesCard() {
   const progressOf = (i: BooksIntake) => { const v = BOOKS_SECTIONS.filter((s) => sectionVisible(s, i.answers)); return `${v.filter((s) => !missingIn(s, i.answers).length).length}/${v.length} sections`; };
   return (
     <div id="intakes" className="mb-5"><Card>
-      <CardHeader icon={ClipboardList} title="Client intakes" subtitle="The questionnaire for new bookkeeping clients — fill it in with them, or email them a private link to do it themselves; submitting requests their documents and sets up the engagement." action={can ? <Button size="sm" variant="primary" icon={Plus} onClick={() => setPicking(true)}>New intake</Button> : undefined} />
+      <CardHeader icon={ClipboardList} title="Client intakes" subtitle="New bookkeeping clients: the intake (with them, or by private link), then your price review, then the proposal and engagement letter they sign." action={can ? <Button size="sm" variant="primary" icon={Plus} onClick={() => setPicking(true)}>New intake</Button> : undefined} />
       {!list ? <p className="border-t border-line px-6 py-4 text-[13px] text-muted">Loading…</p> : list.length === 0 ? <p className="border-t border-line px-6 py-4 text-[13.5px] text-muted">No intakes yet. Start one when a new bookkeeping client signs on.</p> : (
         <ul className="divide-y divide-line border-t border-line">
           {list.map((i) => (
             <li key={i.id}>
               <Link href={intakeHref(i.id)} className="flex flex-wrap items-center gap-3 px-5 py-3 hover:bg-surface-hover sm:px-6">
                 <span className="min-w-0 flex-1"><span className="block truncate text-[14px] font-medium text-ink">{(i.answers.legalName as string) || i.clientName}</span><span className="block text-[12px] text-muted">{i.status === "submitted" ? `Submitted ${relTime(i.submittedAt!)}` : `${progressOf(i)} · updated ${relTime(i.updatedAt)}`}</span></span>
-                <Badge tone={i.workspaceId ? "success" : i.status === "submitted" ? "info" : "warning"}>{i.workspaceId ? "Bookkeeping started" : i.status === "submitted" ? "Ready to start" : i.link?.state === "active" ? (i.link.openedAt ? "Client filling in" : "Link sent") : i.link?.state === "expired" ? "Link expired" : "In progress"}</Badge>
+                {(() => { const st = booksStage(i); return <Badge tone={st === "started" || st === "signed" ? "success" : st === "in_review" ? "warning" : "info"}>{st === "in_progress" ? (i.link?.state === "active" ? (i.link.openedAt ? "Client filling in" : "Link sent") : i.link?.state === "expired" ? "Link expired" : "In progress") : STAGE_LABEL[st]}</Badge>; })()}
               </Link>
             </li>
           ))}

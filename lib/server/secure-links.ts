@@ -12,7 +12,7 @@
 import { addMinutes, HttpError, now, one, rateLimit, run, type AppEnv } from "./core";
 import { randomId, randomToken, sha256 } from "./crypto";
 
-export type LinkPurpose = "books_intake";
+export type LinkPurpose = "books_intake" | "books_proposal";
 export const LINK_DAYS = 14;
 
 type Row = { id: string; token_hash: string; purpose: LinkPurpose; target_id: string; client_id: string; email: string; created_at: string; created_by: string; expires_at: string; revoked_at: string | null; revoked_by: string | null; used_at: string | null; first_opened_at: string | null; last_opened_at: string | null };

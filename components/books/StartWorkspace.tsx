@@ -1,5 +1,6 @@
 "use client";
 
+import { proposalTotals } from "@/lib/books/proposal";
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -58,7 +59,12 @@ export function StartWorkspace({ open, onClose, onCreated, intake, clientId: pre
   // When the saved prices arrive, start from the plan the intake recommends (or the first plan).
   useEffect(() => {
     if (!F.fees) return;
-    if (intake) {
+    if (intake?.proposal) {
+      // The price MKB reviewed (and the client signed): plan, monthly total and the other lines.
+      const p = intake.proposal;
+      setPlan(p.plan); setFee(proposalTotals(p).monthly);
+      setExtras(p.lines.filter((l) => !(l.billing === "monthly" && l.label === `${p.plan} plan`)).map((l) => l.label));
+    } else if (intake) {
       // Plan + extra accounts/locations + monthly add-ons from the intake's quote.
       const q = quoteFor(intake.answers, F.fees.books);
       setPlan(q.plan.key); setFee(q.monthlyTotal);

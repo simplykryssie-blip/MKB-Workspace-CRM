@@ -17,7 +17,7 @@ import { checkFees, expungeFee, feeWords, money, type ServiceFees } from "@/lib/
 import { useServiceFees } from "@/lib/fees/use-fees";
 import { EMPTY_DESIGNEE, designeeReady, type Designee } from "@/lib/irs/f8821";
 
-const SAMPLE = { clientName: "Jordan Sample", date: "November 8, 2026", taxYear: "2025", service: "Foundation", fee: "$399", firstName: "Jordan", count: "2 documents", businessName: "Sample Co. LLC", expires: "November 22, 2026", days: "14", staffName: "Krystal" };
+const SAMPLE = { clientName: "Jordan Sample", date: "November 8, 2026", taxYear: "2025", service: "Foundation", fee: "$399", firstName: "Jordan", count: "2 documents", businessName: "Sample Co. LLC", expires: "November 22, 2026", days: "14", staffName: "Krystal", plan: "Essential — $549/month" };
 const input = "w-full rounded-xl border border-line bg-surface px-3 text-[14px] text-ink disabled:opacity-60";
 
 export function SettingsPage() {
@@ -460,7 +460,10 @@ function TaxRulesCard() {
     <Card>
       <CardHeader icon={ShieldCheck} title="Tax workflow" subtitle="Checked on the server for every return, whoever is signed in." />
       <div className="space-y-3 px-5 pb-5 sm:px-6">
-        <Row k="requireOwnerApproval" title="Owner's final approval before e-file" text="After the reviewer signs off and the client approves, the return waits for your approval. E-filing stays locked until you approve. You get a bell notification." />
+        <div className="flex items-start gap-3 rounded-xl border border-line bg-surface-2 p-3">
+          <ShieldCheck size={18} className="mt-0.5 shrink-0 text-success" />
+          <span><span className="block text-[14px] font-semibold text-ink">Two sign-offs before e-file — always required</span><span className="block text-[12.5px] text-muted">1) The reviewer signs off on the return. 2) After the client approves, the Owner gives final approval. E-filing stays locked until both are done. You get a bell notification when a return is waiting for you.</span></span>
+        </div>
         <Row k="requireEngagement" title="Engagement letter before review" text="A return can't move to review until the client has accepted the engagement letter." />
       </div>
     </Card>

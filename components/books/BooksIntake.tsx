@@ -2,25 +2,22 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, CheckCircle2, Circle, FileSignature, FileUp, Send } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, Circle, FileUp, Send } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useToast } from "@/components/ui/Toast";
 import { SectionView } from "@/components/tax/TaxInterview";
-import { LetterView } from "@/components/engagement/LetterView";
 import { useClients } from "@/lib/store/clients-store";
 import { BACKEND, call, RemoteError } from "@/lib/sync/remote";
-import { BOOKS_INTAKE_VERSION, BOOKS_SECTIONS, pickableAddOns, quoteFor } from "@/lib/books/intake";
+import { BOOKS_INTAKE_VERSION, BOOKS_SECTIONS, pickableAddOns } from "@/lib/books/intake";
 import { docsFor, display, missingIn, qVisible, rowsOf, sectionVisible, type Answers, type Row } from "@/lib/tax/interview/engine";
 import { applyPrefill, prefillFrom } from "@/lib/tax/interview/prefill";
-import { useLetters } from "@/lib/engagement/use-letters";
 import { useServiceFees } from "@/lib/fees/use-fees";
-import { feeWords, money } from "@/lib/fees/config";
 import { fmtDate } from "@/lib/format";
 import type { BooksIntake as Intake } from "@/lib/server/books-intake";
 import { StartWorkspace } from "./StartWorkspace";
-import { QuoteView } from "./QuoteView";
+import { ProposalPanel } from "./ProposalPanel";
 import { SignaturePad } from "@/components/ui/SignaturePad";
 import { IntakeLinkPanel } from "./IntakeLinkPanel";
 
@@ -118,7 +115,7 @@ function Runner({ intake, client, reload }: { intake: Intake; client: Client; re
             {steps.map((s, i) => <option key={s.key} value={i}>{i + 1}. {s.title}</option>)}
           </select>
           {sec && <SectionView s={sec} a={answers} prefilled={initial.ids} showErrors={!!tried[sec.id]} setVal={setVal} setRows={setRows} secure={secure} reveal={reveal} />}
-          {cur.key === "review" && (submitted ? <Submitted intake={intake} client={client} /> : <Review intake={intake} client={client} answers={answers} rev={rev} goTo={(sid) => go(steps.findIndex((x) => x.key === sid))} onSubmitted={reload} />)}
+          {cur.key === "review" && (submitted ? <Submitted intake={intake} client={client} reload={reload} /> : <Review intake={intake} client={client} answers={answers} rev={rev} goTo={(sid) => go(steps.findIndex((x) => x.key === sid))} onSubmitted={reload} />)}
           {cur.key !== "review" && (
             <div className="flex items-center gap-2">
               <Button icon={ArrowLeft} disabled={step === 0} onClick={() => go(step - 1)}>Back</Button>
@@ -135,25 +132,18 @@ function Runner({ intake, client, reload }: { intake: Intake; client: Client; re
 
 function Review({ intake, client, answers, rev, goTo, onSubmitted }: { intake: Intake; client: Client; answers: Answers; rev: React.MutableRefObject<number>; goTo: (sid: string) => void; onSubmitted: () => void }) {
   const toast = useToast();
-  const L = useLetters();
-  const F = useServiceFees();
   const [agree, setAgree] = useState(false);
-  const [accepted, setAccepted] = useState(false);
   const [sig, setSig] = useState("");
   const [drawn, setDrawn] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const missing = BOOKS_SECTIONS.flatMap((s) => missingIn(s, answers).map((m) => ({ ...m, s })));
   const docs = docsFor(BOOKS_SECTIONS, answers);
-  const quote = F.fees ? quoteFor(answers, F.fees.books) : null;
-  const plan = quote?.plan ?? null;
-  const vars = { ...(F.fees ? feeWords(F.fees) : {}), clientName: sig.trim() || (answers.legalName as string) || client.name, date: new Date().toLocaleDateString("en-US", { dateStyle: "long" }), service: plan?.key ?? "", fee: quote ? `${quote.monthly.some((l) => l.startingAt) ? "starting at " : ""}${money(quote.monthlyTotal)}` : "", planIncludes: plan?.includes.join("; ") ?? "", addOns: quote ? [...quote.monthly.slice(1), ...quote.oneTime, ...quote.quoted].map((l) => l.label).join("; ") || "none" : "" };
   const submit = async () => {
-    if (!L.letters) return;
     setBusy(true);
     try {
-      const r = await call<{ emailed: boolean; documents: string[]; plan: { key: string } }>("POST", `/api/books/intakes/${intake.id}/submit`, { answers, rev: rev.current, consentName: sig.trim(), engagement: { version: L.letters.books.version, termsVersion: L.letters.terms.version }, enteredBy: "staff", signature: drawn });
+      const r = await call<{ emailed: boolean; documents: string[] }>("POST", `/api/books/intakes/${intake.id}/submit`, { answers, rev: rev.current, consentName: sig.trim(), enteredBy: "staff", signature: drawn });
       window.dispatchEvent(new CustomEvent("mkb:client-changed", { detail: client.id }));
-      toast(`Intake submitted · ${r.documents.length} documents requested${r.emailed ? " · client emailed" : ""}`);
+      toast(`Intake submitted for review · ${r.documents.length} documents requested${r.emailed ? " · client emailed" : ""}`);
       onSubmitted();
     } catch (e) { toast(e instanceof Error ? e.message : "Couldn't submit", "info"); }
     setBusy(false);
@@ -168,30 +158,18 @@ function Review({ intake, client, answers, rev, goTo, onSubmitted }: { intake: I
             <ul className="mt-1.5 space-y-1">{missing.slice(0, 12).map((m, i) => <li key={i}><button onClick={() => goTo(m.s.id)} className="text-left text-[13px] text-accent hover:underline">{m.s.title}: {m.label}</button></li>)}</ul>
           </div>
         ) : <p className="mt-1 text-[13.5px] text-success-ink">Every question is answered.</p>}
-        {quote && <QuoteView quote={quote} accounts={rowsOf(answers, "accounts").length} />}
+        <p className="mt-2 text-[13px] text-muted">No price is shown to the client here. After they submit, you review the price and send the proposal and engagement letter for their signature.</p>
       </Card>
       <Card className="p-5 sm:p-6">
         <h3 className="flex items-center gap-2 text-[15px] font-semibold text-ink"><FileUp size={16} className="text-accent" /> Documents we&rsquo;ll request ({docs.length})</h3>
         <p className="mt-0.5 text-[12.5px] text-muted">Added to the client&rsquo;s Documents as outstanding and listed in the email.</p>
         <ul className="mt-2 grid gap-1 sm:grid-cols-2">{docs.map((d) => <li key={d.name} className="text-[13px] text-ink-2">• {d.name}</li>)}</ul>
       </Card>
-      <Card className="p-5 sm:p-6">
-        <h3 className="flex items-center gap-2 text-[15px] font-semibold text-ink"><FileSignature size={16} className="text-accent" /> Bookkeeping engagement letter</h3>
-        {!L.letters ? <p className="mt-1 text-[13px] text-muted">Loading…</p> : (
-          <>
-            <div tabIndex={0} aria-label="Engagement letter text" className="scrollbar-thin mt-3 max-h-[340px] space-y-6 overflow-y-auto rounded-xl border border-line bg-bg p-4">
-              <LetterView title={L.letters.books.title} body={L.letters.books.body} version={L.letters.books.version} vars={vars} />
-              <LetterView title={L.letters.terms.title} body={L.letters.terms.body} version={L.letters.terms.version} vars={vars} />
-            </div>
-            <label className="mt-3 flex items-start gap-2 text-[13.5px] text-ink"><input type="checkbox" checked={accepted} onChange={() => setAccepted(!accepted)} className="mt-0.5 h-4 w-4 accent-[var(--accent)]" />The client read the bookkeeping engagement letter and standard terms and agreed to them.</label>
-          </>
-        )}
-      </Card>
       <Card className="space-y-3 p-5 sm:p-6">
         <label className="flex items-start gap-2 text-[13.5px] text-ink"><input type="checkbox" checked={agree} onChange={() => setAgree(!agree)} className="mt-0.5 h-4 w-4 accent-[var(--accent)]" />The client confirmed these answers are complete and accurate to the best of their knowledge.</label>
         <div className="max-w-sm"><label htmlFor="bi-sig" className="mb-1 block text-[13px] font-medium text-ink-2">Client&rsquo;s full name (printed)</label><input id="bi-sig" value={sig} onChange={(e) => setSig(e.target.value)} className="h-11 w-full rounded-xl border border-line bg-surface px-3 text-[15px] text-ink" /></div>
         <div className="max-w-lg"><SignaturePad label="Client signs here" onChange={setDrawn} /></div>
-        <Button variant="primary" icon={Send} disabled={busy || !agree || !accepted || sig.trim().length < 3 || !drawn || missing.length > 0 || !L.letters} onClick={submit}>{busy ? "Submitting…" : "Submit intake"}</Button>
+        <Button variant="primary" icon={Send} disabled={busy || !agree || sig.trim().length < 3 || !drawn || missing.length > 0} onClick={submit}>{busy ? "Submitting…" : "Sign and submit for review"}</Button>
         {!drawn && missing.length === 0 && <p className="text-[12px] text-muted">The client needs to draw their signature to submit.</p>}
         {missing.length > 0 && <p className="text-[12px] text-muted">Answer the remaining questions to submit.</p>}
       </Card>
@@ -199,22 +177,21 @@ function Review({ intake, client, answers, rev, goTo, onSubmitted }: { intake: I
   );
 }
 
-function Submitted({ intake, client }: { intake: Intake; client: Client }) {
+function Submitted({ intake, client, reload }: { intake: Intake; client: Client; reload: () => void }) {
   const [starting, setStarting] = useState(false);
-  const F = useServiceFees();
   const a = intake.answers;
-  const quote = F.fees ? quoteFor(a, F.fees.books) : null;
+  const signed = intake.proposal?.status === "signed";
   return (
     <div className="space-y-5">
       <Card className="p-5 sm:p-6">
         <h2 className="flex items-center gap-2 text-[19px] font-bold text-ink"><CheckCircle2 size={20} className="text-success" /> Intake submitted</h2>
-        <p className="mt-1 text-[13.5px] text-muted">Submitted {intake.submittedAt ? fmtDate(intake.submittedAt) : ""}{intake.consentName ? ` · accepted by ${intake.consentName}` : ""}. The PDF copy and signed engagement letter are in the client&rsquo;s Documents.</p>
-        {quote && <QuoteView quote={quote} accounts={rowsOf(a, "accounts").length} />}
+        <p className="mt-1 text-[13.5px] text-muted">Submitted {intake.submittedAt ? fmtDate(intake.submittedAt) : ""}{intake.consentName ? ` · signed by ${intake.consentName}` : ""}. The signed PDF copy is in the client&rsquo;s Documents.</p>
         <div className="mt-3 flex flex-wrap gap-2">
-          {intake.workspaceId ? <Button variant="primary" href={`/services/bookkeeping/${intake.workspaceId}`}>Open bookkeeping workspace</Button> : <Button variant="primary" onClick={() => setStarting(true)}>Start bookkeeping from this intake</Button>}
+          {intake.workspaceId ? <Button variant="primary" href={`/services/bookkeeping/${intake.workspaceId}`}>Open bookkeeping workspace</Button> : <Button variant={signed ? "primary" : "secondary"} onClick={() => { if (signed || window.confirm("The client hasn't signed the proposal and engagement letter yet. Start bookkeeping anyway?")) setStarting(true); }}>Start bookkeeping from this intake</Button>}
           <Button href={`/clients/${client.id}#documents`}>Client documents</Button>
         </div>
       </Card>
+      {!intake.workspaceId && <ProposalPanel intake={intake} client={client} reload={reload} />}
       <Card className="p-5 sm:p-6">
         <h3 className="text-[15px] font-semibold text-ink">Answers</h3>
         <div className="mt-3 space-y-4">
