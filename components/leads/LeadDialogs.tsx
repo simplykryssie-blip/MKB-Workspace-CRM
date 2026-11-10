@@ -557,9 +557,11 @@ export function ConvertDialog({ lead, open, onClose, onConverted }: { lead: Lead
         responsibleParty: f.type === "business" && f.rpName.trim() ? { name: f.rpName.trim(), title: f.rpTitle, taxIdType: f.rpTaxIdType, taxId: taxNow ? f.rpTaxId : undefined } : undefined,
       },
     });
-    if (f.services.includes("tax") && !taxNow) {
+    // Individuals give their SSN and date of birth in the tax interview (and upload a photo ID there), so
+    // nothing extra is requested. A business is asked only for its IRS EIN letter.
+    if (f.services.includes("tax") && !taxNow && f.type === "business") {
       clientStore.requestDocument(clientId, {
-        name: f.type === "business" ? "EIN + responsible party SSN/ITIN (secure form)" : "Taxpayer ID + date of birth (secure form)",
+        name: "EIN confirmation letter (CP 575 or 147C)",
         service: "tax",
         category: "Tax ID",
         sensitive: true,

@@ -115,9 +115,11 @@ export function NewClientForm() {
       staffIds: staff,
       invite,
     });
-    if (services.includes("tax") && deferTax) {
+    // Individuals give their SSN and date of birth in the tax interview (and upload a photo ID there), so
+    // nothing extra is requested. A business is asked only for its IRS EIN letter.
+    if (services.includes("tax") && deferTax && type === "business") {
       store.requestDocument(id, {
-        name: type === "business" ? "EIN confirmation (CP 575 or 147C)" : "Taxpayer ID + date of birth (secure form)",
+        name: "EIN confirmation letter (CP 575 or 147C)",
         service: "tax",
         category: "Tax ID",
         sensitive: true,
