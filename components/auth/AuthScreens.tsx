@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
-import { AlertCircle, CheckCircle2, KeyRound, Lock, Mail, ShieldCheck, Smartphone } from "lucide-react";
+import { AlertCircle, CheckCircle2, Eye, EyeOff, KeyRound, Lock, Mail, ShieldCheck, Smartphone } from "lucide-react";
 
 /* Sign-in screens. They only talk to /api/auth/*; the server decides everything. */
 
@@ -35,8 +35,23 @@ function Shell({ title, subtitle, children }: { title: string; subtitle?: string
 }
 const input = "h-11 w-full rounded-xl border border-line bg-surface px-3 text-[15px] text-ink focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15";
 const primary = "h-11 w-full rounded-xl bg-accent text-[15px] font-semibold text-white hover:bg-accent-hover disabled:opacity-60";
-function Field({ id, label, ...rest }: { id: string; label: string } & React.InputHTMLAttributes<HTMLInputElement>) {
-  return <div><label htmlFor={id} className="mb-1.5 block text-[13.5px] font-medium text-ink-2">{label}</label><input id={id} className={input} {...rest} /></div>;
+function Field({ id, label, type, ...rest }: { id: string; label: string } & React.InputHTMLAttributes<HTMLInputElement>) {
+  const [show, setShow] = useState(false);
+  const pw = type === "password";
+  return (
+    <div>
+      <label htmlFor={id} className="mb-1.5 block text-[13.5px] font-medium text-ink-2">{label}</label>
+      <div className="relative">
+        <input id={id} type={pw && show ? "text" : type} className={pw ? `${input} pr-12` : input} {...(pw ? { autoCapitalize: "none", autoCorrect: "off", spellCheck: false } : {})} {...rest} />
+        {pw && (
+          <button type="button" onClick={() => setShow((v) => !v)} aria-label={show ? "Hide password" : "Show password"} aria-pressed={show} aria-controls={id} title={show ? "Hide password" : "Show password"}
+            className="absolute inset-y-0 right-1 my-auto grid h-9 w-10 place-items-center rounded-lg text-muted hover:bg-surface-hover hover:text-ink focus:outline-none focus-visible:ring-4 focus-visible:ring-accent/15">
+            {show ? <EyeOff size={18} /> : <Eye size={18} />}
+          </button>
+        )}
+      </div>
+    </div>
+  );
 }
 const Err = ({ msg }: { msg: string | null }) => (msg ? <p role="alert" className="flex items-start gap-1.5 rounded-xl bg-danger-soft/50 px-3 py-2 text-[13px] text-danger-ink"><AlertCircle size={14} className="mt-0.5 shrink-0" />{msg}</p> : null);
 
