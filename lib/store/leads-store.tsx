@@ -291,9 +291,15 @@ function useLeadSync(state: State, dispatch: React.Dispatch<Action>, clientsRef:
         const prev = synced.current.get(id);
         if (l.status === "converted" && prev?.status !== "converted" && l.convertedClientId) {
           // Wait for the new client to exist on the server, then record the conversion.
-          await pendingClientCreates.get(l.convertedClientId);
           const client = clientsRef.current?.clients.find((c) => c.id === l.convertedClientId);
-          const r = await call<{ lead: RevLead }>("POST", `/api/leads/${id}/convert`, { clientId: l.convertedClientId, merged: client?.leadId !== id });
+          const convert = () => call<{ lead: RevLead }>("POST", `/api/leads/${id}/convert`, { clientId: l.convertedClientId, merged: client?.leadId !== id });
+          let r: { lead: RevLead } | undefined;
+          // The new client's own save may not have started yet: wait for it, and retry while it's still being created.
+          for (let i = 0; !r; i++) {
+            await new Promise((ok) => setTimeout(ok, i ? 1500 : 0));
+            await pendingClientCreates.get(l.convertedClientId);
+            try { r = await convert(); } catch (e) { if (!(e instanceof RemoteError && e.status === 404) || i >= 5) throw e; }
+          }
           revs.current.set(id, r.lead.rev ?? 1);
           synced.current.set(id, { ...l, status: "converted" });
         }

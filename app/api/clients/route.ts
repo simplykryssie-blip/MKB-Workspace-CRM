@@ -21,6 +21,15 @@ export const POST = handle(async (req, env) => {
     if (!lead || lead.status !== "open") throw badRequest("That lead is not open.");
   }
   const { stmts, finish } = await createClient(env, a, b.client, b.identifiers ?? {}, { fromLeadId });
+  // The lead is marked converted in the same write, so a lead and its new client can't both stay open.
+  if (fromLeadId) {
+    const t = new Date().toISOString();
+    stmts.push(
+      env.DB.prepare("UPDATE leads SET status = 'converted', converted_client_id = ?, converted_at = ?, rev = rev + 1, last_activity_at = ? WHERE id = ? AND status = 'open'").bind(b.client.id, t, t, fromLeadId),
+      env.DB.prepare("UPDATE lead_reminders SET done = 1 WHERE lead_id = ?").bind(fromLeadId),
+      env.DB.prepare("INSERT INTO lead_activity (id, lead_id, kind, text, actor, member_id, at) VALUES (?, ?, 'lead', ?, 'staff', ?, ?)").bind(`x_${crypto.randomUUID()}`, fromLeadId, `Converted to client ${b.client.id}`, a.kind === "staff" ? a.member.id : null, t),
+    );
+  }
   await env.DB.batch(stmts);
   await finish();
   return jsonResponse({ client: await getFull(env, a, b.client.id) }, 201);

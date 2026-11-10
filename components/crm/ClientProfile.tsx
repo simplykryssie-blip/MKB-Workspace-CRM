@@ -228,6 +228,7 @@ export function ClientProfile({ id }: { id: string }) {
             <Button size="sm" icon={FilePlus2} onClick={() => open("request")}>Request docs</Button>
             <Button size="sm" variant="primary" icon={Receipt} onClick={() => open("invoice")}>New invoice</Button>
             <Button size="sm" icon={Pencil} onClick={() => open("edit")}>Edit</Button>
+            {c.portal !== "active" && c.status !== "inactive" && <Button size="sm" icon={Send} onClick={() => void portalInvite()}>{c.portal === "invited" ? "Resend portal invite" : "Invite to portal"}</Button>}
             <Menu
               label="More client actions"
               trigger={({ toggle, open: isOpen }) => (
