@@ -71,7 +71,8 @@ async function identifierInfo(db: Db, ids: string[]) {
 export async function listFull(env: AppEnv, a: Actor) {
   requirePermission(a, "crm", "view");
   if (a.kind !== "staff") throw forbidden();
-  const rows = await all<FullRow>(env.DB, `${CLIENT_SQL} ORDER BY c.name`);
+  // Prospects (leads sent intake forms) and declined prospects are not clients.
+  const rows = await all<FullRow>(env.DB, `${CLIENT_SQL} WHERE c.status NOT IN ('prospect', 'declined') ORDER BY c.name`);
   // Assignments are loaded once, then every client is checked against the same rules.
   const sets = await assignmentSets(env, a.member.id);
   const visible = rows.filter((r) => clientAccess(a.policy, a.member, { id: r.id, services: (r.services ? r.services.split(",") : []) as ServiceKey[] }, sets));

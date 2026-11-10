@@ -44,7 +44,7 @@ export function IntakesCard() {
           {list.map((i) => (
             <li key={i.id}>
               <Link href={intakeHref(i.id)} className="flex flex-wrap items-center gap-3 px-5 py-3 hover:bg-surface-hover sm:px-6">
-                <span className="min-w-0 flex-1"><span className="block truncate text-[14px] font-medium text-ink">{(i.answers.legalName as string) || i.clientName}</span><span className="block text-[12px] text-muted">{i.status === "submitted" ? `Submitted ${relTime(i.submittedAt!)}` : `${progressOf(i)} · updated ${relTime(i.updatedAt)}`}</span></span>
+                <span className="min-w-0 flex-1"><span className="block truncate text-[14px] font-medium text-ink">{(i.answers.legalName as string) || i.clientName}{i.prospect && <span className="ml-2 rounded-md bg-surface-2 px-1.5 py-0.5 text-[11px] font-semibold text-muted ring-1 ring-line">{i.prospect.declined ? "Declined lead" : "Lead"}</span>}</span><span className="block text-[12px] text-muted">{i.status === "submitted" ? `Submitted ${relTime(i.submittedAt!)}` : `${progressOf(i)} · updated ${relTime(i.updatedAt)}`}</span></span>
                 {(() => { const st = booksStage(i); return <Badge tone={st === "started" || st === "signed" ? "success" : st === "in_review" ? "warning" : "info"}>{st === "in_progress" ? (i.link?.state === "active" ? (i.link.openedAt ? "Client filling in" : "Link sent") : i.link?.state === "expired" ? "Link expired" : "In progress") : STAGE_LABEL[st]}</Badge>; })()}
               </Link>
             </li>

@@ -51,7 +51,8 @@ export async function canOpen(env: AppEnv, a: Actor, row: ClientRow) {
 export async function listClients(env: AppEnv, a: Actor) {
   requirePermission(a, "crm", "view");
   if (a.kind !== "staff") throw forbidden();
-  const rows = await all<ClientRow>(env.DB, `${CLIENT_SQL} ORDER BY c.name`);
+  // Prospects (leads sent intake forms) and declined prospects are not clients.
+  const rows = await all<ClientRow>(env.DB, `${CLIENT_SQL} WHERE c.status NOT IN ('prospect', 'declined') ORDER BY c.name`);
   const sets = await assignmentSets(env, a.member.id);
   const visible = rows.filter((r) => clientAccess(a.policy, a.member, { id: r.id, services: (r.services ? r.services.split(",") : []) as ServiceKey[] }, sets));
   const l4 = await last4Map(env, visible.map((r) => r.id));

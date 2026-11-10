@@ -28,10 +28,10 @@ import { publicAssetOrigin } from "./email";
 import { loadFees } from "./settings";
 import { storeClientPdfAs } from "./tax";
 
-type Row = { id: string; client_id: string; status: "in_progress" | "submitted"; answers: string; step: number; entered_by: string; consent_name: string | null; engagement: string | null; submitted_at: string | null; workspace_id: string | null; history: string; created_at: string; updated_at: string; rev: number; proposal: string | null; c_name?: string };
-export type BooksIntake = { id: string; clientId: string; clientName: string; status: Row["status"]; answers: Answers; step: number; enteredBy: string; consentName?: string; engagement?: { version: number; termsVersion: number; acceptedName: string; acceptedAt: string; method: string; signature?: { key: string; sha256: string; bytes: number } }; submittedAt?: string; workspaceId?: string; history: { at: string; by: string; text: string }[]; createdAt: string; updatedAt: string; rev: number; /** The latest private link sent for this intake (never the link itself). */ link?: LinkInfo | null; /** MKB's reviewed price (staff only until it is sent). */ proposal?: Proposal | null; /** The latest proposal link (never the link itself). */ proposalLink?: LinkInfo | null };
-const toIntake = (r: Row): BooksIntake => ({ id: r.id, clientId: r.client_id, clientName: r.c_name ?? "", status: r.status, answers: json(r.answers, {}), step: r.step, enteredBy: r.entered_by, consentName: r.consent_name ?? undefined, engagement: r.engagement ? json(r.engagement, undefined) : undefined, submittedAt: r.submitted_at ?? undefined, workspaceId: r.workspace_id ?? undefined, history: json(r.history, []), createdAt: r.created_at, updatedAt: r.updated_at, rev: r.rev, proposal: r.proposal ? json<Proposal | null>(r.proposal, null) : null });
-const SQL = "SELECT i.*, c.name AS c_name FROM books_intakes i JOIN clients c ON c.id = i.client_id";
+type Row = { id: string; client_id: string; status: "in_progress" | "submitted"; answers: string; step: number; entered_by: string; consent_name: string | null; engagement: string | null; submitted_at: string | null; workspace_id: string | null; history: string; created_at: string; updated_at: string; rev: number; proposal: string | null; c_name?: string; c_status?: string; c_lead?: string | null };
+export type BooksIntake = { id: string; clientId: string; clientName: string; status: Row["status"]; answers: Answers; step: number; enteredBy: string; consentName?: string; engagement?: { version: number; termsVersion: number; acceptedName: string; acceptedAt: string; method: string; signature?: { key: string; sha256: string; bytes: number } }; submittedAt?: string; workspaceId?: string; history: { at: string; by: string; text: string }[]; createdAt: string; updatedAt: string; rev: number; /** The latest private link sent for this intake (never the link itself). */ link?: LinkInfo | null; /** MKB's reviewed price (staff only until it is sent). */ proposal?: Proposal | null; /** Sent to a lead who isn't a client yet (accept them from the lead). */ prospect?: { leadId: string; declined: boolean } | null; /** The latest proposal link (never the link itself). */ proposalLink?: LinkInfo | null };
+const toIntake = (r: Row): BooksIntake => ({ id: r.id, clientId: r.client_id, clientName: r.c_name ?? "", status: r.status, answers: json(r.answers, {}), step: r.step, enteredBy: r.entered_by, consentName: r.consent_name ?? undefined, engagement: r.engagement ? json(r.engagement, undefined) : undefined, submittedAt: r.submitted_at ?? undefined, workspaceId: r.workspace_id ?? undefined, history: json(r.history, []), createdAt: r.created_at, updatedAt: r.updated_at, rev: r.rev, proposal: r.proposal ? json<Proposal | null>(r.proposal, null) : null, prospect: (r.c_status === "prospect" || r.c_status === "declined") && r.c_lead ? { leadId: r.c_lead, declined: r.c_status === "declined" } : null });
+const SQL = "SELECT i.*, c.name AS c_name, c.status AS c_status, c.lead_id AS c_lead FROM books_intakes i JOIN clients c ON c.id = i.client_id";
 const hist = (h: string, by: string, text: string) => JSON.stringify([{ at: now(), by, text }, ...json<unknown[]>(h, [])].slice(0, 200));
 const MAX = 200_000;
 
@@ -532,4 +532,13 @@ export async function publicSignProposal(env: AppEnv, token: string, ip: string,
   await notify(env, { module: "books" }, { kind: "intake", title: `${bizName} signed their bookkeeping proposal`, body: `${p.plan} · ${money(proposalTotals(p).monthly)}/month — ready to start bookkeeping`, href: `/services/bookkeeping/intake/${r.id}` });
   await audit(env.DB, actor, { action: "Record update", resource: `Bookkeeping intake ${r.id}`, meta: `Proposal v${p.version} + engagement letter v${lt.version} signed (drawn) by ${name}${emailed ? "; copy emailed" : ""}` });
   return { signed: true, emailed };
+}
+
+/** A client's (or prospect's) intakes with their link status — for the lead page. */
+export async function intakesForClient(env: AppEnv, a: Actor, clientId: string) {
+  requirePermission(a, "books", "view");
+  const rows = await all<Row>(env.DB, `${SQL} WHERE i.client_id = ? ORDER BY i.created_at DESC`, clientId);
+  const out: BooksIntake[] = [];
+  for (const r of rows) out.push({ ...toIntake(r), link: await latestLink(env, "books_intake", r.id), proposalLink: await latestLink(env, "books_proposal", r.id) });
+  return out;
 }

@@ -115,7 +115,7 @@ async function process(env: AppEnv, f: LeadForm, raw: Record<string, unknown>, c
   const L = extractLead(f, data);
   const phoneDigits = digits(L.phone);
   const norm = "replace(replace(replace(replace(replace(phone, '(', ''), ')', ''), '-', ''), ' ', ''), '+1', '')";
-  const client = await one<{ id: string }>(db, `SELECT id FROM clients WHERE (? != '' AND email = ?) OR (length(?) = 10 AND ${norm} = ?) LIMIT 1`, L.email, L.email, phoneDigits, phoneDigits);
+  const client = await one<{ id: string }>(db, `SELECT id FROM clients WHERE status NOT IN ('prospect', 'declined') AND ((? != '' AND email = ?) OR (length(?) = 10 AND ${norm} = ?)) LIMIT 1`, L.email, L.email, phoneDigits, phoneDigits);
   if (client) {
     await db.batch([save("existing_client", undefined, client.id), db.prepare("INSERT INTO client_activity (id, client_id, kind, text, actor, at) VALUES (?, ?, 'message', ?, 'client', ?)").bind(randomId("x"), client.id, `Submitted the “${f.name}” form`, t)]);
     if (channel !== "Staff test") await notify(env, { module: "crm" }, { kind: "form", title: `A client submitted the “${f.name}” form`, href: `/clients/${client.id}#activity` });

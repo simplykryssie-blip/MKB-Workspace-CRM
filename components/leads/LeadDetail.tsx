@@ -1,5 +1,6 @@
 "use client";
 
+import { LeadIntakesCard, useLeadIntakes } from "./LeadIntakes";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -56,6 +57,7 @@ export function LeadDetail({ id }: { id: string }) {
   const [noteDraft, setNoteDraft] = useState("");
   const [kind, setKind] = useState<ActivityKind | "all">("all");
   const [showDone, setShowDone] = useState(false);
+  const intakes = useLeadIntakes(id);
 
   if (!lead && !store.ready) return <div className="grid min-h-[50vh] place-items-center text-[14px] text-muted" role="status">Loading…</div>;
   if (!lead)
@@ -160,7 +162,8 @@ export function LeadDetail({ id }: { id: string }) {
           <div className="flex flex-wrap items-start gap-2 lg:max-w-[400px] lg:justify-end">
             {open && <Button size="sm" icon={MessageSquarePlus} onClick={() => setDialog("log")}>Log activity</Button>}
             {open && <Button size="sm" icon={BellPlus} onClick={() => setDialog("reminder")}>Follow-up</Button>}
-            {open && <Button size="sm" variant="primary" icon={UserPlus} onClick={() => setDialog("convert")}>Convert to client</Button>}
+            {/* A lead with an intake is accepted from the Intake forms card (its record already exists). */}
+            {open && !intakes.hasProspect && <Button size="sm" variant="primary" icon={UserPlus} onClick={() => setDialog("convert")}>Convert to client</Button>}
             <Button size="sm" icon={Pencil} onClick={() => setDialog("edit")}>Edit</Button>
             <Menu
               label="More lead actions"
@@ -233,6 +236,7 @@ export function LeadDetail({ id }: { id: string }) {
 
       <div className="mt-5 grid grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
         <div className="space-y-5">
+          <LeadIntakesCard lead={l} intakes={intakes} />
           {/* Follow-ups */}
           <Card>
             <CardHeader title="Follow-ups & reminders" subtitle={openReminders.length ? `Next: ${fmtDateTime(openReminders[0].at)}` : "Nothing scheduled"} action={open ? <Button size="sm" variant="primary" icon={BellPlus} onClick={() => setDialog("reminder")}>Add</Button> : undefined} />

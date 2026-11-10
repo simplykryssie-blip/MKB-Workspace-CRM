@@ -30,9 +30,12 @@ export function BooksIntake({ id }: { id: string }) {
   const { clients, ready } = useClients();
   const load = () => call<{ intake: Intake }>("GET", `/api/books/intakes/${id}`).then((r) => setIntake(r.intake)).catch((e) => setErr(e instanceof Error ? e.message : "Couldn't open the intake"));
   useEffect(() => { if (BACKEND) load(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A lead's intake belongs to a prospect record, which isn't in the client list — load it directly.
+  const [prospect, setProspect] = useState<Client | null>(null);
+  useEffect(() => { if (intake?.prospect && !prospect) call<{ client: Client }>("GET", `/api/clients/${intake.clientId}?full=1`).then((r) => setProspect(r.client)).catch(() => setErr("Couldn't open this lead's record.")); }, [intake?.prospect, intake?.clientId]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!BACKEND) return <Card className="p-10 text-center text-muted">The bookkeeping intake works in the live CRM (preview or production).</Card>;
   if (err) return <Card className="p-10 text-center text-muted">{err}</Card>;
-  const c = clients.find((x) => x.id === intake?.clientId);
+  const c = clients.find((x) => x.id === intake?.clientId) ?? (intake?.prospect ? prospect ?? undefined : undefined);
   if (!intake || !ready || !c) return <Card className="p-10 text-center text-muted"><span role="status">Loading the intake…</span></Card>;
   return <Runner key={intake.id + intake.status} intake={intake} client={c} reload={load} />;
 }
@@ -92,7 +95,7 @@ function Runner({ intake, client, reload }: { intake: Intake; client: Client; re
     <div ref={top} className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <Link href="/services/bookkeeping#intakes" className="text-[13px] font-semibold text-accent">← Bookkeeping</Link>
+          {intake.prospect ? <Link href={`/leads/${intake.prospect.leadId}`} className="text-[13px] font-semibold text-accent">← Lead</Link> : <Link href="/services/bookkeeping#intakes" className="text-[13px] font-semibold text-accent">← Bookkeeping</Link>}
           <h1 className="mt-1 text-[22px] font-bold tracking-tight text-ink sm:text-[26px]">Bookkeeping intake — {client.name}</h1>
           <p className="text-[13px] text-muted">Question set {BOOKS_INTAKE_VERSION.version} · {submitted ? `Submitted ${intake.submittedAt ? fmtDate(intake.submittedAt) : ""}` : `${doneCount} of ${visible.length} sections complete${saved ? ` · saved ${saved}` : ""}`}</p>
         </div>
@@ -185,11 +188,17 @@ function Submitted({ intake, client, reload }: { intake: Intake; client: Client;
     <div className="space-y-5">
       <Card className="p-5 sm:p-6">
         <h2 className="flex items-center gap-2 text-[19px] font-bold text-ink"><CheckCircle2 size={20} className="text-success" /> Intake submitted</h2>
-        <p className="mt-1 text-[13.5px] text-muted">Submitted {intake.submittedAt ? fmtDate(intake.submittedAt) : ""}{intake.consentName ? ` · signed by ${intake.consentName}` : ""}. The signed PDF copy is in the client&rsquo;s Documents.</p>
-        <div className="mt-3 flex flex-wrap gap-2">
+        <p className="mt-1 text-[13.5px] text-muted">Submitted {intake.submittedAt ? fmtDate(intake.submittedAt) : ""}{intake.consentName ? ` · signed by ${intake.consentName}` : ""}. {intake.prospect ? "The signed PDF copy is on file and moves to their client record when you accept them." : <>The signed PDF copy is in the client&rsquo;s Documents.</>}</p>
+        {intake.prospect && (
+          <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-warning/40 bg-warning-soft/50 px-3 py-2.5 text-[13.5px] text-ink">
+            <span className="flex-1">{intake.prospect.declined ? "This lead was declined." : "This is a lead, not a client yet. Review the answers (and the price if you like), then accept or decline them on the lead."}</span>
+            <Button size="sm" variant="primary" href={`/leads/${intake.prospect.leadId}`}>Open the lead</Button>
+          </div>
+        )}
+        {!intake.prospect && <div className="mt-3 flex flex-wrap gap-2">
           {intake.workspaceId ? <Button variant="primary" href={`/services/bookkeeping/${intake.workspaceId}`}>Open bookkeeping workspace</Button> : <Button variant={signed ? "primary" : "secondary"} onClick={() => { if (signed || window.confirm("The client hasn't signed the proposal and engagement letter yet. Start bookkeeping anyway?")) setStarting(true); }}>Start bookkeeping from this intake</Button>}
           <Button href={`/clients/${client.id}#documents`}>Client documents</Button>
-        </div>
+        </div>}
       </Card>
       {!intake.workspaceId && <ProposalPanel intake={intake} client={client} reload={reload} />}
       <Card className="p-5 sm:p-6">
