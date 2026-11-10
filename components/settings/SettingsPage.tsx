@@ -1,7 +1,9 @@
 "use client";
 
+import { TaxFeeSchedule } from "@/components/tax/TaxFeeSchedule";
+import { useTax } from "@/lib/store/tax-store";
 import { useEffect, useMemo, useState } from "react";
-import { DollarSign, ExternalLink, FileSignature, History, Mail, Plus, RotateCcw, Save, ShieldCheck, Trash2 } from "lucide-react";
+import { DollarSign, FileSignature, History, Mail, Plus, RotateCcw, Save, ShieldCheck, Trash2, ChevronDown } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -251,6 +253,7 @@ function FeesEditor() {
   const toast = useToast();
   const canEdit = team.can("settings", "settings");
   const F = useServiceFees();
+  const taxFees = useTax().fees;
   const [f, setF] = useState<ServiceFees | null>(null);
   const [saving, setSaving] = useState(false);
   useEffect(() => { if (F.fees) setF(structuredClone(F.fees)); }, [F.fees]);
@@ -270,8 +273,7 @@ function FeesEditor() {
   return (
     <div className="space-y-5">
       {ro && <p className="rounded-xl bg-surface-2 px-3 py-2 text-[13px] text-muted">You can see the fees. Changing them needs the &ldquo;Manage settings&rdquo; permission.</p>}
-      <Card>
-        <CardHeader icon={DollarSign} title="Tax preparation" subtitle="Return prices (forms, schedules, states, amendments, extensions) are in the Tax Center fee schedule. Back-end bank and service bureau fees come with billing." />
+      <FeeSection title="Tax preparation" subtitle="Return prices (forms, schedules, states, amendments, extensions) and your tax partners. Back-end bank and service bureau fees come with billing." summary={`${taxFees.length} return price${taxFees.length === 1 ? "" : "s"} · ${f.taxPartners.software || "software not set"}`}>
         <div className="space-y-4 px-5 pb-5 sm:px-6">
           <div className="grid gap-4 sm:grid-cols-3">
             {([["software", "Tax software (staff only)"], ["serviceBureau", "Service bureau (staff only)"], ["bankProduct", "Refund transfer bank (shown on bank product invoices)"]] as const).map(([k, l]) => (
@@ -279,12 +281,11 @@ function FeesEditor() {
             ))}
           </div>
           <p className="text-[12.5px] text-muted">Clients never see the tax software or service bureau names. Only the refund transfer bank appears on bank product invoices, because the client signs that bank&rsquo;s agreement.</p>
-          <Button icon={ExternalLink} href="/services/tax-preparation#fees">Open the tax fee schedule</Button>
+          <TaxFeeSchedule />
         </div>
-      </Card>
+      </FeeSection>
 
-      <Card>
-        <CardHeader icon={DollarSign} title="Bookkeeping plans" subtitle="Monthly price and what each plan includes. Clients over their limits get an overage bill; after the set number of months in a row they move up a plan." />
+      <FeeSection title="Bookkeeping plans" subtitle="Monthly price and what each plan includes. Clients over their limits get an overage bill; after the set number of months in a row they move up a plan." summary={plans.map((p) => `${p.key} ${money(p.fee)}${p.startingAt ? "+" : ""}`).join(" · ")}>
         <div className="space-y-3 px-5 pb-5 sm:px-6">
           {plans.map((p, i) => (
             <details key={i} className="rounded-xl border border-line p-3" open={i === 0}>
@@ -316,10 +317,9 @@ function FeesEditor() {
           </div>
           {!f.books.overagePerTransaction && <p className="text-[12.5px] text-muted">No per-transaction overage set — set one if you bill for transactions over a plan&rsquo;s limit.</p>}
         </div>
-      </Card>
+      </FeeSection>
 
-      <Card>
-        <CardHeader icon={DollarSign} title="Bookkeeping add-on services" subtitle="Offered in the bookkeeping intake and added to the client's quote. Monthly add-ons go on the monthly fee; one-time ones are billed once; custom quotes are priced per client." />
+      <FeeSection title="Bookkeeping add-on services" subtitle="Offered in the bookkeeping intake and added to the client's quote. Monthly add-ons go on the monthly fee; one-time ones are billed once; custom quotes are priced per client." summary={`${(f.books.addOns ?? []).length} add-on${(f.books.addOns ?? []).length === 1 ? "" : "s"}`}>
         <div className="space-y-3 px-5 pb-5 sm:px-6">
           {(f.books.addOns ?? []).map((x, i) => {
             const setAdd = (patch: Partial<typeof x>) => setF({ ...f, books: { ...f.books, addOns: f.books.addOns.map((y, j) => (j === i ? { ...y, ...patch } : y)) } });
@@ -341,10 +341,9 @@ function FeesEditor() {
           {canEdit && <Button size="sm" icon={Plus} onClick={() => setF({ ...f, books: { ...f.books, addOns: [...(f.books.addOns ?? []), { key: `addon${Date.now() % 100000}`, name: "", billing: "monthly", price: 0, startingAt: false, unit: "", includes: [] }] } })}>Add add-on</Button>}
           <p className="text-[12px] text-muted">&ldquo;Additional financial accounts&rdquo; and &ldquo;Additional locations&rdquo; are added to a client&rsquo;s quote automatically when they have more accounts or locations than their plan includes.</p>
         </div>
-      </Card>
+      </FeeSection>
 
-      <Card>
-        <CardHeader icon={DollarSign} title="Record expungement" subtitle="Basic expungements only. Third-party fees (court, clerk, fingerprinting, records) are billed separately." />
+      <FeeSection title="Record expungement" subtitle="Basic expungements only. Third-party fees (court, clerk, fingerprinting, records) are billed separately." summary={`${money(f.expunge.baseFee)} up to ${f.expunge.chargesIncluded} charges · ${money(f.expunge.extraChargeFee)} each additional`}>
         <div className="space-y-3 px-5 pb-5 sm:px-6">
           <div className="grid gap-4 sm:grid-cols-3">
             <Num id="ex-base" label="MKB fee" prefix="$" value={f.expunge.baseFee} disabled={ro} onChange={(n) => setF({ ...f, expunge: { ...f.expunge, baseFee: n } })} />
@@ -353,23 +352,20 @@ function FeesEditor() {
           </div>
           <p className="text-[12.5px] text-muted">Examples: 1–{f.expunge.chargesIncluded} charges = {money(expungeFee(f.expunge, 1))} · {f.expunge.chargesIncluded + 1} charges = {money(expungeFee(f.expunge, f.expunge.chargesIncluded + 1))} · {f.expunge.chargesIncluded + 2} charges = {money(expungeFee(f.expunge, f.expunge.chargesIncluded + 2))}</p>
         </div>
-      </Card>
+      </FeeSection>
 
-      <Card>
-        <CardHeader icon={DollarSign} title="Business services" subtitle="Each business service has its own price in the Business Services catalog. That module is being connected next; its prices will be edited there." />
-      </Card>
+      <FeeSection title="Business services" subtitle="Each business service has its own price in the Business Services catalog. That module is being connected next; its prices will be edited there." summary={"Priced in the Business Services catalog"}>
+      </FeeSection>
 
-      <Card>
-        <CardHeader icon={DollarSign} title="Invoice wording" subtitle="Shown on invoices. {{bank}} becomes your refund transfer bank." />
+      <FeeSection title="Invoice wording" subtitle="Shown on invoices. {{bank}} becomes your refund transfer bank." summary={"Payment note and bank product disclosure"}>
         <div className="space-y-3 px-5 pb-5 sm:px-6">
           <div><label htmlFor="iw-up" className="mb-1 block text-[13px] font-medium text-ink-2">Pay upfront invoices — payment note</label><textarea id="iw-up" rows={2} disabled={ro} value={f.invoiceText.upfrontNote} onChange={(e) => setF({ ...f, invoiceText: { ...f.invoiceText, upfrontNote: e.target.value } })} className={`${input} py-2`} /></div>
           <div><label htmlFor="iw-bp" className="mb-1 block text-[13px] font-medium text-ink-2">Bank product invoices — how fees paid from the refund work</label><textarea id="iw-bp" rows={8} disabled={ro} value={f.invoiceText.bankDisclosure} onChange={(e) => setF({ ...f, invoiceText: { ...f.invoiceText, bankDisclosure: e.target.value } })} className={`${input} py-2`} /></div>
           <p className="text-[12px] text-warning-ink">Draft wording — check it against your refund transfer bank&rsquo;s agreement before clients see it.</p>
         </div>
-      </Card>
+      </FeeSection>
 
-      <Card>
-        <CardHeader icon={DollarSign} title="Late payments (all services)" subtitle="Used in the Standard terms of every engagement letter." />
+      <FeeSection title="Late payments (all services)" subtitle="Used in the Standard terms of every engagement letter." summary={`Late after ${f.late.graceDays} days · ${money(f.late.adminFee)} fee · ${f.late.monthlyRatePct}% per month`}>
         <div className="space-y-3 px-5 pb-5 sm:px-6">
           <div className="grid gap-4 sm:grid-cols-3">
             <Num id="lt-grace" label="Late after" suffix="days" value={f.late.graceDays} disabled={ro} onChange={(n) => setF({ ...f, late: { ...f.late, graceDays: n } })} />
@@ -380,7 +376,7 @@ function FeesEditor() {
           </div>
           <p className="text-[12.5px] text-muted">Louisiana generally caps agreed interest at 12% a year (1% per month), so this can&rsquo;t be set higher. If MKB files a claim, the claim admin fee plus all court costs are added. Have your attorney confirm these fees and the rate.</p>
         </div>
-      </Card>
+      </FeeSection>
 
       {canEdit && (
         <div className="sticky bottom-3 flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-surface p-3 shadow-pop">
@@ -394,6 +390,25 @@ function FeesEditor() {
 }
 
 /* ------------------------------------------------------------------ */
+
+/** A collapsible group on the Fees page: click the header to open or close; a summary shows while closed. */
+function FeeSection({ title, subtitle, summary, children }: { title: string; subtitle: string; summary?: string; children?: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const id = `fees-${title.toLowerCase().replace(/[^a-z]+/g, "-")}`;
+  return (
+    <Card>
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} aria-controls={id} className="flex w-full items-start gap-3 px-5 py-4 text-left hover:bg-surface-hover sm:px-6">
+        <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent"><DollarSign size={17} /></span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[15.5px] font-semibold text-ink">{title}</span>
+          <span className="block text-[12.5px] text-muted">{open ? subtitle : summary ?? subtitle}</span>
+        </span>
+        <ChevronDown size={18} className={`mt-2 shrink-0 text-muted transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && children && <div id={id} className="pt-1">{children}</div>}
+    </Card>
+  );
+}
 
 function DesigneeEditor() {
   const team = useTeam();

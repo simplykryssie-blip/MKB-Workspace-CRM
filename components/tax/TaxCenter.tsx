@@ -23,8 +23,6 @@ import {
   Search,
   Send,
   ShieldAlert,
-  Tags,
-  Trash2,
   User,
   Users,
   X,
@@ -56,7 +54,6 @@ const TABS = [
   { key: "efile", label: "E-file", icon: Send },
   { key: "f8821", label: "Form 8821", icon: FileSignature },
   { key: "billing", label: "Billing", icon: CircleDollarSign },
-  { key: "fees", label: "Fee schedule", icon: Tags },
 ] as const;
 type Tab = (typeof TABS)[number]["key"];
 
@@ -75,8 +72,15 @@ export function TaxCenter() {
   const [newOpen, setNewOpen] = useState<{ clientId?: string } | null>(null);
 
   useEffect(() => {
-    const h = window.location.hash.slice(1) as Tab;
-    if (TABS.some((t) => t.key === h)) setTab(h);
+    const read = () => {
+      // The fee schedule moved to Settings → Fees.
+      if (window.location.hash === "#fees") { window.location.replace("/settings#fees"); return; }
+      const h = window.location.hash.slice(1) as Tab;
+      if (TABS.some((t) => t.key === h)) setTab(h);
+    };
+    read();
+    window.addEventListener("hashchange", read);
+    return () => window.removeEventListener("hashchange", read);
   }, []);
   const go = (t: Tab) => {
     setTab(t);
@@ -132,7 +136,6 @@ export function TaxCenter() {
       {tab === "documents" && <MissingDocs returns={inYear} byId={byId} />}
       {tab === "efile" && <EfileTab returns={inYear} byId={byId} />}
       {tab === "billing" && (tax.access.billing ? <BillingTab returns={inYear} byId={byId} /> : <NoAccess what="Tax billing" />)}
-      {tab === "fees" && <FeeSchedule />}
       {tab === "f8821" && <Form8821Tab />}
 
       <NewReturnDialog open={!!newOpen} onClose={() => setNewOpen(null)} defaultYear={year === "all" ? 2026 : year} clientId={newOpen?.clientId} onCreated={(id) => { setNewOpen(null); router.push(`/services/tax-preparation/returns/${id}`); }} />
@@ -670,65 +673,6 @@ function BillingTab({ returns, byId }: { returns: TaxReturn[]; byId: Map<string,
       </section>
       {payClient && <PaymentDialog client={payClient} open={!!pay} onClose={() => setPay(null)} invoiceId={pay?.invoiceId} />}
     </div>
-  );
-}
-
-/* ================================================================== */
-/* Fee schedule                                                        */
-/* ================================================================== */
-
-function FeeSchedule() {
-  const tax = useTax();
-  const toast = useToast();
-  const [label, setLabel] = useState("");
-  const [price, setPrice] = useState("");
-  const [kind, setKind] = useState<"individual" | "business" | "both">("both");
-  const can = tax.access.billing;
-  return (
-    <Card>
-      <CardHeader icon={Tags} title="Tax preparation fee schedule" subtitle="Used to build each return's price. Changing a price doesn't alter returns already priced." />
-      {!can && <div className="mx-5 mb-3 sm:mx-6"><NoAccess what="Editing prices" /></div>}
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[560px] text-left text-[13.5px]">
-          <thead className="border-y border-line bg-surface-2 text-[12px] font-semibold uppercase tracking-wide text-muted">
-            <tr><th className="px-5 py-2.5">Item</th><th className="px-3 py-2.5">Applies to</th><th className="px-3 py-2.5 text-right">Price</th><th className="w-12 px-5 py-2.5" /></tr>
-          </thead>
-          <tbody>
-            {tax.fees.map((f) => (
-              <tr key={f.code} className="border-b border-line last:border-0">
-                <td className="px-5 py-2.5"><span className="font-medium text-ink">{f.label}</span>{f.unit && <span className="ml-1 text-[12px] text-muted">({f.unit})</span>}</td>
-                <td className="px-3 py-2.5 capitalize text-ink-2">{f.kind === "both" ? "All" : f.kind}</td>
-                <td className="px-3 py-2.5 text-right">
-                  <label className="inline-flex items-center gap-1">
-                    <span className="text-muted">$</span>
-                    <input aria-label={`Price for ${f.label}`} type="number" min={0} disabled={!can} defaultValue={f.price} onBlur={(e) => { const v = Number(e.target.value); if (v >= 0 && v !== f.price) { tax.setFee(f.code, v); toast(`${f.label}: ${usd(v)}`); } }} className="h-8 w-24 rounded-lg border border-line bg-surface px-2 text-right tabular-nums text-ink disabled:opacity-60" />
-                  </label>
-                </td>
-                <td className="px-5 py-2.5 text-right">
-                  <button aria-label={`Remove ${f.label}`} disabled={!can} onClick={() => { tax.removeFee(f.code); toast(`Removed ${f.label}`); }} className="grid h-8 w-8 place-items-center rounded-lg text-muted hover:bg-surface-hover hover:text-danger disabled:opacity-30"><Trash2 size={15} /></button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!label.trim() || !(Number(price) >= 0) || price === "") return;
-          tax.addFee({ code: `C-${Date.now().toString(36)}`, label: label.trim(), kind, price: Number(price) });
-          toast(`Added "${label.trim()}"`);
-          setLabel("");
-          setPrice("");
-        }}
-        className="flex flex-wrap items-end gap-2 border-t border-line p-4 sm:px-6"
-      >
-        <input aria-label="New fee item" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="New item, e.g. Schedule F — farm income" disabled={!can} className="h-10 min-w-[220px] flex-1 rounded-xl border border-line bg-surface px-3 text-[14px] text-ink disabled:opacity-60" />
-        <select aria-label="Applies to" value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} disabled={!can} className="h-10 rounded-xl border border-line bg-surface px-2 text-[13.5px] text-ink-2"><option value="both">All</option><option value="individual">Individual</option><option value="business">Business</option></select>
-        <input aria-label="New fee price" type="number" min={0} value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Price" disabled={!can} className="h-10 w-28 rounded-xl border border-line bg-surface px-3 text-right text-[14px] text-ink disabled:opacity-60" />
-        <Button type="submit" icon={Plus} disabled={!can || !label.trim() || price === ""}>Add</Button>
-      </form>
-    </Card>
   );
 }
 
