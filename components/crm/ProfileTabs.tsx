@@ -61,7 +61,7 @@ import { useExp } from "@/lib/store/exp-store";
 import { useTeam } from "@/lib/store/team-store";
 import { BACKEND } from "@/lib/sync/remote";
 import { ReturnStatusBadge } from "@/components/tax/TaxBits";
-import { BooksEnrollmentActions, ClientBooksCard } from "@/components/books/ClientBooks";
+import { BooksEnrollmentActions, BooksOnboardingStage, ClientBooksCard } from "@/components/books/ClientBooks";
 
 export type Act = {
   go: (k: TabKey) => void;
@@ -332,6 +332,8 @@ function EnrollmentRow({ c, e, compact }: { c: Client; e: Enrollment; compact?: 
   const bizReq = useBiz().requests.find((r) => r.enrollmentId === e.id);
   const expMatter = useExp().matters.find((x) => x.enrollmentId === e.id);
   const isTax = e.service === "tax" || e.service === "books" || !!booksWs || !!bizReq || !!expMatter;
+  // Bookkeeping before the workspace exists: show the intake → review → proposal step, not a monthly-close stage.
+  const booksOnboarding = e.service === "books" && !booksWs && !bizReq && !expMatter;
   const setStatus = (s: Enrollment["status"]) => {
     store.setEnrollmentStatus(c.id, e.id, s);
     toast(`Status set to "${enrollmentStatus[s].label}"`);
@@ -346,7 +348,7 @@ function EnrollmentRow({ c, e, compact }: { c: Client; e: Enrollment; compact?: 
           </div>
           <div className="mt-1.5 text-[14.5px] font-semibold text-ink">{e.title}</div>
           <div className="mt-0.5 text-[12.5px] text-muted">
-            Stage: <span className="font-medium text-ink-2">{e.stage}</span> · {staffById(e.staffId).name}
+            Stage: <span className="font-medium text-ink-2">{booksOnboarding ? <BooksOnboardingStage c={c} /> : e.stage}</span> · {staffById(e.staffId).name}
             {e.dueAt && <> · Due {fmtDate(e.dueAt, { month: "short", day: "numeric" })}</>}
           </div>
         </div>
@@ -380,7 +382,7 @@ function EnrollmentRow({ c, e, compact }: { c: Client; e: Enrollment; compact?: 
       <div className="mt-3">
         <Progress value={e.progress} color={svcColor(e.service)} label={`${e.title} progress`} />
       </div>
-      {!compact && (
+      {!compact && !booksOnboarding && (
         <ol className="mt-4 flex flex-wrap gap-x-1 gap-y-2" aria-label="Workflow stages">
           {stages.map((s, i) => {
             const done = i < idx || e.status === "complete";

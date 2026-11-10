@@ -93,6 +93,8 @@ export async function saveIntake(env: AppEnv, a: Actor, id: string, b: { answers
   const answers = b.answers !== undefined ? cleanAnswers(b.answers) : json<Answers>(r.answers, {});
   const step = Number.isInteger(b.step) ? Math.max(0, Math.min(40, Number(b.step))) : r.step;
   const ws = typeof b.workspaceId === "string" ? b.workspaceId.slice(0, 120) : r.workspace_id;
+  // Only link a workspace that really exists for this client (never a pointer to nothing).
+  if (ws && ws !== r.workspace_id && !(await one(env.DB, "SELECT 1 FROM books_workspaces WHERE id = ? AND client_id = ?", ws, r.client_id))) throw badRequest("That bookkeeping workspace wasn't saved. Start bookkeeping again.");
   const note = r.status === "submitted" && b.answers !== undefined && JSON.stringify(answers) !== r.answers ? "Answers updated by staff after submission" : ws !== r.workspace_id ? "Bookkeeping workspace started from this intake" : null;
   const res = await run(env.DB, "UPDATE books_intakes SET answers = ?, step = ?, workspace_id = ?, history = ?, updated_at = ?, rev = rev + 1 WHERE id = ? AND rev = ?", JSON.stringify(answers), step, ws, note ? hist(r.history, a.member.id, note) : r.history, now(), id, r.rev);
   if (!res.meta.changes) throw new HttpError(409, "Someone else updated this intake. Reloading the latest version.", "conflict");

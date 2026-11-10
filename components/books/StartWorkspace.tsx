@@ -8,7 +8,7 @@ import { Modal } from "@/components/ui/Modal";
 import { SelectField, TextField } from "@/components/ui/Field";
 import { useToast } from "@/components/ui/Toast";
 import { useClients } from "@/lib/store/clients-store";
-import { useBooks } from "@/lib/store/books-store";
+import { useBooks, waitForWorkspaceSave } from "@/lib/store/books-store";
 import { useTeam } from "@/lib/store/team-store";
 import { meId } from "@/lib/sample/clients";
 import { REPORT_TYPES, periodLabel, type ReportType } from "@/lib/books/config";
@@ -98,19 +98,25 @@ export function StartWorkspace({ open, onClose, onCreated, intake, clientId: pre
     if (c) setBusinessName(c.business?.legalName ?? c.name);
   };
   useEffect(() => { if (open && presetClient && !intake) pickClient(presetClient); }, [open, presetClient]); // eslint-disable-line react-hooks/exhaustive-deps
-  const submit = () => {
+  const [saving, setSaving] = useState(false);
+  const submit = async () => {
     if (!client) return setErr("Choose the client.");
     if (!businessName.trim()) return setErr("Enter the business name.");
     if (accounts.some((a) => !a.name.trim())) return setErr("Give every account a name (or remove it).");
     if (accounts.some((a) => a.mask && !/^\d{4}$/.test(a.mask))) return setErr("Account numbers: enter only the last 4 digits.");
     const enrollmentId = client.enrollments?.find((e) => e.service === "books")?.id;
     const id = books.createWorkspace({ clientId: client.id, enrollmentId, businessName, entityType, plan, monthlyFee: fee, reports, includes: [...(F.fees?.books.plans.find((p) => p.key === plan)?.includes ?? INCLUDES), ...extras.map((x) => `Add-on: ${x}`)], bookkeeperId, reviewerId, accounts, firstPeriod: period, qboCompany: qbo });
+    // Wait until the workspace is really saved before anything points to it or the page changes.
+    setSaving(true); setErr(null);
+    const ok = await waitForWorkspaceSave(id);
+    setSaving(false);
+    if (!ok) return setErr("The workspace wasn't saved. Check the message above, then try again.");
     toast(`Bookkeeping started for ${businessName.trim()}`);
     onCreated(id);
   };
 
   return (
-    <Modal open={open} onClose={onClose} size="lg" title="Start bookkeeping" description="Sets up monthly review, reconciliation and close for one client business. The client keeps their own QuickBooks." footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" onClick={submit}>Start bookkeeping</Button></>}>
+    <Modal open={open} onClose={onClose} size="lg" title="Start bookkeeping" description="Sets up monthly review, reconciliation and close for one client business. The client keeps their own QuickBooks." footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={saving} onClick={submit}>{saving ? "Saving…" : "Start bookkeeping"}</Button></>}>
       <div className="space-y-5">
         <div className="grid gap-4 sm:grid-cols-2">
           <SelectField label="Client" required disabled={!!intake || !!presetClient} value={clientId} onChange={(e) => pickClient(e.target.value)} options={[["", clients.clients.length ? "Choose a client…" : "Add the client in Clients first"], ...clients.clients.map((c): [string, string] => [c.id, c.name])]} />

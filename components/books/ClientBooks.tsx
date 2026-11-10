@@ -137,3 +137,13 @@ export function BooksEnrollmentActions({ c }: { c: Client }) {
     </>
   );
 }
+
+/** Where the client is before their bookkeeping workspace exists (shown instead of a monthly-close stage). */
+export function BooksOnboardingStage({ c }: { c: Client }) {
+  const b = useClientBooks(c);
+  if (b.intakes === null) return <>…</>;
+  const latest = b.intakes.find((i) => !i.workspaceId) ?? null;
+  if (!latest) return <>Not started — intake needed</>;
+  const st = booksStage(latest);
+  return <>{st === "in_progress" ? (latest.link?.state === "active" ? "Intake link sent" : "Intake in progress") : STAGE_LABEL[st]}</>;
+}

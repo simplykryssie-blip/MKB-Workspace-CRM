@@ -479,5 +479,24 @@ function useBooksSync(state: State, dispatch: React.Dispatch<Action>) {
     state.workspaces.forEach((w) => { if (synced.current.get(w.id) !== w) later(w.id, () => save(w.id)); });
   }, [state.workspaces, ready]);
 
+  // Lets screens wait until a workspace has reached the server (e.g. before leaving the page).
+  useEffect(() => {
+    saveWaiter = async (id: string) => {
+      for (let i = 0; i < 80; i++) {
+        const w = stateRef.current.workspaces.find((x) => x.id === id);
+        // Not in the list yet (just created) — or removed because the server refused it.
+        if (!w) { if (i > 8) return false; await new Promise((res) => setTimeout(res, 250)); continue; }
+        if (revs.current.has(id) && synced.current.get(id) === w && !inflight.current.has(id)) return true;
+        await new Promise((res) => setTimeout(res, 250));
+      }
+      return false;
+    };
+    return () => { saveWaiter = null; };
+  }, []);
+
   return { ready };
 }
+
+let saveWaiter: ((id: string) => Promise<boolean>) | null = null;
+/** Resolves true once the workspace is saved on the server; false if it was refused or it took over ~20 seconds. */
+export const waitForWorkspaceSave = (id: string) => (BACKEND && saveWaiter ? saveWaiter(id) : Promise.resolve(true));
