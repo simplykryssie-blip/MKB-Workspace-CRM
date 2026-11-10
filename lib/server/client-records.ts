@@ -169,7 +169,7 @@ export async function createClient(env: AppEnv, a: Actor, c: ClientSnapshot, ids
   if (a.kind !== "staff") throw forbidden();
   if (!/^c-[A-Za-z0-9_-]{3,40}$/.test(c.id ?? "")) throw badRequest("Invalid client ID.");
   if (await one(env.DB, "SELECT 1 FROM clients WHERE id = ?", c.id)) throw new HttpError(409, "That client already exists.", "exists");
-  const core = cleanCore(c);
+  const core = cleanCore({ ...c, portal: "not_invited" }); // portal access starts only through a real invite
   const dupe = core.email && (await one<{ id: string; name: string }>(env.DB, "SELECT id, name FROM clients WHERE email = ? LIMIT 1", core.email));
   if (dupe) throw new HttpError(409, `${dupe.name} already uses this email.`, "duplicate");
   const t = now();
