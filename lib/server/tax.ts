@@ -29,7 +29,8 @@ export type ReturnSnapshot = TaxReturn & { rev?: number };
 type Staff = Extract<Actor, { kind: "staff" }>;
 const MAX_JSON = 300_000;
 
-const toReturn = (r: Row): ReturnSnapshot => ({
+export type TaxRow = Row;
+export const toReturn = (r: Row): ReturnSnapshot => ({
   id: r.id, clientId: r.client_id, enrollmentId: r.enrollment_id ?? undefined, taxYear: r.tax_year, kind: r.kind, form: r.form,
   filingStatus: (r.filing_status ?? undefined) as TaxReturn["filingStatus"], states: json(r.states, []), status: r.status, preparerId: r.preparer_id, reviewerId: r.reviewer_id,
   dueAt: r.due_at ?? undefined, extension: json(r.extension, undefined), reviewSignoff: json(r.review_signoff, undefined), approvalSignatureId: r.approval_signature_id ?? undefined,
@@ -52,11 +53,13 @@ async function accessibleClients(env: AppEnv, a: Staff, ids: string[]) {
 export async function listTax(env: AppEnv, a: Actor) {
   requirePermission(a, "tax", "view");
   if (a.kind !== "staff") throw forbidden();
-  const [rows, fees] = await Promise.all([all<Row>(env.DB, "SELECT * FROM tax_returns ORDER BY tax_year DESC, created_at DESC"), all<FeeItem & { position: number }>(env.DB, "SELECT code, label, kind, price, unit, position FROM tax_fee_schedule ORDER BY position")]);
+  // Returns of leads who aren't clients yet (prospects) stay out of the Tax Center until they're accepted.
+  const [rows, fees] = await Promise.all([all<Row>(env.DB, "SELECT * FROM tax_returns WHERE client_id NOT IN (SELECT id FROM clients WHERE status IN ('prospect', 'declined')) ORDER BY tax_year DESC, created_at DESC"), all<FeeItem & { position: number }>(env.DB, "SELECT code, label, kind, price, unit, position FROM tax_fee_schedule ORDER BY position")]);
   const ok = await accessibleClients(env, a, [...new Set(rows.map((r) => r.client_id))]);
   return { returns: rows.filter((r) => ok.has(r.client_id)).map(toReturn), fees: fees.map(({ position: _p, unit, ...f }) => ({ ...f, unit: unit ?? undefined })) };
 }
 
+export async function loadReturn(env: AppEnv, a: Staff, id: string) { return load(env, a, id); }
 async function load(env: AppEnv, a: Staff, id: string) {
   const r = await one<Row>(env.DB, "SELECT * FROM tax_returns WHERE id = ?", id);
   if (!r) throw notFound("Return not found.");
@@ -97,7 +100,8 @@ export async function createReturn(env: AppEnv, a: Actor, r: ReturnSnapshot) {
     ...assignmentStmts(env.DB, r),
   ]);
   await audit(env.DB, a, { action: "Record update", resource: `Tax return ${r.id}`, department: "tax", meta: "Return created" });
-  await ensure8821(env, a, r.clientId);
+  // A lead's return (prospect) gets its Form 8821 when they're accepted as a client.
+  if ((await one<{ status: string }>(env.DB, "SELECT status FROM clients WHERE id = ?", r.clientId))?.status !== "prospect") await ensure8821(env, a, r.clientId);
   return load(env, a, r.id);
 }
 

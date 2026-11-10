@@ -18,6 +18,7 @@ import { coverage, display, docsFor, progress, qVisible, rowsOf, sectionVisible,
 import { INTERVIEW_VERSION, flagsFor, impliedFilingStatus, returnNeeds, sectionsFor, senior } from "@/lib/tax/interview/questions";
 import { fmtDate, relTime } from "@/lib/format";
 import { interviewHref } from "./TaxInterview";
+import { TaxLinkPanel } from "./TaxLinkPanel";
 
 const STATUS = {
   not_sent: ["neutral", "Not sent"],
@@ -56,6 +57,7 @@ export function InterviewTab({ r }: { r: TaxReturn }) {
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
       <div className="space-y-5">
+        <TaxLinkPanel r={r} />
         <Card>
           <CardHeader icon={NotebookPen} title="Guided tax interview" subtitle={`TY ${INTERVIEW_VERSION.taxYear} question set ${INTERVIEW_VERSION.version} · ${INTERVIEW_VERSION.status}`} action={<span className="flex flex-wrap gap-1.5">{started && senior(a) && <Badge tone="info">65+ · senior questions on</Badge>}<Badge tone={tone}>{label}</Badge></span>} />
           <div className="space-y-3 px-5 pb-5 sm:px-6">

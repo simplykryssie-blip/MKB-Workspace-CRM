@@ -6,7 +6,7 @@
  * document contents in an email.
  */
 
-export type TemplateKey = "tax_intake_received" | "tax_document_reminder" | "tax_document_request" | "tax_extension_filed" | "invoice_sent" | "books_intake_received" | "books_intake_link" | "books_proposal" | "books_proposal_signed";
+export type TemplateKey = "tax_intake_received" | "tax_document_reminder" | "tax_document_request" | "tax_extension_filed" | "invoice_sent" | "books_intake_received" | "books_intake_link" | "books_proposal" | "books_proposal_signed" | "tax_interview_link";
 
 export type EmailWording = {
   subject: string;
@@ -66,6 +66,20 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
     steps: "An extension gives you more time to file, not more time to pay. Interest applies to any tax not paid by the original due date.\nWe'll keep working on your return as your documents come in.\nWe'll let you know when it's ready for your review and signature.",
     button: "Open your client portal",
     closing: "Questions? Reply through your portal or call us at 833-379-3320.",
+  },
+  tax_interview_link: {
+    key: "tax_interview_link",
+    name: "Tax interview link",
+    when: "Sent when staff click Send interview link (on a return, or to a lead). The button opens the client's private tax interview — no portal login. The link expires and stops working once the interview is submitted.",
+    placeholders: ["firstName", "taxYear", "expires", "staffName"],
+    subject: "Your {{taxYear}} MKB tax interview — private link inside",
+    heading: "Hi {{firstName}}, let's get your {{taxYear}} taxes started.",
+    intro: "{{staffName}} at MKB Financial Group sent you a private link to complete your {{taxYear}} tax interview on your phone or computer — no account or password needed. Your answers save as you go, so you can stop and come back.",
+    docsTitle: "",
+    docsNote: "",
+    steps: "Answer the questions about your household, income and deductions.\nRead and sign our engagement letter, then sign and submit.\nWe email you a copy and the list of documents to upload in your client portal.",
+    button: "Start my interview",
+    closing: "This link is just for you — please don't forward it. It expires on {{expires}} and stops working once you submit. Didn't expect this email or need a new link? Call us at 833-379-3320.",
   },
   books_intake_received: {
     key: "books_intake_received",
