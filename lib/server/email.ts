@@ -12,7 +12,9 @@ export function publicAssetOrigin(env: AppEnv) {
   const host = (env.WEBSITE_HOSTS ?? "").split(",").map((x) => x.trim()).find((h) => h.startsWith("www.")) ?? "www.mkbfinancialgroup.com";
   return `https://${host}`;
 }
-export const portalUrl = (env: AppEnv) => `${env.APP_ORIGIN ?? "https://app.mkbfinancialgroup.com"}/portal`;
+/** The client portal's address (its own host in production; /portal on the app otherwise). */
+export const portalOrigin = (env: AppEnv) => env.PORTAL_ORIGIN ?? env.APP_ORIGIN ?? "https://app.mkbfinancialgroup.com";
+export const portalUrl = (env: AppEnv) => `${portalOrigin(env)}/portal`;
 
 export async function loadWording(env: AppEnv, key: TemplateKey) {
   const r = await one<{ data: string; updated_at: string; updated_by: string | null }>(env.DB, "SELECT data, updated_at, updated_by FROM email_templates WHERE key = ?", key).catch(() => null);

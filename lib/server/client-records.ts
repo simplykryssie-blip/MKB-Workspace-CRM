@@ -6,7 +6,8 @@
 import { invoicesByClient } from "./billing";
 import type { ActivityItem, Client, Enrollment, Note, ServiceKey } from "@/lib/types";
 import { canDo, clientAccess } from "@/lib/team/policy";
-import { all, badRequest, forbidden, HttpError, json, notFound, now, one, type AppEnv, type Db } from "./core";
+import { all, badRequest, forbidden, HttpError, json, notFound, now, one, rateLimit, type AppEnv, type Db } from "./core";
+import { portalUrl, sendTemplate } from "./email";
 import { encryptField } from "./crypto";
 import { audit, requirePermission, type Actor } from "./identity";
 import { CLIENT_SQL, assignmentSets, canOpen, last4Map, type ClientRow } from "./clients";
@@ -201,7 +202,8 @@ export async function saveClient(env: AppEnv, a: Actor, id: string, next: Client
   const need = (action: "edit" | "assign") => { if (!canDo(a.policy, a.member, "crm", action)) throw forbidden(action === "assign" ? "Your role can't change who is assigned to this client." : "Your role can't edit client records."); };
   const stmts: D1PreparedStatement[] = [];
 
-  const core = cleanCore({ ...next, id });
+  // Portal access is changed only through invite / revoke (it creates or disables a real account).
+  const core = cleanCore({ ...next, id, portal: cur.portal });
   const curCore = cleanCore(cur);
   if (!sameJSON(core, curCore)) {
     need("edit");
@@ -250,5 +252,12 @@ export async function saveClient(env: AppEnv, a: Actor, id: string, next: Client
   const res = await db.batch(stmts);
   if (!res[0].meta.changes) throw new HttpError(409, "Someone else updated this client. Reloading the latest version.", "conflict");
   if (changed.length) await audit(db, a, { action: changed.includes("team") ? "Assignment change" : "Record update", resource: `Client ${id}`, meta: `Changed: ${[...new Set(changed)].join(", ")}` });
+  // A new staff message for a client who uses the portal: email them a notice (never the message itself).
+  const before = new Set((cur.messages ?? []).map((m) => m.id));
+  if (cur.portal === "active" && cur.email && (next.messages ?? []).some((m) => m.from === "staff" && !before.has(m.id))) {
+    if (await rateLimit(db, `portalmsgmail:${id}`, 1, 15)) {
+      await sendTemplate(env, "portal_message", { to: cur.email, vars: { firstName: (cur.contactName || cur.name).trim().split(/\s+/)[0] }, buttonUrl: portalUrl(env) + "#messages" }).catch((e) => console.error("portal message notice failed", e));
+    }
+  }
   return getFull(env, a, id);
 }

@@ -77,7 +77,9 @@
         "BACKEND_ENABLED": "true",
         "APP_ORIGIN": "https://app.mkbfinancialgroup.com",
         "EMAIL_FROM": "MKB Financial Group <no-reply@mkbfinancialgroup.com>",
-        "WEBSITE_HOSTS": "mkbfinancialgroup.com,www.mkbfinancialgroup.com"
+        "WEBSITE_HOSTS": "mkbfinancialgroup.com,www.mkbfinancialgroup.com",
+        "PORTAL_HOSTS": "portal.mkbfinancialgroup.com",
+        "PORTAL_ORIGIN": "https://portal.mkbfinancialgroup.com"
       }
     }
   }

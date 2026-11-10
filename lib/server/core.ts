@@ -18,6 +18,8 @@ export type AppEnv = Omit<CloudflareEnv, "APP_ENV" | "BACKEND_ENABLED"> & {
   APP_ORIGIN?: string;
   /** Other addresses the app also answers on (comma-separated origins), e.g. the workers.dev name. */
   APP_ORIGINS?: string;
+  /** Public address of the client portal, e.g. https://portal.mkbfinancialgroup.com (without it, the portal is at APP_ORIGIN/portal). */
+  PORTAL_ORIGIN?: string;
   /** Domains that show the public website, e.g. "mkbfinancialgroup.com,www.mkbfinancialgroup.com". */
   WEBSITE_HOSTS?: string;
   /** One-time link secret for creating the Owner account in an empty database. */
@@ -78,7 +80,7 @@ export function checkSameOrigin(req: Request, env: AppEnv, rawBody = false) {
   if (req.method === "GET" || req.method === "HEAD") return;
   const origin = req.headers.get("origin");
   // The app may be reached at several addresses (APP_ORIGIN plus APP_ORIGINS), each behind Cloudflare Access.
-  const allowed = [env.APP_ORIGIN ?? new URL(req.url).origin, ...(env.APP_ORIGINS ?? "").split(",").map((o) => o.trim()).filter(Boolean)];
+  const allowed = [env.APP_ORIGIN ?? new URL(req.url).origin, ...(env.APP_ORIGINS ?? "").split(",").map((o) => o.trim()).filter(Boolean), ...(env.PORTAL_ORIGIN ? [env.PORTAL_ORIGIN] : [])];
   // The public website's domains may only call the public form API (no cookies are involved there).
   const sitePublic = new URL(req.url).pathname.startsWith("/api/public/") && websiteOrigins(env).includes(origin ?? "");
   if (!origin || (!allowed.includes(origin) && !sitePublic)) throw new HttpError(403, "Request blocked (cross-site).", "bad_origin");

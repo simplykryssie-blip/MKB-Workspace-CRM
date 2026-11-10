@@ -21,7 +21,7 @@ const longDate = (iso: string) => new Date(iso).toLocaleDateString("en-US", { da
 const payOrigin = (env: AppEnv) => (env.WEBSITE_HOSTS ? publicAssetOrigin(env) : env.APP_ORIGIN ?? "https://app.mkbfinancialgroup.com");
 export const stripeReady = (env: AppEnv) => !!env.STRIPE_SECRET_KEY;
 
-async function pdfFor(env: AppEnv, r: InvoiceRow, payUrl?: string) {
+export async function pdfFor(env: AppEnv, r: InvoiceRow, payUrl?: string) {
   const c = await one<{ name: string; contact_name: string | null; address: string | null }>(env.DB, "SELECT name, contact_name, address FROM clients WHERE id = ?", r.client_id);
   const addr = json<{ line1?: string; city?: string; state?: string; zip?: string }>(c?.address, {});
   const fees = await loadFees(env);
@@ -81,6 +81,13 @@ export async function publicPay(env: AppEnv, token: string, ip: string, done: bo
   if (owed <= 0) return page("Already paid", `<p>Invoice ${r.number} is paid in full. Thank you!</p>`);
   if (!stripeReady(env)) return page("Online payment isn't available yet", `<p>Please pay invoice ${r.number} (${usd(owed)}) at our office, or call us.</p>`, 503);
   const base = `${payOrigin(env)}/api/public/pay/${token}`;
+  const url = await stripeCheckout(env, r, owed, `${base}?done=1`, base.replace(/\/api\/public\/pay\/.*/, "/"));
+  if (!url) return page("Payment page unavailable", "<p>We couldn't open the payment page right now. Please try again later or call us.</p>", 502);
+  return Response.redirect(url, 303);
+}
+
+/** A Stripe Checkout page for what's owed on an invoice. Returns its address, or null if Stripe refused. */
+export async function stripeCheckout(env: AppEnv, r: InvoiceRow, owed: number, successUrl: string, cancelUrl: string) {
   const form = new URLSearchParams({
     mode: "payment",
     "line_items[0][quantity]": "1",
@@ -91,13 +98,13 @@ export async function publicPay(env: AppEnv, token: string, ip: string, done: bo
     "payment_intent_data[metadata][invoice_id]": r.id,
     "payment_intent_data[description]": `Invoice ${r.number}`,
     client_reference_id: r.id,
-    success_url: `${base}?done=1`,
-    cancel_url: base.replace(/\/api\/public\/pay\/.*/, "/"),
+    success_url: successUrl,
+    cancel_url: cancelUrl,
   });
   const res = await fetch("https://api.stripe.com/v1/checkout/sessions", { method: "POST", headers: { authorization: `Bearer ${env.STRIPE_SECRET_KEY}`, "content-type": "application/x-www-form-urlencoded" }, body: form });
   const s = (await res.json().catch(() => ({}))) as { url?: string; error?: { message?: string } };
-  if (!res.ok || !s.url) { console.error("stripe checkout", res.status, s.error?.message); return page("Payment page unavailable", "<p>We couldn't open the payment page right now. Please try again later or call us.</p>", 502); }
-  return Response.redirect(s.url, 303);
+  if (!res.ok || !s.url) { console.error("stripe checkout", res.status, s.error?.message); return null; }
+  return s.url;
 }
 
 /* ---------------------------------------------------------------- Stripe webhook */

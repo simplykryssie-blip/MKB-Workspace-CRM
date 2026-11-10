@@ -6,6 +6,7 @@ import Link from "next/link";
 import {
   Activity as ActivityIcon,
   Archive,
+  Ban,
   AtSign,
   Building2,
   CalendarDays,
@@ -38,6 +39,7 @@ import { ServiceTag } from "@/components/ui/ServiceTag";
 import { useToast } from "@/components/ui/Toast";
 import { balanceDue, openRequirements, staffById, SAMPLE_NOW } from "@/lib/sample/clients";
 import { useClient, useClients } from "@/lib/store/clients-store";
+import { BACKEND, call } from "@/lib/sync/remote";
 import { clientStatus, portalStatus } from "@/lib/status";
 import { fmtDate, fmtDateTime, usd } from "@/lib/format";
 import { formatPhone } from "@/lib/validation";
@@ -120,6 +122,24 @@ export function ClientProfile({ id }: { id: string }) {
     );
 
   const act: Act = { go, open };
+  /** Emails the client a 7-day link to set their portal password (live CRM); the server owns portal status. */
+  const portalInvite = async () => {
+    if (!BACKEND) { store.sendInvite(c.id); toast(`Portal invitation sent to ${c.email}`); return; }
+    if (!c.email) { toast("Add the client's email first", "info"); return; }
+    try {
+      const r = await call<{ emailed: boolean }>("POST", `/api/clients/${c.id}/portal`, {});
+      toast(r.emailed ? `Portal invitation sent to ${c.email}` : "Portal access created, but the email didn't send — check Settings → Email, then resend the invite.", r.emailed ? "success" : "info");
+      window.dispatchEvent(new CustomEvent("mkb:client-changed", { detail: c.id }));
+    } catch (e) { toast(e instanceof Error ? e.message : "Couldn't send the invitation", "info"); }
+  };
+  const portalRevoke = async () => {
+    if (!confirm(`Turn off portal access for ${c.name}? They're signed out right away. You can invite them again later.`)) return;
+    try {
+      await call("POST", `/api/clients/${c.id}/portal/revoke`, {});
+      toast("Portal access turned off");
+      window.dispatchEvent(new CustomEvent("mkb:client-changed", { detail: c.id }));
+    } catch (e) { toast(e instanceof Error ? e.message : "Couldn't turn off access", "info"); }
+  };
   const st = clientStatus[c.status];
   const ps = portalStatus[c.portal];
   const bal = balanceDue(c);
@@ -216,7 +236,8 @@ export function ClientProfile({ id }: { id: string }) {
                 </Button>
               )}
               items={[
-                { label: c.portal === "active" ? "Portal is active" : c.portal === "invited" ? "Resend portal invite" : "Send portal invite", icon: Send, disabled: c.portal === "active", onSelect: () => { store.sendInvite(c.id); toast(`Portal invitation sent to ${c.email}`); } },
+                { label: c.portal === "active" ? "Portal is active" : c.portal === "invited" ? "Resend portal invite" : "Send portal invite", icon: Send, disabled: c.portal === "active", onSelect: () => void portalInvite() },
+                ...(BACKEND && c.portal !== "not_invited" ? [{ label: "Turn off portal access", icon: Ban, danger: true, onSelect: () => void portalRevoke() }] : []),
                 c.status === "active"
                   ? { label: "Mark inactive", icon: UserX, onSelect: () => { store.updateClient(c.id, { status: "inactive" }, "Marked client inactive"); toast("Client marked inactive"); } }
                   : { label: "Mark active", icon: UserCheck, onSelect: () => { store.updateClient(c.id, { status: "active" }, "Marked client active"); toast("Client marked active"); } },

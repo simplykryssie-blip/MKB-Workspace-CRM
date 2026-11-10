@@ -12,10 +12,22 @@ import { NextResponse, type NextRequest } from "next/server";
  */
 const ON = process.env.NEXT_PUBLIC_BACKEND === "1";
 const OLD_PATHS: Record<string, string> = { "/about-mkb": "/about", "/about-us": "/about", "/get-started": "/contact", "/mkb-financial-group": "/" };
-const STAFF_FREE = /^\/(api|login|f\/|i\/|site(\/|$)|_next|brand|favicon|icon|apple-icon)/;
+const STAFF_FREE = /^\/(api|login|portal(\/|$)|f\/|i\/|site(\/|$)|_next|brand|favicon|icon|apple-icon)/;
+
+// 3. The client portal's own address (PORTAL_HOSTS, e.g. "portal.mkbfinancialgroup.com") only serves
+//    the portal, client sign-in and the public links — never staff screens or staff APIs.
+const PORTAL_OK = /^\/(portal(\/|$)|api\/portal\/|api\/public\/|api\/auth\/(logout|session|password\/forgot|password\/reset|invite\/accept)$|i\/|_next|brand|favicon|icon|apple-icon)/;
 
 export function middleware(req: NextRequest) {
   const host = (req.headers.get("host") ?? "").toLowerCase().split(":")[0];
+  const portalHosts = (process.env.PORTAL_HOSTS ?? "").toLowerCase().split(",").map((h) => h.trim()).filter(Boolean);
+  if (portalHosts.includes(host)) {
+    const p = req.nextUrl.pathname;
+    if (p === "/" || p === "") return NextResponse.redirect(`https://${host}/portal`, 302);
+    if (p === "/favicon.ico") { const url = req.nextUrl.clone(); url.pathname = "/brand/mkb-seal.ico"; return NextResponse.rewrite(url); }
+    if (PORTAL_OK.test(p)) return NextResponse.next();
+    return p.startsWith("/api/") ? new NextResponse("Not found", { status: 404 }) : NextResponse.redirect(`https://${host}/portal`, 302);
+  }
   const siteHosts = (process.env.WEBSITE_HOSTS ?? "").toLowerCase().split(",").map((h) => h.trim()).filter(Boolean);
   const path = req.nextUrl.pathname;
   if (siteHosts.includes(host)) {

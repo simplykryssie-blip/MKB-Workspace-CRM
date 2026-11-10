@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
-import { AlertCircle, CheckCircle2, KeyRound, Lock, ShieldCheck, Smartphone } from "lucide-react";
+import { AlertCircle, CheckCircle2, KeyRound, Lock, Mail, ShieldCheck, Smartphone } from "lucide-react";
 
 /* Sign-in screens. They only talk to /api/auth/*; the server decides everything. */
 
@@ -14,7 +14,7 @@ async function api<T = Record<string, unknown>>(path: string, method: "POST" | "
 }
 const afterSignIn = async () => {
   const s = await api<{ kind?: string }>("/api/auth/session", "GET");
-  window.location.assign(s.data.kind === "client" ? "/login/done" : "/dashboard");
+  window.location.assign(s.data.kind === "client" ? "/portal" : "/dashboard");
 };
 
 function Shell({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
@@ -41,8 +41,9 @@ function Field({ id, label, ...rest }: { id: string; label: string } & React.Inp
 const Err = ({ msg }: { msg: string | null }) => (msg ? <p role="alert" className="flex items-start gap-1.5 rounded-xl bg-danger-soft/50 px-3 py-2 text-[13px] text-danger-ink"><AlertCircle size={14} className="mt-0.5 shrink-0" />{msg}</p> : null);
 
 /* ---------------------------------------------------------------- sign in */
-export function LoginFlow() {
-  const [step, setStep] = useState<"credentials" | "mfa" | "mfa_setup" | "forgot" | "forgot_sent">("credentials");
+/** `portal`: the client portal's sign-in (password, then a code we email). */
+export function LoginFlow({ portal = false }: { portal?: boolean }) {
+  const [step, setStep] = useState<"credentials" | "mfa" | "mfa_setup" | "email_code" | "forgot" | "forgot_sent">("credentials");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState<string | null>(null);
@@ -51,7 +52,7 @@ export function LoginFlow() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true); setErr(null);
-    const r = await api<{ next?: "done" | "mfa" | "mfa_setup" }>("/api/auth/login", "POST", { email, password });
+    const r = await api<{ next?: "done" | "mfa" | "mfa_setup" | "email_code" }>(portal ? "/api/portal/auth/login" : "/api/auth/login", "POST", { email, password });
     setBusy(false);
     if (!r.ok) return setErr(r.data.error ?? "Couldn't sign in.");
     setPassword("");
@@ -59,6 +60,7 @@ export function LoginFlow() {
     setStep(r.data.next ?? "mfa");
   };
 
+  if (step === "email_code") return <EmailCode email={email} onDone={afterSignIn} onBack={() => setStep("credentials")} />;
   if (step === "mfa") return <MfaCode onDone={afterSignIn} />;
   if (step === "mfa_setup") return <MfaSetup onDone={afterSignIn} />;
   if (step === "forgot" || step === "forgot_sent")
@@ -77,13 +79,36 @@ export function LoginFlow() {
       </Shell>
     );
   return (
-    <Shell title="Sign in" subtitle="MKB Business Suite and client portal">
+    <Shell title={portal ? "Client portal" : "Sign in"} subtitle={portal ? "Sign in to your MKB Financial Group account" : "MKB Business Suite"}>
       <form className="space-y-4" onSubmit={submit}>
         <Field id="li-email" label="Email" type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} />
         <Field id="li-password" label="Password" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
         <Err msg={err} />
         <button className={primary} disabled={busy || !email || !password}>{busy ? "Signing in…" : "Sign in"}</button>
         <button type="button" className="w-full text-[13.5px] font-semibold text-accent hover:underline" onClick={() => { setErr(null); setStep("forgot"); }}>Forgot your password?</button>
+        {portal && <p className="text-center text-[12.5px] text-muted">New here? Your MKB team emails you an invitation to set up your portal.</p>}
+      </form>
+    </Shell>
+  );
+}
+
+/** Client portal: the 6-digit code we emailed after the password. */
+function EmailCode({ email, onDone, onBack }: { email: string; onDone: () => void; onBack: () => void }) {
+  const [code, setCode] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  return (
+    <Shell title="Check your email" subtitle={`We sent a 6-digit code to ${email || "your email"}. It works for 10 minutes.`}>
+      <form className="space-y-4" onSubmit={async (e) => { e.preventDefault(); setBusy(true); setErr(null); setNote(null); const r = await api("/api/portal/auth/code", "POST", { code }); setBusy(false); if (!r.ok) { setCode(""); if (r.status === 401 && r.data.code === "unauthenticated") { onBack(); return; } return setErr(r.data.error ?? "That code didn't work."); } onDone(); }}>
+        <Field id="email-code" label="Code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} required autoFocus value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} />
+        <Err msg={err} />
+        {note && <p className="flex items-start gap-1.5 rounded-xl bg-success-soft/50 px-3 py-2 text-[13px] text-ink-2"><Mail size={14} className="mt-0.5 shrink-0" />{note}</p>}
+        <button className={primary} disabled={busy || code.length !== 6}>{busy ? "Checking…" : "Continue"}</button>
+        <div className="flex justify-between text-[13.5px]">
+          <button type="button" className="font-semibold text-accent hover:underline" onClick={onBack}>Back</button>
+          <button type="button" className="font-semibold text-accent hover:underline" disabled={busy} onClick={async () => { setErr(null); setNote(null); const r = await api("/api/portal/auth/code/resend", "POST"); if (!r.ok) return setErr(r.data.error ?? "Couldn't send a new code."); setNote("A new code is on its way. Check spam if you don't see it."); }}>Send a new code</button>
+        </div>
       </form>
     </Shell>
   );
@@ -137,7 +162,7 @@ function MfaSetup({ onDone }: { onDone: () => void }) {
 }
 
 /* ---------------------------------------------------------------- set a password (reset link or invitation) */
-export function SetPasswordFlow({ mode }: { mode: "reset" | "invite" }) {
+export function SetPasswordFlow({ mode, portal = false }: { mode: "reset" | "invite"; portal?: boolean }) {
   const [token, setToken] = useState<string | null>(null);
   const [pw, setPw] = useState("");
   const [pw2, setPw2] = useState("");
@@ -153,9 +178,9 @@ export function SetPasswordFlow({ mode }: { mode: "reset" | "invite" }) {
   if (next === "mfa_setup") return <MfaSetup onDone={afterSignIn} />;
   if (next === "mfa") return <MfaCode onDone={afterSignIn} />;
   if (next === "reset_ok")
-    return <Shell title="Password updated" subtitle="You've been signed out everywhere for safety."><Link href="/login" className={`${primary} grid place-items-center`}>Sign in</Link></Shell>;
+    return <Shell title="Password updated" subtitle="You've been signed out everywhere for safety."><Link href={portal ? "/portal/login" : "/login"} className={`${primary} grid place-items-center`}>Sign in</Link></Shell>;
   return (
-    <Shell title={mode === "invite" ? "Welcome to MKB" : "Choose a new password"} subtitle={mode === "invite" ? "Create your password to activate your account." : undefined}>
+    <Shell title={mode === "invite" ? (portal ? "Set up your client portal" : "Welcome to MKB") : "Choose a new password"} subtitle={mode === "invite" ? (portal ? "Create a password. Each time you sign in, we'll also email you a code." : "Create your password to activate your account.") : undefined}>
       {!token ? <Err msg="This link is missing its code. Open the link from your email again." /> : (
         <form className="space-y-4" onSubmit={async (e) => {
           e.preventDefault();
@@ -172,7 +197,7 @@ export function SetPasswordFlow({ mode }: { mode: "reset" | "invite" }) {
           <Field id="sp-pw2" label="Confirm password" type="password" autoComplete="new-password" required value={pw2} onChange={(e) => setPw2(e.target.value)} />
           <p className="flex items-start gap-1.5 text-[12.5px] text-muted"><KeyRound size={13} className="mt-0.5 shrink-0" />At least 12 characters, using three of: lowercase, uppercase, numbers, symbols. A passphrase works well.</p>
           <Err msg={err} />
-          <button className={primary} disabled={busy || !pw || !pw2}>{mode === "invite" ? "Activate my account" : "Save new password"}</button>
+          <button className={primary} disabled={busy || !pw || !pw2}>{mode === "invite" ? (portal ? "Open my portal" : "Activate my account") : "Save new password"}</button>
         </form>
       )}
     </Shell>
@@ -180,6 +205,7 @@ export function SetPasswordFlow({ mode }: { mode: "reset" | "invite" }) {
 }
 
 export function ClientSignedIn() {
+  useEffect(() => { window.location.replace("/portal"); }, []);
   return (
     <Shell title="You're signed in" subtitle="Client portal">
       <p className="text-center text-[14px] text-ink-2">Your secure portal is being connected to your account. Your MKB team will let you know when it&rsquo;s ready.</p>

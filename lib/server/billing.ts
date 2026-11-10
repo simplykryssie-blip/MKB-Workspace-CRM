@@ -23,7 +23,8 @@ export type BureauFee = { code: string; label: string; amount: number; applies: 
 const SERVICES: ServiceKey[] = ["tax", "books", "biz", "expunge"];
 const KINDS: InvoiceLine["kind"][] = ["service", "additional", "filing", "third_party", "discount", "clerk", "government", "records", "backend", "late_fee"];
 export const cents = (d: number) => Math.round(d * 100);
-const dollars = (c: number) => Math.round(c) / 100;
+export const dollarsOf = (c: number) => Math.round(c) / 100;
+const dollars = dollarsOf;
 
 export const toInvoice = (r: InvoiceRow): Invoice => ({
   id: r.id, number: r.number, service: r.service, description: r.description, amount: dollars(r.amount_cents), paid: dollars(r.paid_cents),

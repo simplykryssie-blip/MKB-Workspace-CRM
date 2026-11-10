@@ -1,6 +1,8 @@
 /**
- * Sign-in: sessions, lockout, MFA (authenticator app), password reset,
- * invitation acceptance. Server-only.
+ * Sign-in: sessions, lockout, MFA (authenticator app for staff; a 6-digit code
+ * emailed at every sign-in for client-portal accounts), password reset,
+ * invitation acceptance. Staff and client accounts each sign in only on their
+ * own screens. Server-only.
  *
  * - Session tokens: 256-bit random, sent only as an HttpOnly, SameSite=Lax
  *   cookie (Secure on HTTPS); the database stores a SHA-256 hash.
@@ -10,6 +12,7 @@
 import { addMinutes, clientIp, HttpError, isDev, now, one, rateLimit, run, type AppEnv } from "./core";
 import { decryptField, encryptField, hashPassword, newTotpSecret, otpauthUrl, passwordProblem, randomId, randomToken, sha256, verifyPassword, verifyTotp } from "./crypto";
 import { appOrigin, audit, loadMember, loadPolicy, loadSecurity, sendEmail, type Actor } from "./identity";
+import { portalOrigin } from "./email";
 
 const ABSOLUTE_HOURS = 12;
 const RESET_MINUTES = 30;
@@ -34,8 +37,7 @@ function key(env: AppEnv) {
   return env.ENCRYPTION_KEY;
 }
 
-async function createSession(env: AppEnv, req: Request, userId: string, mfaVerified: boolean) {
-  const token = randomToken();
+async function createSession(env: AppEnv, req: Request, userId: string, mfaVerified: boolean, token = randomToken()) {
   const t = now();
   await run(env.DB, "INSERT INTO sessions (id_hash, user_id, created_at, last_seen_at, expires_at, mfa_verified, ip, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", await sha256(token), userId, t, t, addMinutes(t, ABSOLUTE_HOURS * 60), mfaVerified ? 1 : 0, clientIp(req), (req.headers.get("user-agent") ?? "").slice(0, 200));
   return cookie(env, req, token, ABSOLUTE_HOURS * 3600);
@@ -79,16 +81,18 @@ export async function authenticate(env: AppEnv, req: Request, opts: { allowParti
 }
 
 async function mfaRequiredFor(env: AppEnv, user: UserRow) {
-  if (user.kind === "client") return !!user.mfa_enabled;
+  // Client portal: always a second step (an emailed code).
+  if (user.kind === "client") return true;
   const [sec, member] = await Promise.all([loadSecurity(env.DB), loadMember(env.DB, user.member_id!)]);
   return !!user.mfa_enabled || (!!member && sec.mfaRequiredFor.includes(member.roleId));
 }
 
 /* ---------------------------------------------------------------- login */
-export type LoginResult = { next: "done" | "mfa" | "mfa_setup"; setCookie?: string };
+export type LoginResult = { next: "done" | "mfa" | "mfa_setup" | "email_code"; setCookie?: string };
 const GENERIC = "Email or password is incorrect.";
 
-export async function login(env: AppEnv, req: Request, email: string, password: string): Promise<LoginResult> {
+/** `audience`: the staff sign-in only signs in staff accounts; the portal sign-in only client accounts. */
+export async function login(env: AppEnv, req: Request, email: string, password: string, audience: "staff" | "client" = "staff"): Promise<LoginResult> {
   const ip = clientIp(req);
   const db = env.DB;
   if (!(await rateLimit(db, `login-ip:${ip}`, 100, 15))) throw new HttpError(429, "Too many attempts. Try again in a few minutes.", "rate_limited");
@@ -109,20 +113,70 @@ export async function login(env: AppEnv, req: Request, email: string, password: 
     }
     throw new HttpError(401, GENERIC, "bad_credentials");
   }
+  // Each account signs in only on its own screen (never says which kind exists).
+  if (user.kind !== audience) throw new HttpError(401, GENERIC, "bad_credentials");
   if (user.kind === "staff") {
     const m = await loadMember(db, user.member_id!);
     if (!m || m.status !== "active") throw new HttpError(401, GENERIC, "bad_credentials");
   }
   await run(db, "UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = ?", user.id);
   const needMfa = await mfaRequiredFor(env, user);
-  const setCookie = await createSession(env, req, user.id, !needMfa);
+  const token = randomToken();
+  const setCookie = await createSession(env, req, user.id, !needMfa, token);
   if (!needMfa) await finishLogin(env, req, user);
+  if (user.kind === "client") { await sendLoginCode(env, user, await sha256(token)); return { next: "email_code", setCookie }; }
   return { next: !needMfa ? "done" : user.mfa_enabled ? "mfa" : "mfa_setup", setCookie };
 }
 
 async function finishLogin(env: AppEnv, req: Request, user: UserRow) {
   await run(env.DB, "UPDATE users SET last_login_at = ? WHERE id = ?", now(), user.id);
   await audit(env.DB, { kind: "anonymous", ip: clientIp(req), userId: user.id, memberId: user.member_id ?? undefined }, { action: "Login", resource: "MKB Business Suite", meta: user.kind === "client" ? "Client portal" : undefined });
+}
+
+/* ---------------------------------------------------------------- client portal: emailed sign-in code */
+const CODE_MINUTES = 10;
+const codeHash = (sessionHash: string, code: string) => sha256(`${sessionHash}:${code}`);
+
+/** Emails a fresh 6-digit code for this session (replacing any earlier one). */
+async function sendLoginCode(env: AppEnv, user: UserRow, sessionHash: string) {
+  const n = crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000;
+  const code = String(n).padStart(6, "0");
+  const t = now();
+  await run(env.DB, "INSERT INTO login_codes (session_hash, user_id, code_hash, created_at, expires_at, attempts, sends) VALUES (?, ?, ?, ?, ?, 0, 1) ON CONFLICT(session_hash) DO UPDATE SET code_hash = excluded.code_hash, created_at = excluded.created_at, expires_at = excluded.expires_at, attempts = 0, sends = sends + 1", sessionHash, user.id, await codeHash(sessionHash, code), t, addMinutes(t, CODE_MINUTES));
+  const text = `Your MKB Financial Group sign-in code is:\n\n${code}\n\nIt expires in ${CODE_MINUTES} minutes. If you didn't try to sign in, you can ignore this email — and consider changing your password.\n\nMKB will never ask you for this code by phone, text or email.`;
+  const html = `<div style="font-family:Arial,Helvetica,sans-serif;color:#111;max-width:480px;margin:0 auto;padding:24px"><p style="font:600 18px Georgia,serif;margin:0 0 12px">MKB Financial Group</p><p>Your sign-in code is:</p><p style="font-size:32px;letter-spacing:8px;font-weight:bold;margin:12px 0">${code}</p><p style="color:#555;font-size:13px">It expires in ${CODE_MINUTES} minutes. If you didn't try to sign in, you can ignore this email — and consider changing your password. MKB will never ask you for this code by phone, text or email.</p></div>`;
+  await sendEmail(env, { to: user.email, template: "portal_code", subject: "Your MKB sign-in code", text, html });
+}
+
+/** Checks the emailed code and finishes the client's sign-in. */
+export async function verifyLoginCode(env: AppEnv, req: Request, code: string) {
+  const r = await readSession(env, req);
+  if (!r) throw new HttpError(401, "Please sign in again.", "unauthenticated");
+  if (r.session.mfa_verified) return;
+  if (r.user.kind !== "client") throw new HttpError(400, "Use your authenticator app.", "bad_code");
+  const row = await one<{ code_hash: string; expires_at: string; attempts: number }>(env.DB, "SELECT code_hash, expires_at, attempts FROM login_codes WHERE session_hash = ?", r.hash);
+  if (!row || row.expires_at < now()) throw new HttpError(401, "That code has expired. Send a new one.", "code_expired");
+  if (row.attempts >= 5) throw new HttpError(429, "Too many tries. Send a new code.", "rate_limited");
+  if (!/^\d{6}$/.test(code.trim()) || (await codeHash(r.hash, code.trim())) !== row.code_hash) {
+    await run(env.DB, "UPDATE login_codes SET attempts = attempts + 1 WHERE session_hash = ?", r.hash);
+    await audit(env.DB, { kind: "anonymous", ip: clientIp(req), userId: r.user.id }, { action: "Failed login", resource: "Client portal", meta: "Wrong sign-in code", success: false });
+    throw new HttpError(401, "That code didn't work. Check the newest email from us and try again.", "bad_code");
+  }
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM login_codes WHERE session_hash = ?").bind(r.hash),
+    env.DB.prepare("UPDATE sessions SET mfa_verified = 1 WHERE id_hash = ?").bind(r.hash),
+  ]);
+  await finishLogin(env, req, r.user);
+}
+
+/** Sends another code (rate-limited). */
+export async function resendLoginCode(env: AppEnv, req: Request) {
+  const r = await readSession(env, req);
+  if (!r) throw new HttpError(401, "Please sign in again.", "unauthenticated");
+  if (r.session.mfa_verified || r.user.kind !== "client") return;
+  const row = await one<{ sends: number }>(env.DB, "SELECT sends FROM login_codes WHERE session_hash = ?", r.hash);
+  if ((row?.sends ?? 0) >= 5 || !(await rateLimit(env.DB, `code:${r.user.id}`, 8, 60))) throw new HttpError(429, "Too many codes sent. Wait a while, then sign in again.", "rate_limited");
+  await sendLoginCode(env, r.user, r.hash);
 }
 
 /* ---------------------------------------------------------------- MFA */
@@ -189,7 +243,9 @@ export async function forgotPassword(env: AppEnv, req: Request, email: string) {
   const token = randomToken();
   const t = now();
   await run(env.DB, "INSERT INTO auth_tokens (token_hash, user_id, purpose, created_at, expires_at) VALUES (?, ?, 'reset', ?, ?)", await sha256(token), user.id, t, addMinutes(t, RESET_MINUTES));
-  await sendEmail(env, { to: user.email, template: "password_reset", subject: "Reset your MKB password", text: `Use this link within ${RESET_MINUTES} minutes to choose a new password:\n\n${appOrigin(env, req)}/login/reset?token=${token}\n\nIf you didn't ask for this, you can ignore this email.` });
+  // Client accounts reset on the portal; staff on the CRM.
+  const link = user.kind === "client" ? `${portalOrigin(env)}/portal/reset?token=${token}` : `${appOrigin(env, req)}/login/reset?token=${token}`;
+  await sendEmail(env, { to: user.email, template: "password_reset", subject: "Reset your MKB password", text: `Use this link within ${RESET_MINUTES} minutes to choose a new password:\n\n${link}\n\nIf you didn't ask for this, you can ignore this email.` });
   await audit(env.DB, { kind: "anonymous", ip: clientIp(req), userId: user.id, memberId: user.member_id ?? undefined }, { action: "Password change", resource: user.email, meta: "Reset link requested" });
 }
 
@@ -238,9 +294,16 @@ export async function acceptInvite(env: AppEnv, req: Request, token: string, pas
     stmts.push(env.DB.prepare("UPDATE members SET status = 'active', onboarding = json_set(onboarding, '$.\"Invitation accepted\"', ?, '$.\"Account created\"', ?) WHERE id = ? AND status = 'invited'").bind(t, t, u.member_id));
     stmts.push(env.DB.prepare("UPDATE invitations SET status = 'accepted' WHERE member_id = ? AND status = 'pending'").bind(u.member_id));
   }
+  if (u.client_id) stmts.push(env.DB.prepare("UPDATE clients SET portal = 'active', updated_at = ? WHERE id = ?").bind(t, u.client_id));
   await env.DB.batch(stmts);
-  await audit(env.DB, { kind: "anonymous", ip: clientIp(req), userId, memberId: u.member_id ?? undefined }, { action: "Invitation", resource: u.email, meta: "Invitation accepted" });
-  return login(env, req, u.email, password);
+  await audit(env.DB, { kind: "anonymous", ip: clientIp(req), userId, memberId: u.member_id ?? undefined }, { action: "Invitation", resource: u.email, meta: u.kind === "client" ? "Client portal invitation accepted" : "Invitation accepted" });
+  // A client just proved their email by opening the invitation: sign them straight in.
+  if (u.kind === "client") {
+    const setCookie = await createSession(env, req, u.id, true);
+    await finishLogin(env, req, { ...u, status: "active" });
+    return { next: "done", setCookie };
+  }
+  return login(env, req, u.email, password, "staff");
 }
 
 export { randomId };

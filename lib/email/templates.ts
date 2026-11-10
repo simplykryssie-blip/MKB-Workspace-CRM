@@ -6,7 +6,7 @@
  * document contents in an email.
  */
 
-export type TemplateKey = "tax_intake_received" | "tax_document_reminder" | "tax_document_request" | "tax_extension_filed" | "invoice_sent" | "books_intake_received" | "books_intake_link" | "books_proposal" | "books_proposal_signed" | "tax_interview_link";
+export type TemplateKey = "tax_intake_received" | "tax_document_reminder" | "tax_document_request" | "tax_extension_filed" | "invoice_sent" | "books_intake_received" | "books_intake_link" | "books_proposal" | "books_proposal_signed" | "tax_interview_link" | "portal_invite" | "portal_message";
 
 export type EmailWording = {
   subject: string;
@@ -66,6 +66,34 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
     steps: "An extension gives you more time to file, not more time to pay. Interest applies to any tax not paid by the original due date.\nWe'll keep working on your return as your documents come in.\nWe'll let you know when it's ready for your review and signature.",
     button: "Open your client portal",
     closing: "Questions? Reply through your portal or call us at 833-379-3320.",
+  },
+  portal_invite: {
+    key: "portal_invite",
+    name: "Client portal invitation",
+    when: "Sent when staff invite a client to the portal (or resend the invitation). The button lets them choose a password.",
+    placeholders: ["firstName", "staffName", "expires"],
+    subject: "Your MKB Financial Group client portal is ready",
+    heading: "Welcome, {{firstName}} — your secure client portal is ready.",
+    intro: "{{staffName}} invited you to the MKB Financial Group client portal. In one place you can see where your services stand, upload the documents we need, view and pay invoices, download your signed documents and message our team securely.",
+    docsTitle: "",
+    docsNote: "",
+    steps: "Choose your password using the button below.\nEach time you sign in, we'll email you a 6-digit code to confirm it's you.\nOpen your to-do list to see anything we need from you.",
+    button: "Set up my portal",
+    closing: "This invitation link expires on {{expires}}. Didn't expect this email? Call us at 833-379-3320.",
+  },
+  portal_message: {
+    key: "portal_message",
+    name: "New portal message",
+    when: "Sent when MKB writes to a client who uses the portal. The message itself is never in the email — they read it after signing in.",
+    placeholders: ["firstName"],
+    subject: "You have a new secure message from MKB Financial Group",
+    heading: "Hi {{firstName}}, you have a new message.",
+    intro: "Our team sent you a secure message. For your privacy, sign in to your client portal to read and reply.",
+    docsTitle: "",
+    docsNote: "",
+    steps: "",
+    button: "Read my message",
+    closing: "Questions? Call us at 833-379-3320.",
   },
   tax_interview_link: {
     key: "tax_interview_link",
