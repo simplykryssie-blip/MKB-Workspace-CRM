@@ -61,6 +61,7 @@ import { useExp } from "@/lib/store/exp-store";
 import { useTeam } from "@/lib/store/team-store";
 import { BACKEND } from "@/lib/sync/remote";
 import { ReturnStatusBadge } from "@/components/tax/TaxBits";
+import { BooksEnrollmentActions, ClientBooksCard } from "@/components/books/ClientBooks";
 
 export type Act = {
   go: (k: TabKey) => void;
@@ -202,6 +203,7 @@ export function OverviewTab({ c, act }: { c: Client; act: Act }) {
         )}
 
         <TaxReturnsCard c={c} />
+        <ClientBooksCard c={c} />
 
         <Card>
           <CardHeader title="Recent activity" action={<Button size="sm" variant="ghost" onClick={() => act.go("activity")}>View all</Button>} />
@@ -329,7 +331,7 @@ function EnrollmentRow({ c, e, compact }: { c: Client; e: Enrollment; compact?: 
   const booksWs = useBooks().workspaces.find((w) => w.enrollmentId === e.id);
   const bizReq = useBiz().requests.find((r) => r.enrollmentId === e.id);
   const expMatter = useExp().matters.find((x) => x.enrollmentId === e.id);
-  const isTax = e.service === "tax" || !!booksWs || !!bizReq || !!expMatter;
+  const isTax = e.service === "tax" || e.service === "books" || !!booksWs || !!bizReq || !!expMatter;
   const setStatus = (s: Enrollment["status"]) => {
     store.setEnrollmentStatus(c.id, e.id, s);
     toast(`Status set to "${enrollmentStatus[s].label}"`);
@@ -398,7 +400,10 @@ function EnrollmentRow({ c, e, compact }: { c: Client; e: Enrollment; compact?: 
           })}
         </ol>
       )}
-      {isTax && (
+      {isTax && e.service === "books" && !booksWs && !bizReq && !expMatter && (
+        <div className="mt-3 flex flex-wrap items-center justify-end gap-2"><BooksEnrollmentActions c={c} /></div>
+      )}
+      {isTax && !(e.service === "books" && !booksWs && !bizReq && !expMatter) && (
         <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
           <span className="mr-auto text-[12px] text-muted">{expMatter ? `Managed in Record Expungement as ${expMatter.number}.` : bizReq ? `Managed in Business Services as ${bizReq.number}.` : booksWs ? "Monthly close is managed in the Bookkeeping workspace." : "Workflow is managed in the Tax Preparation Center."}</span>
           {expMatter ? (

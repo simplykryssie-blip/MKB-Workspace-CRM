@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Copy, Link2, Mail, RefreshCw, ShieldCheck, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -25,6 +25,13 @@ export function IntakeLinkPanel({ intake, defaultEmail, beforeSend, reload }: { 
   const [busy, setBusy] = useState(false);
   const [sentUrl, setSentUrl] = useState<string | null>(null);
   const link = intake.link;
+  // Opened from a client's profile with "Send intake link": go straight to the send window.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("send") !== "1") return;
+    window.history.replaceState(null, "", window.location.pathname);
+    setOpen(true);
+  }, []);
   const active = link?.state === "active";
 
   const send = async () => {

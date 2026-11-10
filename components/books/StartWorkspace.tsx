@@ -39,7 +39,8 @@ const monthOptions = (): [string, string][] => {
   return out;
 };
 
-export function StartWorkspace({ open, onClose, onCreated, intake }: { open: boolean; onClose: () => void; onCreated: (id: string) => void; intake?: BooksIntake }) {
+/** `clientId`: open from a client's profile with that client already chosen. */
+export function StartWorkspace({ open, onClose, onCreated, intake, clientId: presetClient }: { open: boolean; onClose: () => void; onCreated: (id: string) => void; intake?: BooksIntake; clientId?: string }) {
   const clients = useClients();
   const books = useBooks();
   const team = useTeam();
@@ -90,6 +91,7 @@ export function StartWorkspace({ open, onClose, onCreated, intake }: { open: boo
     const c = clients.clients.find((x) => x.id === id);
     if (c) setBusinessName(c.business?.legalName ?? c.name);
   };
+  useEffect(() => { if (open && presetClient && !intake) pickClient(presetClient); }, [open, presetClient]); // eslint-disable-line react-hooks/exhaustive-deps
   const submit = () => {
     if (!client) return setErr("Choose the client.");
     if (!businessName.trim()) return setErr("Enter the business name.");
@@ -105,7 +107,7 @@ export function StartWorkspace({ open, onClose, onCreated, intake }: { open: boo
     <Modal open={open} onClose={onClose} size="lg" title="Start bookkeeping" description="Sets up monthly review, reconciliation and close for one client business. The client keeps their own QuickBooks." footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" onClick={submit}>Start bookkeeping</Button></>}>
       <div className="space-y-5">
         <div className="grid gap-4 sm:grid-cols-2">
-          <SelectField label="Client" required disabled={!!intake} value={clientId} onChange={(e) => pickClient(e.target.value)} options={[["", clients.clients.length ? "Choose a client…" : "Add the client in Clients first"], ...clients.clients.map((c): [string, string] => [c.id, c.name])]} />
+          <SelectField label="Client" required disabled={!!intake || !!presetClient} value={clientId} onChange={(e) => pickClient(e.target.value)} options={[["", clients.clients.length ? "Choose a client…" : "Add the client in Clients first"], ...clients.clients.map((c): [string, string] => [c.id, c.name])]} />
           <TextField label="Business name" required value={businessName} onChange={(e) => setBusinessName(e.target.value)} />
           <SelectField label="Business type" value={entityType} onChange={(e) => setEntityType(e.target.value)} options={["LLC", "S Corporation", "C Corporation", "Sole proprietorship", "Partnership", "Nonprofit"].map((x): [string, string] => [x, x])} />
           <TextField label="QuickBooks company name" hint="optional" value={qbo} onChange={(e) => setQbo(e.target.value)} />
