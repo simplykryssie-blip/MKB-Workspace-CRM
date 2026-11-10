@@ -3,7 +3,8 @@ import { NextResponse, type NextRequest } from "next/server";
 /**
  * 1. Website domains (WEBSITE_HOSTS, e.g. "mkbfinancialgroup.com,www.mkbfinancialgroup.com")
  *    show the public website: "/bookkeeping" is served from "/site/bookkeeping". Only the
- *    website, public forms and the public form API are reachable there — never the CRM.
+ *    website, public forms, private client links (/i/<token>) and the public API are
+ *    reachable there — never the CRM.
  * 2. When the backend is switched on (NEXT_PUBLIC_BACKEND=1), staff pages require a
  *    session cookie; without one the visitor goes to /login. This is only a convenience
  *    redirect — the real check happens on every /api request, which is where all data
@@ -11,7 +12,7 @@ import { NextResponse, type NextRequest } from "next/server";
  */
 const ON = process.env.NEXT_PUBLIC_BACKEND === "1";
 const OLD_PATHS: Record<string, string> = { "/about-mkb": "/about", "/about-us": "/about", "/get-started": "/contact", "/mkb-financial-group": "/" };
-const STAFF_FREE = /^\/(api|login|f\/|site(\/|$)|_next|brand|favicon|icon|apple-icon)/;
+const STAFF_FREE = /^\/(api|login|f\/|i\/|site(\/|$)|_next|brand|favicon|icon|apple-icon)/;
 
 export function middleware(req: NextRequest) {
   const host = (req.headers.get("host") ?? "").toLowerCase().split(":")[0];
@@ -37,7 +38,7 @@ export function middleware(req: NextRequest) {
       url.pathname = "/brand/mkb-seal.ico";
       return NextResponse.rewrite(url);
     }
-    if (/^\/(_next|brand|favicon|icon|apple-icon|f\/|api\/public\/)/.test(path)) return NextResponse.next();
+    if (/^\/(_next|brand|favicon|icon|apple-icon|f\/|i\/|api\/public\/)/.test(path)) return NextResponse.next();
     if (path.startsWith("/api/")) return new NextResponse("Not found", { status: 404 });
     const url = req.nextUrl.clone();
     url.pathname = path.startsWith("/site/media/") ? path : `/site${path === "/" ? "" : path}`;

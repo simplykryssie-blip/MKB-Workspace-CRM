@@ -12,7 +12,6 @@ import { LetterView } from "@/components/engagement/LetterView";
 import { useClients } from "@/lib/store/clients-store";
 import { BACKEND, call, RemoteError } from "@/lib/sync/remote";
 import { BOOKS_INTAKE_VERSION, BOOKS_SECTIONS, pickableAddOns, quoteFor } from "@/lib/books/intake";
-import type { BooksQuote } from "@/lib/fees/config";
 import { docsFor, display, missingIn, qVisible, rowsOf, sectionVisible, type Answers, type Row } from "@/lib/tax/interview/engine";
 import { applyPrefill, prefillFrom } from "@/lib/tax/interview/prefill";
 import { useLetters } from "@/lib/engagement/use-letters";
@@ -21,6 +20,8 @@ import { feeWords, money } from "@/lib/fees/config";
 import { fmtDate } from "@/lib/format";
 import type { BooksIntake as Intake } from "@/lib/server/books-intake";
 import { StartWorkspace } from "./StartWorkspace";
+import { QuoteView } from "./QuoteView";
+import { IntakeLinkPanel } from "./IntakeLinkPanel";
 
 export const intakeHref = (id: string) => `/services/bookkeeping/intake/${id}`;
 
@@ -97,8 +98,9 @@ function Runner({ intake, client, reload }: { intake: Intake; client: Client; re
           <h1 className="mt-1 text-[22px] font-bold tracking-tight text-ink sm:text-[26px]">Bookkeeping intake — {client.name}</h1>
           <p className="text-[13px] text-muted">Question set {BOOKS_INTAKE_VERSION.version} · {submitted ? `Submitted ${intake.submittedAt ? fmtDate(intake.submittedAt) : ""}` : `${doneCount} of ${visible.length} sections complete${saved ? ` · saved ${saved}` : ""}`}</p>
         </div>
-        {!submitted && <Badge tone="info">Filling in with the client</Badge>}
+        {!submitted && (intake.link?.state === "active" ? <Badge tone="info">Link sent — the client can fill this in</Badge> : <Badge tone="info">Filling in with the client</Badge>)}
       </div>
+      {!submitted && <IntakeLinkPanel intake={intake} defaultEmail={(typeof answers.email === "string" && answers.email) || client.email || ""} beforeSend={() => persist(step)} reload={reload} />}
       <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[250px_minmax(0,1fr)]">
         <nav aria-label="Intake steps" className="hidden lg:block">
           <Card className="sticky top-24 p-2">
@@ -234,25 +236,6 @@ function Submitted({ intake, client }: { intake: Intake; client: Client }) {
         await call("PUT", `/api/books/intakes/${intake.id}`, { workspaceId: wsId, rev: intake.rev }).catch(() => {});
         window.location.assign(`/services/bookkeeping/${wsId}`);
       }} />}
-    </div>
-  );
-}
-
-/** The client's bookkeeping quote: plan, extras, add-ons, one-time and custom-quoted work. */
-function QuoteView({ quote, accounts }: { quote: BooksQuote; accounts: number }) {
-  const p = quote.plan;
-  const line = (l: BooksQuote["monthly"][number]) => (l.billing === "quote" ? "Custom quote" : `${l.startingAt ? "from " : ""}${money(l.amount)}`);
-  return (
-    <div className="mt-3 rounded-xl border border-accent/30 bg-accent-soft/30 p-3.5">
-      <p className="text-[13.5px] text-ink">Recommended plan: <b>{p.key}</b> — up to {p.transactions.toLocaleString()} transactions, {p.accounts} accounts, {p.locations} location{p.locations === 1 ? "" : "s"} ({accounts} account{accounts === 1 ? "" : "s"} listed).</p>
-      <table className="mt-2 w-full text-[13px]">
-        <tbody>
-          {quote.monthly.map((l) => <tr key={l.label}><td className="py-0.5 text-ink-2">{l.label}</td><td className="py-0.5 text-right tabular-nums">{line(l)}/mo</td></tr>)}
-          <tr className="border-t border-line font-semibold"><td className="py-1">Monthly total</td><td className="py-1 text-right tabular-nums">{quote.monthly.some((l) => l.startingAt) ? "from " : ""}{money(quote.monthlyTotal)}/mo</td></tr>
-          {quote.oneTime.map((l) => <tr key={l.label}><td className="py-0.5 text-ink-2">{l.label} <span className="text-muted">(one-time)</span></td><td className="py-0.5 text-right tabular-nums">{line(l)}</td></tr>)}
-          {quote.quoted.map((l) => <tr key={l.label}><td className="py-0.5 text-ink-2">{l.label}</td><td className="py-0.5 text-right text-muted">Custom quote</td></tr>)}
-        </tbody>
-      </table>
     </div>
   );
 }

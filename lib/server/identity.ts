@@ -60,7 +60,9 @@ export const hasSensitivePerm = (a: Actor, key: string) => a.kind === "staff" &&
 /* ---------------------------------------------------------------- audit */
 export type AuditInput = Omit<AuditEvent, "id" | "at" | "actorId" | "success"> & { success?: boolean };
 /** Appends to the audit log (the table rejects updates and deletes). */
-export async function audit(db: Db, actor: Actor | { kind: "anonymous"; ip: string; userId?: string; memberId?: string }, e: AuditInput) {
+/** `link`: someone using a private client link (no sign-in) — recorded against the client. */
+export type LinkActor = { kind: "link"; ip: string; clientId: string; linkId: string };
+export async function audit(db: Db, actor: Actor | LinkActor | { kind: "anonymous"; ip: string; userId?: string; memberId?: string }, e: AuditInput) {
   await run(
     db,
     "INSERT INTO audit_events (id, at, actor_user_id, actor_member_id, actor_client_id, action, resource, department, meta, success, ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -68,7 +70,7 @@ export async function audit(db: Db, actor: Actor | { kind: "anonymous"; ip: stri
     now(),
     "userId" in actor ? actor.userId ?? null : null,
     actor.kind === "staff" ? actor.member.id : actor.kind === "anonymous" ? actor.memberId ?? null : null,
-    actor.kind === "client" ? actor.clientId : null,
+    actor.kind === "client" || actor.kind === "link" ? actor.clientId : null,
     e.action,
     e.resource,
     e.department ?? null,

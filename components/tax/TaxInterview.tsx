@@ -284,6 +284,8 @@ function SecureNumber({ id, value, onChange, err, kind, save, reveal }: { id: st
   const [busy, setBusy] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  // While typing (before saving), the person can show the digits to check them. Once saved, only the last 4 are shown.
+  const [peek, setPeek] = useState(false);
   const [editing, setEditing] = useState(!value);
   useEffect(() => { if (!value) setEditing(true); }, [value]);
   const need = kind === "bank" ? 4 : 9;
@@ -300,18 +302,20 @@ function SecureNumber({ id, value, onChange, err, kind, save, reveal }: { id: st
     );
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <input id={id} type="password" autoComplete="off" inputMode="numeric" value={draft} onChange={(e) => setDraft(e.target.value.replace(/[^\d-]/g, "").slice(0, kind === "bank" ? 17 : 11))} placeholder={kind === "ssn" ? "•••-••-••••" : kind === "ein" ? "••-•••••••" : "Digits only"} className={`${inputCls(err)} max-w-[240px] tabular-nums`} />
+      <input id={id} type={peek ? "text" : "password"} autoComplete="off" autoCorrect="off" spellCheck={false} inputMode="numeric" value={draft} onChange={(e) => setDraft(e.target.value.replace(/[^\d-]/g, "").slice(0, kind === "bank" ? 17 : 11))} placeholder={kind === "ssn" ? "•••-••-••••" : kind === "ein" ? "••-•••••••" : "Digits only"} className={`${inputCls(err)} max-w-[240px] tabular-nums`} />
       <Button size="sm" disabled={busy || (kind === "bank" ? digits.length < need : digits.length !== need)} onClick={async () => {
         if (save) {
           setBusy(true); setSaveErr(null);
           try { await save(kind, digits); } catch (e) { setBusy(false); return setSaveErr(e instanceof Error ? e.message : "Couldn't save the number."); }
           setBusy(false);
         }
-        onChange(maskLast4(digits, kind)); setDraft(""); setEditing(false);
+        onChange(maskLast4(digits, kind)); setDraft(""); setPeek(false); setEditing(false);
       }}>{busy ? "Saving…" : "Save number"}</Button>
+      <Button size="sm" variant="ghost" icon={peek ? EyeOff : Eye} aria-pressed={peek} aria-controls={id} onClick={() => setPeek(!peek)}>{peek ? "Hide" : "Show"}</Button>
       {value && <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>}
       {saveErr && <p role="alert" className="w-full text-[12px] text-danger-ink">{saveErr}</p>}
-      <p className="w-full text-[12px] text-muted"><Lock size={11} className="mr-1 inline" />Encrypted and visible only to authorized MKB staff. {kind !== "bank" && `Enter all ${need} digits.`}</p>
+      {peek && digits && <p className="w-full text-[13px] text-ink-2">Check your number: <b className="tabular-nums tracking-wide">{kind === "ein" && digits.length > 2 ? `${digits.slice(0, 2)}-${digits.slice(2)}` : kind === "ssn" && digits.length > 5 ? `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}` : digits}</b></p>}
+      <p className="w-full text-[12px] text-muted"><Lock size={11} className="mr-1 inline" />Encrypted when saved and visible only to authorized MKB staff — after saving, only the last 4 digits are shown. {kind !== "bank" && `Enter all ${need} digits.`}</p>
     </div>
   );
 }

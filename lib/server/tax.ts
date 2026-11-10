@@ -200,8 +200,13 @@ async function saveEngagementPdf(env: AppEnv, a: Actor, r: TaxReturn, clientName
 }
 
 /** Stores a generated PDF privately and lists it in the client's Documents. Returns the document id. */
-export async function storeClientPdf(env: AppEnv, a: Actor, clientId: string, pdf: Uint8Array, d: { name: string; fileName: string; category: string; taxYear?: number; activity: string; service?: string }) {
+export async function storeClientPdf(env: AppEnv, a: Actor, clientId: string, pdf: Uint8Array, d: StoredPdf) {
   if (a.kind !== "staff") throw forbidden();
+  return storeClientPdfAs(env, a.member.id, clientId, pdf, d);
+}
+type StoredPdf = { name: string; fileName: string; category: string; taxYear?: number; activity: string; service?: string };
+/** Same, for work done without a staff session (a client's private link): `memberId` is who sent the link, or null. */
+export async function storeClientPdfAs(env: AppEnv, memberId: string | null, clientId: string, pdf: Uint8Array, d: StoredPdf) {
   const docId = randomId("d");
   const key = `clients/${clientId}/${docId}.pdf`;
   const t = now();
@@ -210,9 +215,9 @@ export async function storeClientPdf(env: AppEnv, a: Actor, clientId: string, pd
   const md = json<Record<string, unknown[]>>(c?.module_data, {});
   md.documents = [{ id: docId, name: d.name, fileName: d.fileName, service: d.service ?? "tax", category: d.category, status: "received", sensitive: true, requestedAt: t, uploadedAt: t, sizeKb: Math.max(1, Math.round(pdf.length / 1024)), uploadedBy: "staff", taxYear: d.taxYear, hasFile: true, deliveredAt: t }, ...((md.documents as unknown[]) ?? [])];
   await env.DB.batch([
-    env.DB.prepare("INSERT INTO client_files (id, client_id, r2_key, name, content_type, size_bytes, sensitive, created_at, created_by) VALUES (?, ?, ?, ?, 'application/pdf', ?, 1, ?, ?)").bind(docId, clientId, key, d.fileName, pdf.length, t, a.member.id),
+    env.DB.prepare("INSERT INTO client_files (id, client_id, r2_key, name, content_type, size_bytes, sensitive, created_at, created_by) VALUES (?, ?, ?, ?, 'application/pdf', ?, 1, ?, ?)").bind(docId, clientId, key, d.fileName, pdf.length, t, memberId),
     env.DB.prepare("UPDATE clients SET module_data = ?, rev = rev + 1, updated_at = ? WHERE id = ?").bind(JSON.stringify(md), t, clientId),
-    env.DB.prepare("INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'upload', ?, 'system', ?, ?)").bind(randomId("x"), clientId, d.activity, a.member.id, t),
+    env.DB.prepare("INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'upload', ?, 'system', ?, ?)").bind(randomId("x"), clientId, d.activity, memberId, t),
   ]);
   return docId;
 }

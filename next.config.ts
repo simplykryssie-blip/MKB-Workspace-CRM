@@ -16,6 +16,8 @@ const nextConfig: NextConfig = {
       { source: "/((?!f/).*)", headers: [...common, { key: "X-Frame-Options", value: "DENY" }, { key: "Content-Security-Policy", value: "frame-ancestors 'none'" }] },
       // …except public forms, which are meant to be embedded on MKB's website.
       { source: "/f/:path*", headers: common },
+      // Private client links: the token is in the address, so never send it on as a referrer or let it be indexed.
+      { source: "/i/:path*", headers: [{ key: "Referrer-Policy", value: "no-referrer" }, { key: "X-Robots-Tag", value: "noindex, nofollow" }, { key: "Cache-Control", value: "no-store" }] },
     ];
   },
 };

@@ -6,7 +6,7 @@
  * document contents in an email.
  */
 
-export type TemplateKey = "tax_intake_received" | "tax_document_reminder" | "tax_document_request" | "tax_extension_filed" | "invoice_sent" | "books_intake_received";
+export type TemplateKey = "tax_intake_received" | "tax_document_reminder" | "tax_document_request" | "tax_extension_filed" | "invoice_sent" | "books_intake_received" | "books_intake_link";
 
 export type EmailWording = {
   subject: string;
@@ -80,6 +80,20 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
     steps: "Invite MKB to your accounting software (we'll send instructions if you need them).\nWe connect your accounts and review your books, including any catch-up months.\nWe confirm your plan and your first monthly close date.\nEach month you get your reports and a list of anything we need from you.",
     button: "Open your client portal",
     closing: "Questions? Reply through your portal or call us at 833-379-3320.",
+  },
+  books_intake_link: {
+    key: "books_intake_link",
+    name: "Bookkeeping intake link",
+    when: "Sent when staff click Send intake link. The button opens the client's private intake — no portal login. The link expires and stops working once the intake is submitted.",
+    placeholders: ["firstName", "businessName", "expires", "days", "staffName"],
+    subject: "Your MKB bookkeeping intake — private link inside",
+    heading: "Hi {{firstName}}, let's get {{businessName}} set up.",
+    intro: "{{staffName}} at MKB Financial Group sent you a private link to complete your bookkeeping intake on your phone or computer — no account or password needed. Your answers save as you go, so you can stop and come back. At the end you'll review and accept our engagement letter online and submit.",
+    docsTitle: "",
+    docsNote: "",
+    steps: "Answer the questions about your business, accounts and goals.\nReview and accept the engagement letter, then submit.\nWe'll email you a copy, your recommended plan and the list of documents to bring to our office.",
+    button: "Start my intake",
+    closing: "This link is just for you — please don't forward it. It expires on {{expires}} ({{days}} days) and stops working once you submit. Didn't expect this email or need a new link? Call us at 833-379-3320.",
   },
   invoice_sent: {
     key: "invoice_sent",

@@ -17,7 +17,7 @@ import { checkFees, expungeFee, feeWords, money, type ServiceFees } from "@/lib/
 import { useServiceFees } from "@/lib/fees/use-fees";
 import { EMPTY_DESIGNEE, designeeReady, type Designee } from "@/lib/irs/f8821";
 
-const SAMPLE = { clientName: "Jordan Sample", date: "November 8, 2026", taxYear: "2025", service: "Foundation", fee: "$399", firstName: "Jordan", count: "2 documents" };
+const SAMPLE = { clientName: "Jordan Sample", date: "November 8, 2026", taxYear: "2025", service: "Foundation", fee: "$399", firstName: "Jordan", count: "2 documents", businessName: "Sample Co. LLC", expires: "November 22, 2026", days: "14", staffName: "Krystal" };
 const input = "w-full rounded-xl border border-line bg-surface px-3 text-[14px] text-ink disabled:opacity-60";
 
 export function SettingsPage() {
