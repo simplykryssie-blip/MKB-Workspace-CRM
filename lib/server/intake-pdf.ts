@@ -36,6 +36,8 @@ function wrap(text: string, font: PDFFont, size: number, width: number) {
 export type IntakePdfInput = {
   clientName: string; taxYear: number; form: TaxForm; returnId: string; answers: Answers;
   submittedAt: string; enteredBy: "client" | "staff"; consentName?: string; documents: string[]; engagement?: { title: string; version: number; acceptedName: string; acceptedAt: string };
+  /** The client's drawn signature (PNG). */
+  signaturePng?: Uint8Array;
   /** Other interviews (e.g. bookkeeping intake): their own sections and title instead of the tax return's. */
   sections?: import("@/lib/tax/interview/engine").Section[];
   title?: string;
@@ -110,19 +112,34 @@ async function makeWriter(docTitle: string, headerRight: string) {
     if (!o.group) { page.drawRectangle({ x: M, y: y - 6, width: W - 2 * M, height: 0.5, color: LINE }); y -= size + 12; }
     else y -= size + 6;
   };
-  return { text, heading, row, space, finish, amountRow, fonts: { reg, bold, serif } };
+  /** A drawn signature image over a signature line, with a caption underneath. */
+  const signature = async (png: Uint8Array, caption: string) => {
+    const img = await pdf.embedPng(png);
+    const h = Math.min(80, img.height), w = img.width * (h / img.height);
+    const width = Math.min(w, 260), height = img.height * (width / img.width);
+    need(height + 34);
+    y -= 4;
+    page.drawImage(img, { x: M, y: y - height, width, height });
+    y -= height + 2;
+    page.drawRectangle({ x: M, y, width: 260, height: 0.75, color: INK });
+    y -= 12;
+    page.drawText(safe(caption), { x: M, y, size: 8.5, font: reg, color: MUTED });
+    y -= 16;
+  };
+  return { text, heading, row, space, finish, amountRow, signature, fonts: { reg, bold, serif } };
 }
 
 export async function buildIntakePdf(x: IntakePdfInput): Promise<Uint8Array> {
   const title = x.title ?? `${x.taxYear} Tax Interview`;
-  const { text, heading, row, space, finish, fonts: { bold, serif } } = await makeWriter(`${title} — ${x.clientName}`, title);
+  const { text, heading, row, space, finish, signature, fonts: { bold, serif } } = await makeWriter(`${title} — ${x.clientName}`, title);
   text(title, { size: 20, font: serif, gap: 8 });
   text(x.clientName, { size: 12, font: bold, gap: 10 });
   const when = new Date(x.submittedAt).toLocaleString("en-US", { dateStyle: "long", timeStyle: "short", timeZone: "America/Chicago" });
   if (!x.sections) row("Return", `${x.returnId} · Form ${x.form}`);
   row("Submitted", `${when} (Central)`);
   row("Completed by", x.enteredBy === "staff" ? "MKB staff with the client" : "The client, online");
-  if (x.consentName) row("Confirmed accurate by (typed name)", x.consentName);
+  if (x.consentName) row(x.signaturePng ? "Confirmed accurate and signed by (printed name)" : "Confirmed accurate by (typed name)", x.consentName);
+  if (x.signaturePng) { space(4); await signature(x.signaturePng, `Signature of ${x.consentName ?? "the client"}`); }
   if (x.engagement) row("Engagement letter accepted", `${x.engagement.title} (version ${x.engagement.version}) — ${x.engagement.acceptedName}, ${new Date(x.engagement.acceptedAt).toLocaleDateString("en-US", { dateStyle: "long" })}`);
   space(6);
   text("Social Security numbers, EINs and bank account numbers show only the last four digits. Full numbers are kept encrypted at MKB.", { size: 8.5, color: MUTED });
@@ -155,8 +172,8 @@ export async function buildIntakePdf(x: IntakePdfInput): Promise<Uint8Array> {
 
 
 /** A signed engagement letter: service letter + standard terms + acceptance record. */
-export async function buildLetterPdf(x: { clientName: string; parts: { title: string; body: string; version: number }[]; acceptedName: string; acceptedAt: string; method: "online" | "in_office" | "paper"; recordedBy?: string }): Promise<Uint8Array> {
-  const { text, heading, row, space, finish, fonts: { bold, serif } } = await makeWriter(`Engagement letter — ${x.clientName}`, "Engagement Letter");
+export async function buildLetterPdf(x: { clientName: string; parts: { title: string; body: string; version: number }[]; acceptedName: string; acceptedAt: string; method: "online" | "in_office" | "paper"; recordedBy?: string; signaturePng?: Uint8Array }): Promise<Uint8Array> {
+  const { text, heading, row, space, finish, signature, fonts: { bold, serif } } = await makeWriter(`Engagement letter — ${x.clientName}`, "Engagement Letter");
   x.parts.forEach((part, n) => {
     if (n) space(16);
     text(part.title, { size: 17, font: serif, gap: 6 });
@@ -168,9 +185,10 @@ export async function buildLetterPdf(x: { clientName: string; parts: { title: st
     }
   });
   heading("Acceptance");
-  row("Accepted by (typed name)", x.acceptedName);
+  if (x.signaturePng) await signature(x.signaturePng, `Signature of ${x.acceptedName}`);
+  row(x.signaturePng ? "Signed by (printed name)" : "Accepted by (typed name)", x.acceptedName);
   row("Date and time", `${new Date(x.acceptedAt).toLocaleString("en-US", { dateStyle: "long", timeStyle: "short", timeZone: "America/Chicago" })} (Central)`);
-  row("How", x.method === "online" ? "Accepted online by the client" : x.method === "in_office" ? "Accepted in the office with MKB staff" : "Signed on paper; recorded by MKB staff");
+  row("How", x.method === "online" ? (x.signaturePng ? "Signed online by the client (drawn signature)" : "Accepted online by the client") : x.method === "in_office" ? (x.signaturePng ? "Signed in the office with MKB staff (drawn signature)" : "Accepted in the office with MKB staff") : "Signed on paper; recorded by MKB staff");
   if (x.recordedBy) row("Recorded by", x.recordedBy);
   row("Letters accepted", x.parts.map((p) => `${p.title} (v${p.version})`).join("; "));
   void bold;

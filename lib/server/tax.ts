@@ -4,6 +4,7 @@
  * sign-off and e-file "approve"; everything else "edit". Sensitive interview
  * answers live in the encrypted vault (owner_type 'tax_return'). Server-only.
  */
+import { sha256Bytes, signatureFrom } from "./signature";
 import { STATUS_PATH, type FeeItem, type TaxReturn } from "@/lib/tax/config";
 import { canDo, clientAccess } from "@/lib/team/policy";
 import type { ServiceKey } from "@/lib/types";
@@ -186,14 +187,14 @@ async function checkEngagement(env: AppEnv, a: Actor, cur: TaxReturn, next: Retu
 }
 
 /** Saves the signed engagement letter (service letter + standard terms) as a PDF in the client's Documents. */
-async function saveEngagementPdf(env: AppEnv, a: Actor, r: TaxReturn, clientName: string) {
+async function saveEngagementPdf(env: AppEnv, a: Actor, r: TaxReturn, clientName: string, signaturePng?: Uint8Array) {
   const e = r.organizer?.engagement;
   if (!e || a.kind !== "staff") return null;
   const [l, t] = await Promise.all([letterVersion(env, e.letterKey, e.version), letterVersion(env, "terms", e.termsVersion)]);
   if (!l || !t) return null;
   const vars = { ...feeWords(await loadFees(env)), clientName, date: longDate(e.acceptedAt), taxYear: String(r.taxYear), service: "", fee: "" };
   const recorder = e.recordedBy ? (await one<{ name: string }>(env.DB, "SELECT name FROM members WHERE id = ?", e.recordedBy))?.name : undefined;
-  const pdf = await buildLetterPdf({ clientName, parts: [{ title: fillLetter(l.title, vars), body: fillLetter(l.body, vars), version: l.version }, { title: fillLetter(t.title, vars), body: fillLetter(t.body, vars), version: t.version }], acceptedName: e.acceptedName, acceptedAt: e.acceptedAt, method: e.method, recordedBy: recorder });
+  const pdf = await buildLetterPdf({ clientName, parts: [{ title: fillLetter(l.title, vars), body: fillLetter(l.body, vars), version: l.version }, { title: fillLetter(t.title, vars), body: fillLetter(t.body, vars), version: t.version }], acceptedName: e.acceptedName, acceptedAt: e.acceptedAt, method: e.method, recordedBy: recorder, signaturePng });
   const fileName = `MKB-Engagement-Letter-${r.taxYear}-${clientName.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "")}.pdf`;
   const doc = await storeClientPdf(env, a, r.clientId, pdf, { name: `${r.taxYear} engagement letter (accepted ${longDate(e.acceptedAt)})`, fileName, category: "Engagement letter", taxYear: r.taxYear, activity: `Saved the signed ${r.taxYear} engagement letter to Documents` });
   return { docId: doc, pdf, fileName };
@@ -347,7 +348,7 @@ const longDate = (iso: string) => new Date(iso).toLocaleDateString("en-US", { da
  * (private file storage, visible in the portal) and emails the client the
  * "we received it" message with the PDF attached and any documents still needed.
  */
-export async function completeIntake(env: AppEnv, a: Actor, id: string, b: { request?: unknown; email?: unknown }) {
+export async function completeIntake(env: AppEnv, a: Actor, id: string, b: { request?: unknown; email?: unknown; signature?: unknown }) {
   requirePermission(a, "tax", "edit");
   if (a.kind !== "staff") throw forbidden();
   const r = await load(env, a, id);
@@ -357,11 +358,14 @@ export async function completeIntake(env: AppEnv, a: Actor, id: string, b: { req
   const c = await one<{ name: string; contact_name: string | null; email: string | null; module_data: string | null; rev: number }>(env.DB, "SELECT name, contact_name, email, module_data, rev FROM clients WHERE id = ?", r.clientId);
   if (!c) throw notFound("Client not found.");
   const docs = cleanNames(b.request);
-  const pdf = await buildIntakePdf({ clientName: c.name, taxYear: r.taxYear, form: r.form, returnId: r.id, answers: iv.answers, submittedAt: r.organizer.submittedAt, enteredBy: iv.enteredBy ?? "client", consentName: iv.consentName, documents: docs, engagement: r.organizer.engagement });
+  // The client's drawn signature, kept privately with their files and printed on both PDFs.
+  const sigPng = b.signature !== undefined && b.signature !== null ? signatureFrom(b.signature) : undefined;
+  if (sigPng) await env.FILES.put(`clients/${r.clientId}/signatures/${r.id}-${randomId("sig")}.png`, sigPng, { httpMetadata: { contentType: "image/png" }, customMetadata: { taxReturn: r.id, signedBy: iv.consentName ?? "", sha256: await sha256Bytes(sigPng) } });
+  const pdf = await buildIntakePdf({ clientName: c.name, taxYear: r.taxYear, form: r.form, returnId: r.id, answers: iv.answers, submittedAt: r.organizer.submittedAt, enteredBy: iv.enteredBy ?? "client", consentName: iv.consentName, documents: docs, engagement: r.organizer.engagement, signaturePng: sigPng });
   const fileName = `MKB-Tax-Interview-${r.taxYear}-${c.name.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "")}.pdf`;
   const docId = await storeClientPdf(env, a, r.clientId, pdf, { name: `${r.taxYear} tax interview (submitted ${longDate(r.organizer.submittedAt)})`, fileName, category: "Intake", taxYear: r.taxYear, activity: `Saved a PDF copy of the ${r.taxYear} tax interview to Documents` });
   // The signed engagement letter travels with the intake.
-  const letter = await saveEngagementPdf(env, a, r, c.name);
+  const letter = await saveEngagementPdf(env, a, r, c.name, sigPng);
   let emailed = false;
   if (b.email !== false && c.email) {
     const out = await sendTemplate(env, "tax_intake_received", { to: c.email, vars: { firstName: firstName(c), taxYear: String(r.taxYear), date: longDate(r.organizer.submittedAt) }, documents: docs, attachments: [{ filename: fileName, content: pdf }, ...(letter ? [{ filename: letter.fileName, content: letter.pdf }] : [])] });

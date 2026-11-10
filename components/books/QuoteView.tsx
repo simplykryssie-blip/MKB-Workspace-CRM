@@ -16,6 +16,7 @@ export function QuoteView({ quote, accounts }: { quote: BooksQuote; accounts: nu
           {quote.quoted.map((l) => <tr key={l.label}><td className="py-0.5 text-ink-2">{l.label}</td><td className="py-0.5 text-right text-muted">Custom quote</td></tr>)}
         </tbody>
       </table>
+      {!!quote.notes?.length && <ul className="mt-2 space-y-1 border-t border-line pt-2">{quote.notes.map((n) => <li key={n} className="text-[12.5px] text-muted">• {n}</li>)}</ul>}
     </div>
   );
 }

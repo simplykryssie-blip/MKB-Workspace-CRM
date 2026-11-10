@@ -85,8 +85,8 @@ export function IntakeLinkPanel({ intake, defaultEmail, beforeSend, reload }: { 
             </div>
             <ul className="space-y-1.5 text-[12.5px] text-muted">
               <li className="flex gap-2"><ShieldCheck size={14} className="mt-0.5 shrink-0 text-success" />Long and random; opens only this intake; expires in 14 days; you can cancel it anytime; it stops working once they submit.</li>
-              <li className="flex gap-2"><ShieldCheck size={14} className="mt-0.5 shrink-0 text-success" />EIN and bank numbers go straight to encrypted storage. They can check a number while typing it, but after saving the link only ever shows the last 4.</li>
-              <li className="flex gap-2"><ShieldCheck size={14} className="mt-0.5 shrink-0 text-success" />Not the portal: no uploads or messages. They&rsquo;ll bring documents to the office.</li>
+              <li className="flex gap-2"><ShieldCheck size={14} className="mt-0.5 shrink-0 text-success" />EIN and bank numbers go straight to encrypted storage. They can check a number while typing it, but after saving the link only ever shows the last 4. They sign with a drawn signature.</li>
+              <li className="flex gap-2"><ShieldCheck size={14} className="mt-0.5 shrink-0 text-success" />Not a portal login: the link is only for this intake. After submitting, they upload their documents in the client portal.</li>
               {active && <li className="flex gap-2"><XCircle size={14} className="mt-0.5 shrink-0 text-warning-ink" />Sending a new link cancels the one sent {relTime(link!.sentAt)}.</li>}
             </ul>
           </div>

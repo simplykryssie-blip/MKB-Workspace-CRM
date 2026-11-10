@@ -126,7 +126,7 @@ export function checkFees(f: ServiceFees): string | null {
 
 /* ---------------------------------------------------------------- bookkeeping quote */
 export type BooksQuoteLine = { label: string; amount: number; billing: "monthly" | "one_time" | "quote"; startingAt?: boolean };
-export type BooksQuote = { plan: BooksPlan; monthly: BooksQuoteLine[]; oneTime: BooksQuoteLine[]; quoted: BooksQuoteLine[]; monthlyTotal: number; oneTimeTotal: number; extraAccounts: number; extraLocations: number };
+export type BooksQuote = { plan: BooksPlan; monthly: BooksQuoteLine[]; oneTime: BooksQuoteLine[]; quoted: BooksQuoteLine[]; monthlyTotal: number; oneTimeTotal: number; extraAccounts: number; extraLocations: number; /** Why the quote looks the way it does (estimates, add-ons the answers call for). */ notes?: string[] };
 
 /**
  * Cheapest plan that fits the monthly transactions, plus extra accounts and

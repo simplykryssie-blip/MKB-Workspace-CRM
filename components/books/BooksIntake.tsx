@@ -21,6 +21,7 @@ import { fmtDate } from "@/lib/format";
 import type { BooksIntake as Intake } from "@/lib/server/books-intake";
 import { StartWorkspace } from "./StartWorkspace";
 import { QuoteView } from "./QuoteView";
+import { SignaturePad } from "@/components/ui/SignaturePad";
 import { IntakeLinkPanel } from "./IntakeLinkPanel";
 
 export const intakeHref = (id: string) => `/services/bookkeeping/intake/${id}`;
@@ -139,6 +140,7 @@ function Review({ intake, client, answers, rev, goTo, onSubmitted }: { intake: I
   const [agree, setAgree] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [sig, setSig] = useState("");
+  const [drawn, setDrawn] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const missing = BOOKS_SECTIONS.flatMap((s) => missingIn(s, answers).map((m) => ({ ...m, s })));
   const docs = docsFor(BOOKS_SECTIONS, answers);
@@ -149,7 +151,7 @@ function Review({ intake, client, answers, rev, goTo, onSubmitted }: { intake: I
     if (!L.letters) return;
     setBusy(true);
     try {
-      const r = await call<{ emailed: boolean; documents: string[]; plan: { key: string } }>("POST", `/api/books/intakes/${intake.id}/submit`, { answers, rev: rev.current, consentName: sig.trim(), engagement: { version: L.letters.books.version, termsVersion: L.letters.terms.version }, enteredBy: "staff" });
+      const r = await call<{ emailed: boolean; documents: string[]; plan: { key: string } }>("POST", `/api/books/intakes/${intake.id}/submit`, { answers, rev: rev.current, consentName: sig.trim(), engagement: { version: L.letters.books.version, termsVersion: L.letters.terms.version }, enteredBy: "staff", signature: drawn });
       window.dispatchEvent(new CustomEvent("mkb:client-changed", { detail: client.id }));
       toast(`Intake submitted · ${r.documents.length} documents requested${r.emailed ? " · client emailed" : ""}`);
       onSubmitted();
@@ -187,8 +189,10 @@ function Review({ intake, client, answers, rev, goTo, onSubmitted }: { intake: I
       </Card>
       <Card className="space-y-3 p-5 sm:p-6">
         <label className="flex items-start gap-2 text-[13.5px] text-ink"><input type="checkbox" checked={agree} onChange={() => setAgree(!agree)} className="mt-0.5 h-4 w-4 accent-[var(--accent)]" />The client confirmed these answers are complete and accurate to the best of their knowledge.</label>
-        <div className="max-w-sm"><label htmlFor="bi-sig" className="mb-1 block text-[13px] font-medium text-ink-2">Client&rsquo;s full name (their acceptance)</label><input id="bi-sig" value={sig} onChange={(e) => setSig(e.target.value)} className="h-11 w-full rounded-xl border border-line bg-surface px-3 text-[15px] text-ink" /></div>
-        <Button variant="primary" icon={Send} disabled={busy || !agree || !accepted || sig.trim().length < 3 || missing.length > 0 || !L.letters} onClick={submit}>{busy ? "Submitting…" : "Submit intake"}</Button>
+        <div className="max-w-sm"><label htmlFor="bi-sig" className="mb-1 block text-[13px] font-medium text-ink-2">Client&rsquo;s full name (printed)</label><input id="bi-sig" value={sig} onChange={(e) => setSig(e.target.value)} className="h-11 w-full rounded-xl border border-line bg-surface px-3 text-[15px] text-ink" /></div>
+        <div className="max-w-lg"><SignaturePad label="Client signs here" onChange={setDrawn} /></div>
+        <Button variant="primary" icon={Send} disabled={busy || !agree || !accepted || sig.trim().length < 3 || !drawn || missing.length > 0 || !L.letters} onClick={submit}>{busy ? "Submitting…" : "Submit intake"}</Button>
+        {!drawn && missing.length === 0 && <p className="text-[12px] text-muted">The client needs to draw their signature to submit.</p>}
         {missing.length > 0 && <p className="text-[12px] text-muted">Answer the remaining questions to submit.</p>}
       </Card>
     </div>

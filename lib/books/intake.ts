@@ -300,21 +300,62 @@ const finish: Section = {
 export const BOOKS_SECTIONS: Section[] = [business, contact, people, software, status, accounts, debts, loans, income, spending, payroll, taxes, goals, finish];
 
 const TX: Record<string, number> = { "Under 150": 150, "150 – 400": 400, "400 – 750": 750, "750 – 1,500": 1500, "Over 1,500": 1501 };
+/**
+ * When the client isn't sure of their transaction count, estimate it from annual revenue
+ * (monthly transactions, matched to the plan limits). Editable here if MKB's experience differs.
+ */
+const TX_FROM_REVENUE: Record<string, number> = { "Under $50,000": 150, "$50,000 – $150,000": 400, "$150,000 – $500,000": 750, "$500,000 – $1 million": 1500, "Over $1 million": 1501, "Brand new — no sales yet": 150 };
+/** Payment processors and sales platforms that hold money — each is reconciled like a financial account. */
+const PROCESSOR_APPS = ["Square", "Stripe", "PayPal", "Shopify", "Clover", "Toast", "Amazon", "Etsy"];
+const picked = (a: Answers, id: string) => ((a[id] as string) ?? "").split("|").filter(Boolean);
 
-/** Add-on keys the answers call for: chosen add-ons, update frequency, QuickBooks setup and catch-up. */
+/** Monthly transactions: the client's answer, or an estimate from revenue when they aren't sure. */
+export function transactionsFrom(a: Answers): { count: number; estimated: boolean } {
+  const stated = TX[(a.volume as string) ?? ""];
+  if (stated) return { count: stated, estimated: false };
+  const est = TX_FROM_REVENUE[(a.revenue as string) ?? ""];
+  return est ? { count: est, estimated: true } : { count: 0, estimated: false };
+}
+
+/** Financial accounts to reconcile: the accounts listed plus payment processors / sales platforms they use. */
+export function accountsFrom(a: Answers) {
+  const processors = picked(a, "apps").filter((x) => PROCESSOR_APPS.includes(x));
+  // Don't count a processor twice when it was also listed as an account.
+  const listed = rowsOf(a, "accounts");
+  const listedText = listed.map((r) => `${r.bank ?? ""} ${r.nickname ?? ""}`.toLowerCase()).join(" ");
+  const extra = processors.filter((x) => !listedText.includes(x.toLowerCase()));
+  return { count: listed.length + extra.length, processors: extra };
+}
+
+/** Add-on keys the answers call for: chosen add-ons, update frequency, QuickBooks setup and catch-up, A/R and A/P. */
 export function addOnKeysFrom(a: Answers, books: ServiceFees["books"]) {
   const byName = new Map(books.addOns.map((x) => [x.name, x.key]));
-  const keys = new Set(((a.addons as string) ?? "").split("|").map((n) => byName.get(n)).filter((k): k is string => !!k));
+  const keys = new Set(picked(a, "addons").map((n) => byName.get(n)).filter((k): k is string => !!k));
   if (a.frequency === "Every two weeks") keys.add("biweekly");
   if (a.frequency === "Weekly") keys.add("weekly");
   if (a.setupQbo === "Yes" || a.desktopMove === "Yes") keys.add("qbo");
   if (typeof a.upToDate === "string" && !a.upToDate.startsWith("Current")) keys.add("catchup");
+  // Tracking who owes them / who they owe is A/R and A/P work, which plans don't include.
+  if (a.invoices === "Yes" || picked(a, "reports").includes("Who owes us (A/R aging)")) keys.add("ar");
+  if (a.bills === "Yes" || picked(a, "reports").includes("Who we owe (A/P aging)")) keys.add("ap");
   return [...keys];
 }
 
 /** The client's quote: best plan for their volume, extra accounts/locations, and add-ons (prices from Settings → Fees). */
 export function quoteFor(a: Answers, books: ServiceFees["books"]) {
-  return booksQuote(books, { transactions: TX[(a.volume as string) ?? ""] ?? 0, accounts: rowsOf(a, "accounts").length, locations: Math.max(1, Number(a.locations) || 1), addOnKeys: addOnKeysFrom(a, books) });
+  const tx = transactionsFrom(a);
+  const acc = accountsFrom(a);
+  const keys = addOnKeysFrom(a, books);
+  const q = booksQuote(books, { transactions: tx.count, accounts: acc.count, locations: Math.max(1, Number(a.locations) || 1), addOnKeys: keys });
+  const chosen = new Set(picked(a, "addons"));
+  const name = (k: string) => books.addOns.find((x) => x.key === k)?.name ?? k;
+  const notes: string[] = [];
+  if (tx.estimated) notes.push(`Plan estimated from annual revenue (${a.revenue}) because the monthly transaction count wasn't known. We'll confirm it from your statements.`);
+  if (acc.processors.length) notes.push(`${acc.processors.join(", ")} ${acc.processors.length === 1 ? "is counted as a financial account" : "are counted as financial accounts"} to reconcile.`);
+  if (keys.includes("ar") && !chosen.has(name("ar"))) notes.push(`${name("ar")} added because you invoice customers or want the A/R aging report.`);
+  if (keys.includes("ap") && !chosen.has(name("ap"))) notes.push(`${name("ap")} added because you have vendor bills or want the A/P aging report.`);
+  if (a.hasEmployees === "Yes") notes.push("Payroll processing and payroll tax filings aren't part of bookkeeping plans — we'll talk with you about payroll separately.");
+  return { ...q, notes };
 }
 
 /** Plan only (older screens). */

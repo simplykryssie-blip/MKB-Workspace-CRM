@@ -12,6 +12,7 @@ import { feeWords, money, type ServiceFees } from "@/lib/fees/config";
 import type { Letter } from "@/lib/engagement/letters";
 import { docsFor, missingIn, rowsOf, sectionVisible, type Answers, type Row } from "@/lib/tax/interview/engine";
 import { QuoteView } from "./QuoteView";
+import { SignaturePad } from "@/components/ui/SignaturePad";
 
 /**
  * The client's own bookkeeping intake, opened from the private link MKB emailed
@@ -61,7 +62,7 @@ export function PublicBooksIntake({ token }: { token: string }) {
           : err ? <Gone err={err} />
           : !data ? <Card className="p-10 text-center text-[14px] text-muted"><span role="status">Loading your intake…</span></Card>
           : <Runner key={gen} data={data} api={api} reload={load} onDone={setDone} onGone={setErr} />}
-        <p className="mt-8 text-center text-[12px] text-muted">© MKB Financial Group · 833-379-3320 · We never ask you to email bank statements or tax documents.</p>
+        <p className="mt-8 text-center text-[12px] text-muted">© MKB Financial Group · 833-379-3320 · Upload documents in your client portal — we never ask you to email bank statements or tax documents.</p>
       </div>
     </main>
   );
@@ -84,9 +85,9 @@ function Thanks({ done, name }: { done: { documents: string[]; emailed: boolean;
       <p className="mt-2 text-[14.5px] text-ink-2">We received your bookkeeping intake and your accepted engagement letter. {done.emailed ? "A copy is on its way to your email." : "We'll email you a copy shortly."} Recommended plan: <b>{done.plan}</b>.</p>
       {done.documents.length > 0 && (
         <div className="mt-4 rounded-xl border border-line bg-surface-2 p-4">
-          <p className="text-[14px] font-semibold text-ink">Please bring these to our office</p>
+          <p className="text-[14px] font-semibold text-ink">Please upload these in your client portal</p>
           <ul className="mt-1.5 grid gap-1 sm:grid-cols-2">{done.documents.map((d) => <li key={d} className="text-[13.5px] text-ink-2">• {d}</li>)}</ul>
-          <p className="mt-2 text-[12.5px] text-muted">Please don&rsquo;t email bank statements or tax documents. Online uploads are coming with the client portal.</p>
+          <p className="mt-2 text-[12.5px] text-muted">We&rsquo;ll email you when your portal is ready. Please don&rsquo;t email bank statements or tax documents.</p>
         </div>
       )}
       <p className="mt-4 text-[13.5px] text-muted">This link is now closed. Questions? Call us at 833-379-3320. You can close this page.</p>
@@ -197,6 +198,7 @@ function Review({ data, sections, answers, rev, api, flush, goTo, onDone, onErr 
   const [agree, setAgree] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [sig, setSig] = useState("");
+  const [drawn, setDrawn] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const missing = sections.flatMap((s) => (sectionVisible(s, answers) ? missingIn(s, answers).map((m) => ({ ...m, s })) : []));
   const docs = docsFor(sections, answers);
@@ -208,7 +210,7 @@ function Review({ data, sections, answers, rev, api, flush, goTo, onDone, onErr 
     setBusy(true);
     try {
       await flush();
-      const r = await api<{ documents: string[]; emailed: boolean; plan: string }>("POST", "/submit", { answers, rev: rev.current, consentName: sig.trim(), engagement: { version: L.books.version, termsVersion: L.terms.version } });
+      const r = await api<{ documents: string[]; emailed: boolean; plan: string }>("POST", "/submit", { answers, rev: rev.current, consentName: sig.trim(), engagement: { version: L.books.version, termsVersion: L.terms.version }, signature: drawn });
       onDone(r);
     } catch (e) { onErr(e); setBusy(false); }
   };
@@ -227,7 +229,7 @@ function Review({ data, sections, answers, rev, api, flush, goTo, onDone, onErr 
       {docs.length > 0 && (
         <Card className="p-5 sm:p-6">
           <h3 className="flex items-center gap-2 text-[15px] font-semibold text-ink"><FileUp size={16} className="text-accent" /> Documents we&rsquo;ll ask for ({docs.length})</h3>
-          <p className="mt-0.5 text-[12.5px] text-muted">After you submit, please bring these to our office. Don&rsquo;t email them.</p>
+          <p className="mt-0.5 text-[12.5px] text-muted">After you submit, upload these in your client portal. Please don&rsquo;t email them.</p>
           <ul className="mt-2 grid gap-1 sm:grid-cols-2">{docs.map((d) => <li key={d.name} className="text-[13px] text-ink-2">• {d.name}</li>)}</ul>
         </Card>
       )}
@@ -241,8 +243,10 @@ function Review({ data, sections, answers, rev, api, flush, goTo, onDone, onErr 
       </Card>
       <Card className="space-y-3 p-5 sm:p-6">
         <label className="flex items-start gap-2 text-[14px] text-ink"><input type="checkbox" checked={agree} onChange={() => setAgree(!agree)} className="mt-0.5 h-5 w-5 accent-[var(--accent)]" />My answers are complete and accurate to the best of my knowledge.</label>
-        <div className="max-w-sm"><label htmlFor="pi-sig" className="mb-1 block text-[13px] font-medium text-ink-2">Type your full name to sign</label><input id="pi-sig" autoComplete="name" value={sig} onChange={(e) => setSig(e.target.value)} className="h-11 w-full rounded-xl border border-line bg-surface px-3 text-[15px] text-ink" /></div>
-        <Button variant="primary" icon={Send} disabled={busy || !agree || !accepted || sig.trim().length < 3 || missing.length > 0} onClick={submit}>{busy ? "Submitting…" : "Accept and submit"}</Button>
+        <div className="max-w-sm"><label htmlFor="pi-sig" className="mb-1 block text-[13px] font-medium text-ink-2">Your full name (printed)</label><input id="pi-sig" autoComplete="name" value={sig} onChange={(e) => setSig(e.target.value)} className="h-11 w-full rounded-xl border border-line bg-surface px-3 text-[15px] text-ink" /></div>
+        <div className="max-w-lg"><SignaturePad label="Sign here with your finger or mouse" onChange={setDrawn} /></div>
+        <Button variant="primary" icon={Send} disabled={busy || !agree || !accepted || sig.trim().length < 3 || !drawn || missing.length > 0} onClick={submit}>{busy ? "Submitting…" : "Sign and submit"}</Button>
+        {!drawn && missing.length === 0 && <p className="text-[12px] text-muted">Draw your signature in the box to submit.</p>}
         {missing.length > 0 && <p className="text-[12px] text-muted">Answer the remaining questions to submit.</p>}
         <p className="text-[12px] text-muted">Once you submit, this link closes. To change something afterwards, call us at 833-379-3320.</p>
       </Card>

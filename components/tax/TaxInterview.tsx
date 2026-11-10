@@ -17,6 +17,7 @@ import { useLetters } from "@/lib/engagement/use-letters";
 import { useServiceFees } from "@/lib/fees/use-fees";
 import { feeWords } from "@/lib/fees/config";
 import { LetterView } from "@/components/engagement/LetterView";
+import { SignaturePad } from "@/components/ui/SignaturePad";
 import { display, docsFor, invalidReason, maskLast4, missingIn, needsFix, progress, qVisible, rowsOf, sectionVisible, type Answers, type Q, type Row, type Section } from "@/lib/tax/interview/engine";
 import { INTERVIEW_VERSION, sectionsFor } from "@/lib/tax/interview/questions";
 import { applyPrefill, prefillFrom } from "@/lib/tax/interview/prefill";
@@ -327,6 +328,7 @@ function Review({ r, sections, a, answers, by, goTo }: { r: TaxReturn; sections:
   const toast = useToast();
   const [agree, setAgree] = useState(false);
   const [sig, setSig] = useState("");
+  const [drawn, setDrawn] = useState<string | null>(null);
   const L = useLetters();
   const F = useServiceFees();
   const fw = F.fees ? feeWords(F.fees) : {};
@@ -358,7 +360,7 @@ function Review({ r, sections, a, answers, by, goTo }: { r: TaxReturn; sections:
     if (by === "staff" && BACKEND) {
       // PDF copy to the client's Documents + the "we received it" email (with any documents still needed).
       try {
-        const res = await call<{ emailed: boolean; noEmail: boolean }>("POST", `/api/tax/returns/${r.id}/complete-intake`, { request: requestRest ? out.requested : [] });
+        const res = await call<{ emailed: boolean; noEmail: boolean }>("POST", `/api/tax/returns/${r.id}/complete-intake`, { request: requestRest ? out.requested : [], signature: drawn });
         note += res.noEmail ? " · PDF saved to Documents (no email on file)" : res.emailed ? " · PDF saved and emailed to the client" : " · PDF saved; email queued";
         window.dispatchEvent(new CustomEvent("mkb:client-changed", { detail: r.clientId }));
       } catch (e) { note += ` · couldn't save the PDF copy (${e instanceof Error ? e.message : "error"})`; }
@@ -439,8 +441,10 @@ function Review({ r, sections, a, answers, by, goTo }: { r: TaxReturn; sections:
       </Card>
       <Card className="space-y-3 p-5 sm:p-6">
         <label className="flex items-start gap-2 text-[13.5px] text-ink"><input type="checkbox" checked={agree} onChange={() => setAgree(!agree)} className="mt-0.5 h-4 w-4 accent-[var(--accent)]" />{by === "staff" ? "The client confirmed these answers are complete and accurate to the best of their knowledge." : "My answers are complete and accurate to the best of my knowledge. I'll tell MKB if anything changes."}</label>
-        <div className="max-w-sm"><label htmlFor="iv-sig" className="mb-1 block text-[13px] font-medium text-ink-2">{by === "staff" ? "Client's name (confirmed verbally or in person)" : "Type your full name"}</label><input id="iv-sig" value={sig} onChange={(e) => setSig(e.target.value)} className={inputCls()} /></div>
-        <Button variant="primary" icon={Send} disabled={sending || !agree || sig.trim().length < 3 || missing.length > 0 || (!already && (!letterReady || !accepted))} onClick={submit}>{sending ? "Submitting…" : "Submit to MKB"}</Button>
+        <div className="max-w-sm"><label htmlFor="iv-sig" className="mb-1 block text-[13px] font-medium text-ink-2">{by === "staff" ? "Client's full name (printed)" : "Your full name (printed)"}</label><input id="iv-sig" value={sig} onChange={(e) => setSig(e.target.value)} className={inputCls()} /></div>
+        <div className="max-w-lg"><SignaturePad label={by === "staff" ? "Client signs here" : "Sign here with your finger or mouse"} onChange={setDrawn} /></div>
+        <Button variant="primary" icon={Send} disabled={sending || !agree || sig.trim().length < 3 || !drawn || missing.length > 0 || (!already && (!letterReady || !accepted))} onClick={submit}>{sending ? "Submitting…" : "Sign and submit to MKB"}</Button>
+        {!drawn && missing.length === 0 && <p className="text-[12px] text-muted">{by === "staff" ? "The client needs to draw their signature to submit." : "Draw your signature in the box to submit."}</p>}
         {missing.length > 0 && <p className="text-[12px] text-muted">Answer the remaining questions to submit.</p>}
         {!already && letterReady && !accepted && missing.length === 0 && <p className="text-[12px] text-muted">Accept the engagement letter above to submit.</p>}
       </Card>
