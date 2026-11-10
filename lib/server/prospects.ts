@@ -103,27 +103,50 @@ export async function sendLeadIntake(env: AppEnv, a: Actor, leadId: string, b: {
   return { intakeId: intake.id, link: sent.link, url: sent.url, emailed: sent.emailed };
 }
 
+const SCH_C = "1040 + Sch C";
+/**
+ * Schedule C for a business lead: the prospect record becomes the owner (an individual
+ * client), keeping the business — its name, type and industry — on the record.
+ */
+async function ownerProspect(env: AppEnv, clientId: string, l: LeadRow) {
+  const c = await one<{ type: string; business: string | null }>(env.DB, "SELECT type, business FROM clients WHERE id = ?", clientId);
+  if (!c || c.type === "individual") return;
+  if (await one(env.DB, "SELECT 1 FROM tax_returns WHERE client_id = ? AND kind = 'business'", clientId)) throw badRequest("This lead already has a business return. Schedule C goes on the owner's personal return — add the owner as a separate individual lead.");
+  const biz = json<Record<string, unknown>>(c.business ?? l.business, {});
+  const owner = (l.contact_name ?? "").trim() || l.name;
+  await run(env.DB, "UPDATE clients SET type = 'individual', name = ?, contact_name = NULL, business = ?, rev = rev + 1, updated_at = ? WHERE id = ?", owner, JSON.stringify({ ...biz, legalName: (biz.legalName as string) || l.name, entityType: biz.entityType === "LLC" || !biz.entityType ? "Sole Prop" : biz.entityType }), now(), clientId);
+  await run(env.DB, "INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'status', ?, 'system', NULL, ?)", randomId("x"), clientId, `Set up as the owner (${owner}) — ${l.name} is reported on Schedule C of their personal return`, now());
+}
+
 /** The lead's return for that tax year (created the first time; priced from the fee schedule like any new return). */
 async function prospectReturn(env: AppEnv, a: Extract<Actor, { kind: "staff" }>, clientId: string, l: LeadRow, b: { taxYear?: unknown; form?: unknown }) {
   const year = Number(b.taxYear);
   if (!Number.isInteger(year) || year < 2015 || year > new Date().getFullYear()) throw badRequest("Choose the tax year.");
-  const forms = (l.type === "business" ? BUSINESS_FORMS : INDIVIDUAL_FORMS) as readonly string[];
+  // A business lead that's a sole proprietor / single-member LLC files Schedule C on the owner's 1040.
+  const forms = (l.type === "business" ? [...BUSINESS_FORMS, SCH_C] : INDIVIDUAL_FORMS) as readonly string[];
   const form = (typeof b.form === "string" && forms.includes(b.form) ? b.form : forms[0]) as TaxForm;
   if (form === "990") throw badRequest("The nonprofit (990) interview isn't built yet.");
+  const kind: TaxReturn["kind"] = (INDIVIDUAL_FORMS as readonly string[]).includes(form) ? "individual" : "business";
   const existing = await one<TaxRow>(env.DB, "SELECT * FROM tax_returns WHERE client_id = ? AND tax_year = ? LIMIT 1", clientId, year);
   if (existing) {
     const r = toReturn(existing);
     if (r.organizer.status === "submitted" || r.organizer.status === "reviewed") throw badRequest(`This lead already submitted their ${year} tax interview.`);
-    return r;
+    if (r.form === form) return r;
+    // Wrong return type sent: replace it, unless they've already started answering.
+    if (r.organizer.interview?.updatedAt || Object.keys(r.organizer.answers ?? {}).length) throw badRequest(`They already started the ${year} ${r.form} interview — cancel it with them before switching to ${form}.`);
+    await cancelLinks(env, "tax_interview", r.id, a.member.id);
+    await run(env.DB, "DELETE FROM tax_returns WHERE id = ?", r.id);
+    await leadLog(env, l.id, `${year} ${r.form} interview replaced with ${form} (not started)`, a.member.id);
   }
+  if (kind === "individual" && l.type === "business") await ownerProspect(env, clientId, l);
   const fees = await all<{ code: string; label: string; price: number }>(env.DB, "SELECT code, label, price FROM tax_fee_schedule");
   const lines = defaultPricing(form).flatMap((p) => { const f = fees.find((x) => x.code === p.code); return f ? [{ id: randomId("p"), code: p.code, description: f.label, qty: p.qty, unit: f.price }] : []; });
   const t = now();
   const r: TaxReturn = {
-    id: `TR-${clientId}-${year}`, clientId, taxYear: year, kind: l.type, form, states: [], status: "Intake",
+    id: `TR-${clientId}-${year}`, clientId, taxYear: year, kind, form, states: [], status: "Intake",
     preparerId: a.member.id, reviewerId: a.member.id, dueAt: dueDates(form, year).due,
     organizer: { status: "not_sent", answers: {} },
-    checklist: baseChecklist(l.type, { hasEin: false, form }).map((d) => ({ id: randomId("ci"), ...d, required: true, source: "standard" as const })),
+    checklist: baseChecklist(kind, { hasEin: false, form }).map((d) => ({ id: randomId("ci"), ...d, required: true, source: "standard" as const })),
     efile: [], pricing: { lines, discount: 0 }, statusHistory: [{ status: "Intake", at: t, by: a.member.id }], notes: [],
     activity: [{ id: randomId("x"), kind: "intake", text: `Return created for lead ${l.name} — TY ${year} ${form} (not a client yet)`, at: t, actor: "staff" }], createdAt: t,
   };

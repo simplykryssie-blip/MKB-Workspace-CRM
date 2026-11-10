@@ -41,7 +41,15 @@ export function LeadIntakesCard({ lead, intakes: h }: { lead: Lead; intakes: Ret
   const toast = useToast();
   const team = useTeam();
   const [sending, setSending] = useState<null | "books" | "tax">(null);
-  const forms = lead.type === "business" ? ["1120-S", "1065", "1120"] : ["1040", "1040 + Sch C", "1040-X"];
+  const forms = lead.type === "business" ? ["1040 + Sch C", "1120-S", "1065", "1120"] : ["1040", "1040 + Sch C", "1040-X"];
+  const FORM_HELP: Record<string, string> = {
+    "1040 + Sch C": lead.type === "business" ? "Owner's personal return with Schedule C — sole proprietor or single-member LLC (most small LLCs)" : "Personal return with Schedule C (self-employed)",
+    "1120-S": "S corporation, or an LLC that elected S-corp status",
+    "1065": "Partnership or LLC with more than one owner",
+    "1120": "C corporation",
+    "1040": "Personal return",
+    "1040-X": "Amended personal return",
+  };
   const [taxYear, setTaxYear] = useState(new Date().getFullYear() - 1);
   const [form, setForm] = useState(forms[0]);
   const [email, setEmail] = useState(lead.email ?? "");
@@ -144,6 +152,7 @@ export function LeadIntakesCard({ lead, intakes: h }: { lead: Lead; intakes: Ret
               <div className="grid grid-cols-2 gap-3">
                 <label className="block text-[13px] font-medium text-ink-2">Tax year<select value={taxYear} onChange={(e) => setTaxYear(Number(e.target.value))} className="mt-1 h-10 w-full rounded-xl border border-line bg-surface px-3 text-[14px] text-ink">{[0, 1, 2, 3].map((n) => { const y = new Date().getFullYear() - 1 - n; return <option key={y} value={y}>{y}</option>; })}</select></label>
                 <label className="block text-[13px] font-medium text-ink-2">Return<select value={form} onChange={(e) => setForm(e.target.value)} className="mt-1 h-10 w-full rounded-xl border border-line bg-surface px-3 text-[14px] text-ink">{forms.map((f) => <option key={f} value={f}>{f}</option>)}</select></label>
+                <p className="col-span-2 -mt-1 text-[12.5px] text-muted">{FORM_HELP[form]}{lead.type === "business" && form === "1040 + Sch C" ? `. They get the personal interview (with the Schedule C questions for ${lead.name}); the record becomes ${lead.contactName || "the owner"}, keeping the business on it.` : ""}</p>
               </div>
             )}
             <label className="block text-[13px] font-medium text-ink-2">Lead&rsquo;s email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="mt-1 h-10 w-full rounded-xl border border-line bg-surface px-3 text-[14px] text-ink" /></label>
