@@ -26,7 +26,7 @@ const money = (n: number) => n.toLocaleString("en-US", { style: "currency", curr
 type Me = { client: { name: string; firstName: string; type: string; email: string }; unread: number };
 type Todo = { id: string; kind: "tax_interview" | "books_intake" | "proposal" | "upload" | "books_task" | "pay"; title: string; detail?: string; service: string; ref: string; extra?: { taskId?: string; type?: string; period?: string } };
 type Home = Me & { services: { service: string; name: string; title: string; status: string; detail?: string }[]; todos: Todo[] };
-type Doc = { id: string; name: string; service: string; serviceName: string; category?: string; taxYear?: number; requestedAt?: string; uploadedAt?: string; uploadedBy?: string; status: string; hasFile: boolean };
+type Doc = { id: string; name: string; fileName?: string; secureForm?: boolean; service: string; serviceName: string; category?: string; taxYear?: number; requestedAt?: string; uploadedAt?: string; uploadedBy?: string; status: string; hasFile: boolean };
 type Invoice = { id: string; number: string; description: string; service: string; issuedAt: string; dueAt: string; amount: number; paid: number; owed: number; status: string; bankProduct: boolean };
 type Msg = { id: string; from: "staff" | "client"; author: string; body: string; at: string; service?: string };
 
@@ -257,7 +257,7 @@ function DocumentsTab() {
           <Row key={d.id}>
             <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-warning-soft text-warning-ink"><Upload size={17} /></span>
             <span className="min-w-0 flex-1"><span className="block text-[14.5px] font-semibold text-ink">{d.name}</span><span className="block text-[12.5px] text-muted">{d.taxYear ? `${d.taxYear} · ` : ""}{d.serviceName}{d.requestedAt ? ` · requested ${date(d.requestedAt)}` : ""}</span></span>
-            <span className="ml-12 sm:ml-0"><UploadButton doc={d.id} onDone={load} /></span>
+            <span className="ml-12 sm:ml-0">{d.secureForm ? <span className="text-[12.5px] text-muted">No upload needed — collected through your secure tax interview or form</span> : <UploadButton doc={d.id} onDone={load} />}</span>
           </Row>
         )) : <Empty icon={CheckCircle2}>Nothing requested right now.</Empty>}
       </Section>
@@ -272,7 +272,7 @@ function DocumentsTab() {
         {data.files.length ? data.files.map((d) => (
           <Row key={d.id}>
             <FileText size={18} className="shrink-0 text-muted" />
-            <span className="min-w-0 flex-1"><span className="block truncate text-[14.5px] font-medium text-ink">{d.name}</span><span className="block text-[12.5px] text-muted">{d.serviceName}{d.uploadedAt ? ` · ${d.uploadedBy === "client" ? "you uploaded" : "shared"} ${date(d.uploadedAt)}` : ""}</span></span>
+            <span className="min-w-0 flex-1"><span className="block truncate text-[14.5px] font-medium text-ink">{d.name}</span><span className="block text-[12.5px] text-muted">{d.fileName && d.fileName !== d.name ? `${d.fileName} · ` : ""}{d.serviceName}{d.uploadedAt ? ` · ${d.uploadedBy === "client" ? "you uploaded" : "shared"} ${date(d.uploadedAt)}` : ""}</span></span>
             {d.status === "received" && d.uploadedBy === "client" && <Badge tone="info">Received</Badge>}
             <a href={`/api/portal/files/${d.id}?view=1`} target="_blank" rel="noopener" className="inline-flex h-8 items-center gap-1.5 rounded-xl px-2.5 text-[13px] font-semibold text-ink-2 hover:bg-surface-hover"><Eye size={15} />View</a>
             <a href={`/api/portal/files/${d.id}`} className="inline-flex h-8 items-center gap-1.5 rounded-xl px-2.5 text-[13px] font-semibold text-ink-2 hover:bg-surface-hover"><Download size={15} />Download</a>

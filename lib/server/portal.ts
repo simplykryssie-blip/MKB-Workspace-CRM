@@ -29,6 +29,8 @@ async function me(env: AppEnv, a: ClientActor) {
   return c;
 }
 type MD = { documents?: ClientDocument[]; messages?: Message[]; [k: string]: unknown };
+/** Requests that are answered through a secure form (SSN, EIN…), never by uploading a file. */
+const secureForm = (d: Pick<ClientDocument, "name">) => /\(secure form\)/i.test(d.name);
 const firstName = (c: Pick<ClientBits, "name" | "contact_name">) => (c.contact_name || c.name).trim().split(/\s+/)[0];
 const SERVICE_NAME: Record<string, string> = { tax: "Tax preparation", books: "Bookkeeping", biz: "Business services", expunge: "Record expungement" };
 const MODULE: Record<string, "tax" | "books" | "biz" | "exp" | "crm"> = { tax: "tax", books: "books", biz: "biz", expunge: "exp" };
@@ -90,7 +92,7 @@ export async function portalHome(env: AppEnv, a: Actor) {
   for (const e of await all<{ service: string; title: string; stage: string; status: string }>(env.DB, "SELECT service, title, stage, status FROM client_enrollments WHERE client_id = ? AND service IN ('biz', 'expunge') AND status != 'cancelled'", c.id))
     services.push({ service: e.service, name: SERVICE_NAME[e.service] ?? e.service, title: e.title, status: e.status === "complete" ? "Complete" : e.stage });
   // Documents MKB asked for
-  for (const d of (md.documents ?? []).filter((x) => x.status === "requested")) todos.push({ id: `doc-${d.id}`, kind: "upload", title: `Upload: ${d.name}`, detail: d.taxYear ? `For your ${d.taxYear} tax return` : SERVICE_NAME[d.service], service: d.service, ref: d.id });
+  for (const d of (md.documents ?? []).filter((x) => x.status === "requested" && !secureForm(x))) todos.push({ id: `doc-${d.id}`, kind: "upload", title: `Upload: ${d.name}`, detail: d.taxYear ? `For your ${d.taxYear} tax return` : SERVICE_NAME[d.service], service: d.service, ref: d.id });
   // Invoices to pay
   for (const r of await all<InvoiceRow>(env.DB, "SELECT * FROM invoices WHERE client_id = ? AND status IN ('open', 'partial') AND payment_mode = 'upfront'", c.id)) {
     const owed = r.amount_cents - r.paid_cents;
@@ -159,7 +161,7 @@ export async function portalDocuments(env: AppEnv, a: Actor) {
   requireClient(a);
   const c = await me(env, a);
   const docs = json<MD>(c.module_data, {}).documents ?? [];
-  const shape = (d: ClientDocument & { hasFile?: boolean; fileName?: string }) => ({ id: d.id, name: d.name, service: d.service, serviceName: SERVICE_NAME[d.service] ?? "", category: d.category, taxYear: d.taxYear, requestedAt: d.requestedAt, uploadedAt: d.uploadedAt, uploadedBy: d.uploadedBy, status: d.status, hasFile: !!d.hasFile });
+  const shape = (d: ClientDocument & { hasFile?: boolean; fileName?: string }) => ({ id: d.id, name: d.name, fileName: d.fileName, secureForm: secureForm(d), service: d.service, serviceName: SERVICE_NAME[d.service] ?? "", category: d.category, taxYear: d.taxYear, requestedAt: d.requestedAt, uploadedAt: d.uploadedAt, uploadedBy: d.uploadedBy, status: d.status, hasFile: !!d.hasFile });
   return {
     requested: docs.filter((d) => d.status === "requested").map(shape),
     files: (docs as (ClientDocument & { hasFile?: boolean })[]).filter((d) => d.hasFile && d.status !== "requested" && d.status !== "rejected").map(shape),
@@ -190,6 +192,7 @@ export async function portalUpload(env: AppEnv, a: Actor, req: Request, q: { doc
   const t = now();
   let doc = q.doc ? docs.find((d) => d.id === q.doc) : undefined;
   if (q.doc && (!doc || doc.status !== "requested")) throw badRequest("That request was already completed — upload it as an extra document instead.");
+  if (doc && secureForm(doc)) throw badRequest("That information is collected through a secure form, not an upload. Upload this file as an extra document instead.");
   const service = (doc?.service ?? (["tax", "books", "biz", "expunge"].includes(q.service ?? "") ? q.service : "tax")) as ServiceKey;
   const fileId = doc?.id ?? randomId("d");
   const key = `clients/${c.id}/${fileId}.${ext}`;
