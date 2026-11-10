@@ -149,7 +149,7 @@ export function ReopenDialog({ w, m, open, onClose }: Base) {
     <Modal open={open} onClose={onClose} title={`Reopen ${periodLabel(m.period)}`} description="Use when a correction is needed after close. The reopen is recorded in the month's history." footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!reason.trim()} onClick={() => { books.reopenMonth(w.id, m.id, reason.trim(), to); toast(`${periodLabel(m.period)} reopened`); onClose(); }}>Reopen month</Button></>}>
       <div className="space-y-4">
         <TextArea id="ro-reason" label="Why is it being reopened?" required value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Client found a duplicate deposit after reports were delivered" />
-        <SelectField id="ro-to" label="Reopen to" value={to} onChange={(e) => setTo(e.target.value as MonthStage)} options={(["Client Entry in Progress", "MKB Reviewing", "Reconciliation in Progress", "MKB Final Review"] as MonthStage[]).map((s) => [s, s])} />
+        <SelectField id="ro-to" label="Reopen to" value={to} onChange={(e) => setTo(e.target.value as MonthStage)} options={(["Waiting on Client Items", "MKB Reviewing", "Reconciliation in Progress", "MKB Final Review"] as MonthStage[]).map((s) => [s, s])} />
         <p className="text-[12px] text-muted">Final approval is cleared and reports return to review.</p>
       </div>
     </Modal>
@@ -256,7 +256,7 @@ export function StageOverrideDialog({ w, m, open, onClose }: Base) {
       setNote("");
     }
   }, [open, m.stage]);
-  const stages: MonthStage[] = ["Client Entry in Progress", "Ready for MKB Review", "MKB Reviewing", "Reconciliation in Progress", "Client Follow-up Needed", "MKB Final Review", "Reports Ready", "Month Closed"];
+  const stages: MonthStage[] = ["Waiting on Client Items", "Ready for MKB Review", "MKB Reviewing", "Reconciliation in Progress", "Client Follow-up Needed", "MKB Final Review", "Reports Ready", "Month Closed"];
   return (
     <Modal open={open} onClose={onClose} title="Change stage" description="Owner override — the guided workflow is recommended." footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={stage === m.stage || !note.trim()} onClick={() => { books.setStage(w.id, m.id, stage, note.trim()); toast(`Stage → ${stage}`); onClose(); }}>Change stage</Button></>}>
       <div className="space-y-4">

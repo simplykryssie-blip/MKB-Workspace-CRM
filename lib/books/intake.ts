@@ -22,6 +22,9 @@ const LLC = is("entity", "Single-member LLC", "Multi-member LLC");
 
 export const BOOKS_INTAKE_VERSION = { version: "1.0", status: "Draft" };
 
+/** The email clients invite as their accountant in QuickBooks Online (MKB's QuickBooks Online Accountant login). */
+export const QBO_INVITE_EMAIL = "info@mkbfinancialgroup.com";
+
 const business: Section = {
   id: "business",
   title: "Your business",
@@ -96,8 +99,8 @@ const software: Section = {
     { id: "system", label: "What do you use to keep your books today?", type: "choice", options: ["QuickBooks Online", "QuickBooks Desktop", "Xero", "Wave", "FreshBooks", "Spreadsheets", "Paper / receipts only", "Nothing yet", "Other"] },
     { id: "systemOther", label: "Which software?", type: "text", show: is("system", "Other") },
     { id: "qboPlan", label: "Which QuickBooks Online plan?", type: "choice", options: ["Simple Start", "Essentials", "Plus", "Advanced", "Not sure"], show: is("system", "QuickBooks Online") },
-    { id: "qboInvite", label: "Can you invite MKB as your accountant user in QuickBooks?", type: YN, show: is("system", "QuickBooks Online"), help: "In QuickBooks: Settings (gear) → Manage users → Accountants → Invite, then enter our email.", warn: "We'll need access to your QuickBooks to start. We'll walk you through the invite.", warnWhen: "No" },
-    { id: "bankFeeds", label: "Are your bank and credit card accounts connected to QuickBooks (bank feeds)?", type: "choice", options: ["Yes, all of them", "Some of them", "No", "Not sure"], show: is("system", "QuickBooks Online") },
+    { id: "qboInvite", label: "Invite MKB as your accountant in QuickBooks", type: "choice", options: ["Done — I sent the invite", "I'll do it after this intake", "I need help with this"], show: is("system", "QuickBooks Online"), help: `This gives us our own login to your QuickBooks — you stay the owner, never share your password, and can remove our access anytime.\n1. In QuickBooks Online, click the gear icon (Settings) → Manage users.\n2. Open the Accountants tab and click Invite.\n3. Enter ${QBO_INVITE_EMAIL} and click Send.`, warn: "No problem — we'll walk you through it on a quick call after you submit.", warnWhen: "I need help with this" },
+    { id: "bankFeeds", label: "Are your bank and credit card accounts connected to QuickBooks (bank feeds)?", type: "choice", options: ["Yes, all of them", "Some of them", "No", "Not sure"], show: is("system", "QuickBooks Online"), help: "Bank feeds download your transactions automatically, so you don't type them in. In QuickBooks: Transactions (or Banking) → Bank transactions → Link account. We'll help connect any that are missing." },
     { id: "desktopMove", label: "Would you like us to move you to QuickBooks Online?", type: "choice", options: ["Yes", "No — stay on Desktop", "Let's discuss"], show: is("system", "QuickBooks Desktop") },
     { id: "setupQbo", label: "Would you like MKB to set up QuickBooks Online for you?", type: "choice", options: ["Yes", "No", "Let's discuss"], show: is("system", "Spreadsheets", "Paper / receipts only", "Nothing yet", "Wave", "FreshBooks", "Other"), help: "You own the subscription and the data; it's billed by Intuit to you." },
     { id: "apps", label: "Which other apps does the business use? (choose all that apply)", type: "multi", options: ["Square", "Stripe", "PayPal", "Shopify", "Clover", "Toast", "Amazon", "Etsy", "Gusto", "ADP", "Paychex", "QuickBooks Payroll", "Bill.com", "Expensify", "Housecall Pro / Jobber", "None", "Other"] },

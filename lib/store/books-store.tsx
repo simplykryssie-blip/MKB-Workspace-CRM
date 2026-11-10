@@ -73,8 +73,8 @@ export const balanceDue = (w: BooksWorkspace, c?: Client) => workspaceInvoices(w
 export function nextAction(w: BooksWorkspace, m: BooksMonth): { text: string; owner: "Client" | "MKB" | "Done" } {
   const tasks = openTasks(w, m.period);
   switch (m.stage) {
-    case "Client Entry in Progress":
-      return { text: tasks.length ? `Finish entry & submit (${tasks.length} task${tasks.length > 1 ? "s" : ""} open)` : "Submit the month for review", owner: "Client" };
+    case "Waiting on Client Items":
+      return { text: tasks.length ? `Client items: ${tasks.length} task${tasks.length > 1 ? "s" : ""} open (feeds, receipts, notes)` : "Client confirms the month is ready", owner: "Client" };
     case "Ready for MKB Review":
       return { text: `Start review (${staffById(m.assignedTo).name})`, owner: "MKB" };
     case "MKB Reviewing": {
@@ -102,9 +102,11 @@ function standardTasks(period: string): ClientTask[] {
   const label = periodLabel(period);
   const at = nowIso();
   return [
-    { id: uid("t"), period, type: "entry", title: `Enter all ${label} transactions in QuickBooks`, detail: "Add or match every bank and card transaction for the month.", status: "open", createdAt: at, docIds: [] },
-    { id: uid("t"), period, type: "categorize", title: `Categorize outstanding ${label} transactions`, detail: "Clear the 'For review' list and Uncategorized accounts.", status: "open", createdAt: at, docIds: [] },
-    { id: uid("t"), period, type: "submit", title: `Submit ${label} for MKB review`, detail: "Confirm your entries are complete.", status: "open", createdAt: at, docIds: [] },
+    // What the client owes MKB each month — MKB does the categorizing and bookkeeping itself.
+    { id: uid("t"), period, type: "entry", title: `Keep your ${label} bank and card feeds connected in QuickBooks`, detail: "Make sure every account in your plan is connected so transactions download. Tell us if a bank stops syncing.", status: "open", createdAt: at, docIds: [], standard: true },
+    { id: uid("t"), period, type: "receipts", title: `Upload your ${label} receipts`, detail: "Receipts and bills for the month's business purchases.", status: "open", createdAt: at, docIds: [], standard: true },
+    { id: uid("t"), period, type: "confirm", title: `Tell us about anything that didn't go through the bank in ${label}`, detail: "Cash sales or expenses, new loans, owner money in or out, large or unusual purchases — or say there was nothing.", status: "open", createdAt: at, docIds: [], standard: true },
+    { id: uid("t"), period, type: "submit", title: `Let MKB know ${label} is ready`, detail: "Confirm your feeds, receipts and notes are in so we can start your review.", status: "open", createdAt: at, docIds: [], standard: true },
   ];
 }
 
@@ -134,7 +136,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     const np = nextPeriod(m.period);
     const opening = stage === "Month Closed" && !w.months.some((x) => x.period === np);
     const newMonth: BooksMonth | null = opening
-      ? { id: `${wsId}-${np}`, period: np, stage: "Client Entry in Progress", assignedTo: w.bookkeeperId, reopenCount: 0, recons: w.accounts.map((a) => ({ accountId: a.id, status: "not_started" as const })), reviewItems: [], reports: w.service.reports.map((t) => ({ id: uid("rp"), type: t, period: np, review: "not_started" as const, delivery: "not_delivered" as const })), reviewNotes: [], history: [{ stage: "Client Entry in Progress", at: nowIso(), by: "system" }] }
+      ? { id: `${wsId}-${np}`, period: np, stage: "Waiting on Client Items", assignedTo: w.bookkeeperId, reopenCount: 0, recons: w.accounts.map((a) => ({ accountId: a.id, status: "not_started" as const })), reviewItems: [], reports: w.service.reports.map((t) => ({ id: uid("rp"), type: t, period: np, review: "not_started" as const, delivery: "not_delivered" as const })), reviewNotes: [], history: [{ stage: "Waiting on Client Items", at: nowIso(), by: "system" }] }
       : null;
     const newTasks = opening ? standardTasks(np) : [];
     const entryId = uid("x");
@@ -160,7 +162,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       const at = nowIso();
       const accounts = input.accounts.map((x) => ({ ...x, id: uid("acct"), mask: x.mask.replace(/\D/g, "").slice(-4) }));
       const p = input.firstPeriod;
-      const month: BooksMonth = { id: `${id}-${p}`, period: p, stage: "Client Entry in Progress", assignedTo: input.bookkeeperId, reopenCount: 0, recons: accounts.map((x) => ({ accountId: x.id, status: "not_started" as const })), reviewItems: [], reports: input.reports.map((t) => ({ id: uid("rp"), type: t, period: p, review: "not_started" as const, delivery: "not_delivered" as const })), reviewNotes: [], history: [{ stage: "Client Entry in Progress", at, by: "system" }] };
+      const month: BooksMonth = { id: `${id}-${p}`, period: p, stage: "Waiting on Client Items", assignedTo: input.bookkeeperId, reopenCount: 0, recons: accounts.map((x) => ({ accountId: x.id, status: "not_started" as const })), reviewItems: [], reports: input.reports.map((t) => ({ id: uid("rp"), type: t, period: p, review: "not_started" as const, delivery: "not_delivered" as const })), reviewNotes: [], history: [{ stage: "Waiting on Client Items", at, by: "system" }] };
       const w: BooksWorkspace = {
         id, clientId: input.clientId, enrollmentId: input.enrollmentId, businessName: input.businessName.trim(), entityType: input.entityType, bookkeeperId: input.bookkeeperId, reviewerId: input.reviewerId,
         service: { plan: input.plan, monthlyFee: input.monthlyFee, reports: input.reports, includes: input.includes }, extras: [],
@@ -185,7 +187,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     /** Client (or staff on their behalf) submits the month. */
     submitMonth(wsId: string, monthId: string, by: "client" | "staff") {
       const m = M(wsId, monthId);
-      up(wsId, (w) => ({ ...w, tasks: w.tasks.map((t) => (t.period === m.period && ["entry", "categorize", "submit"].includes(t.type) && t.status === "open" ? { ...t, status: "done", completedAt: nowIso(), completedBy: by } : t)) }));
+      up(wsId, (w) => ({ ...w, tasks: w.tasks.map((t) => (t.period === m.period && (t.standard || ["entry", "categorize", "submit"].includes(t.type)) && t.status === "open" ? { ...t, status: "done", completedAt: nowIso(), completedBy: by } : t)) }));
       moveTo(wsId, monthId, "Ready for MKB Review", by === "staff" ? "submitted by MKB on the client's behalf" : "client confirmed entries are complete", by === "client" ? "client" : meId(), { submittedAt: nowIso() });
     },
     remindClient(wsId: string, monthId: string): number {
@@ -215,7 +217,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       if (opts.response && opts.by === "client") clients().sendMessage(w.clientId, `Re: ${t.title} — ${opts.response}`, "books", { from: "client", workspaceId: wsId });
       if (t.type === "submit") {
         const m = w.months.find((mm) => mm.period === t.period);
-        if (m && m.stage === "Client Entry in Progress") a.submitMonth(wsId, m.id, opts.by);
+        if (m && m.stage === "Waiting on Client Items") a.submitMonth(wsId, m.id, opts.by);
       }
     },
     reopenTask(wsId: string, taskId: string) {

@@ -14,7 +14,7 @@ import type { ActivityItem, Note } from "@/lib/types";
 /* ------------------------------------------------------------------ */
 
 export const MONTH_STAGES = [
-  "Client Entry in Progress",
+  "Waiting on Client Items",
   "Ready for MKB Review",
   "MKB Reviewing",
   "Reconciliation in Progress",
@@ -27,7 +27,7 @@ export type MonthStage = (typeof MONTH_STAGES)[number];
 
 export type Responsible = "Client" | "MKB" | "Done";
 export const STAGE_META: Record<MonthStage, { owner: Responsible; tone: "neutral" | "info" | "warning" | "success"; hint: string }> = {
-  "Client Entry in Progress": { owner: "Client", tone: "neutral", hint: "Client enters and categorizes transactions in QuickBooks" },
+  "Waiting on Client Items": { owner: "Client", tone: "neutral", hint: "Waiting on the client's items: bank feeds connected, receipts, notes on cash or unusual activity" },
   "Ready for MKB Review": { owner: "MKB", tone: "info", hint: "Client submitted the month — waiting for MKB to start review" },
   "MKB Reviewing": { owner: "MKB", tone: "info", hint: "Reviewing categorization, uncategorized and unusual activity, missing information" },
   "Reconciliation in Progress": { owner: "MKB", tone: "info", hint: "Reconciling bank and credit card accounts to statements" },
@@ -156,6 +156,8 @@ export type ClientTask = {
   title: string;
   detail?: string;
   status: "open" | "done";
+  /** One of the four tasks every month starts with (closed together when the month is submitted). */
+  standard?: boolean;
   createdAt: string;
   completedAt?: string;
   completedBy?: "client" | "staff";

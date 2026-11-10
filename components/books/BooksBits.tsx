@@ -4,14 +4,36 @@ import { Building2, Check, CheckCircle2, CircleDashed, Link2, Link2Off, MailQues
 import { Badge } from "@/components/ui/Badge";
 import { MONTH_STAGES, QBO_STATUS, STAGE_META, periodLabel, type BooksMonth, type MonthStage, type QboStatus, type ReconStatus, type ReportDelivery, type ReportReview } from "@/lib/books/config";
 
+/**
+ * Color code used across Bookkeeping: amber = the client's turn, blue = MKB staff's turn,
+ * green = done. Always with an icon and words too, never color alone.
+ */
+export const TURN = {
+  Client: { tone: "warning" as const, icon: UserRound, label: "Client's turn", bar: "var(--warning)" },
+  MKB: { tone: "info" as const, icon: Building2, label: "MKB's turn", bar: "var(--accent)" },
+  Done: { tone: "success" as const, icon: CheckCircle2, label: "Done", bar: "var(--success)" },
+};
+
+/** A month's stage, colored by whose turn it is. */
 export function StageBadge({ stage }: { stage: MonthStage }) {
-  return <Badge tone={STAGE_META[stage].tone} icon={stage === "Month Closed" ? CheckCircle2 : undefined}>{stage}</Badge>;
+  const t = TURN[STAGE_META[stage].owner];
+  return <Badge tone={t.tone} icon={t.icon}>{stage}</Badge>;
+}
+
+/** The key for the color code. */
+export function TurnLegend({ className = "" }: { className?: string }) {
+  return (
+    <div className={`flex flex-wrap items-center gap-1.5 text-[12px] text-muted ${className}`} aria-label="Color key">
+      <span>Color key:</span>
+      {(["Client", "MKB", "Done"] as const).map((k) => <Badge key={k} tone={TURN[k].tone} icon={TURN[k].icon}>{TURN[k].label}</Badge>)}
+    </div>
+  );
 }
 
 /** Who owns the next step — always text + icon, never color alone. */
 export function OwnerBadge({ owner }: { owner: "Client" | "MKB" | "Done" }) {
-  if (owner === "Done") return <Badge tone="success" icon={Check}>Done</Badge>;
-  return owner === "Client" ? <Badge tone="warning" icon={UserRound}>Client</Badge> : <Badge tone="info" icon={Building2}>MKB</Badge>;
+  const t = TURN[owner];
+  return <Badge tone={t.tone} icon={owner === "Done" ? Check : t.icon}>{owner}</Badge>;
 }
 
 export function QboBadge({ status }: { status: QboStatus }) {

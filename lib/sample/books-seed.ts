@@ -66,7 +66,7 @@ export const BOOKS_SEEDS: BooksSeed[] = [
       { period: "2026-08", stage: "Month Closed" },
       { period: "2026-09", stage: "Month Closed" },
       { period: "2026-10", stage: "Reconciliation in Progress" },
-      { period: "2026-11", stage: "Client Entry in Progress" },
+      { period: "2026-11", stage: "Waiting on Client Items" },
     ],
     items: [
       { period: "2026-10", kind: "uncategorized", txnRef: "Oct 14 · Business card ••1007 · SAMPLE HARDWARE SUPPLY", amount: 412.6, description: "Left in Uncategorized Expense — likely materials / supplies.", status: "resolved", resolution: "Client confirmed job materials; recategorized to Supplies." },
@@ -99,8 +99,8 @@ export const BOOKS_SEEDS: BooksSeed[] = [
     months: [
       { period: "2026-08", stage: "Month Closed" },
       { period: "2026-09", stage: "Client Follow-up Needed", followupFrom: "Reconciliation in Progress" },
-      { period: "2026-10", stage: "Client Entry in Progress" },
-      { period: "2026-11", stage: "Client Entry in Progress" },
+      { period: "2026-10", stage: "Waiting on Client Items" },
+      { period: "2026-11", stage: "Waiting on Client Items" },
     ],
     items: [
       { period: "2026-09", kind: "discrepancy", txnRef: "Corporate card ••6650 · Sep statement", amount: 236.18, description: "QuickBooks register is short of the September statement — likely a missing charge.", status: "sent_to_client" },
@@ -138,7 +138,7 @@ export const BOOKS_SEEDS: BooksSeed[] = [
       { period: "2026-08", stage: "Month Closed" },
       { period: "2026-09", stage: "Month Closed" },
       { period: "2026-10", stage: "MKB Final Review" },
-      { period: "2026-11", stage: "Client Entry in Progress" },
+      { period: "2026-11", stage: "Waiting on Client Items" },
     ],
     items: [{ period: "2026-10", kind: "miscategorized", txnRef: "Oct 9 · Supplies card ••3301 · SAMPLE OVEN REPAIR", amount: 890, description: "Booked to Supplies; repair of equipment should go to Repairs & Maintenance.", status: "resolved", resolution: "Client approved the correction; reclassified." }],
     billing: { "2026-08": "paid", "2026-09": "paid", "2026-10": "paid", "2026-11": "open" },
@@ -163,7 +163,7 @@ export const BOOKS_SEEDS: BooksSeed[] = [
     months: [
       { period: "2026-09", stage: "Month Closed" },
       { period: "2026-10", stage: "Ready for MKB Review" },
-      { period: "2026-11", stage: "Client Entry in Progress" },
+      { period: "2026-11", stage: "Waiting on Client Items" },
     ],
     billing: { "2026-09": "paid", "2026-10": "paid", "2026-11": "open" },
     messages: [{ from: "client", body: "October is all entered — submitted for review!", daysAgo: 1 }],
@@ -185,7 +185,7 @@ export const BOOKS_SEEDS: BooksSeed[] = [
     months: [
       { period: "2026-09", stage: "Reports Ready" },
       { period: "2026-10", stage: "MKB Reviewing" },
-      { period: "2026-11", stage: "Client Entry in Progress" },
+      { period: "2026-11", stage: "Waiting on Client Items" },
     ],
     items: [
       { period: "2026-10", kind: "uncategorized", txnRef: "Oct 3 · Rental operating ••6602 · SAMPLE PLUMBING LLC", amount: 345, description: "Uncategorized — which property was this repair for?", status: "open" },
@@ -202,7 +202,7 @@ export const BOOKS_SEEDS: BooksSeed[] = [
 
 export const workspaceIdFor = (enrollmentId: string) => `BK-${enrollmentId}`;
 export const acctId = (wsId: string, i: number) => `${wsId}-a${i}`;
-const ORDER: MonthStage[] = ["Client Entry in Progress", "Ready for MKB Review", "MKB Reviewing", "Reconciliation in Progress", "Client Follow-up Needed", "MKB Final Review", "Reports Ready", "Month Closed"];
+const ORDER: MonthStage[] = ["Waiting on Client Items", "Ready for MKB Review", "MKB Reviewing", "Reconciliation in Progress", "Client Follow-up Needed", "MKB Final Review", "Reports Ready", "Month Closed"];
 export const stageIndex = (s: MonthStage) => ORDER.indexOf(s);
 const monthName = (p: string) => new Date(`${p}-15T12:00:00`).toLocaleDateString("en-US", { month: "long", year: "numeric" });
 const endOf = (p: string) => {

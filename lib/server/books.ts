@@ -65,7 +65,7 @@ function clean(w: BooksWorkspace): BooksWorkspace {
     service: { plan: str(w.service?.plan, 60), monthlyFee: Math.max(0, Math.min(1_000_000, Number(w.service?.monthlyFee) || 0)), reports: (w.service?.reports ?? []).filter((r) => (REPORT_TYPES as readonly string[]).includes(r)), includes: (w.service?.includes ?? []).map((x) => str(x, 200)).slice(0, 30) },
     qbo: { status: (["connected", "needs_reauth", "invite_pending", "not_connected"] as const).includes(q.status) ? q.status : "not_connected", companyName: str(q.companyName, 200), access: q.access === "client_authorized" ? "client_authorized" : "qboa", realmMasked: q.realmMasked ? `•••• ${last4(q.realmMasked)}` : undefined, connectedAt: q.connectedAt ? str(q.connectedAt, 40) : undefined, lastSyncAt: q.lastSyncAt ? str(q.lastSyncAt, 40) : undefined, authorizedBy: q.authorizedBy ? str(q.authorizedBy, 120) : undefined },
     accounts: (w.accounts ?? []).slice(0, 40).map((x) => ({ id: str(x.id, 60), name: str(x.name, 120), kind: x.kind === "credit_card" ? "credit_card" : "bank", mask: last4(x.mask), institution: str(x.institution, 120) })),
-    months: (w.months ?? []).map((m) => ({ ...m, stage: (MONTH_STAGES as readonly string[]).includes(m.stage) ? m.stage : "Client Entry in Progress" })),
+    months: (w.months ?? []).map((m) => ({ ...m, stage: (MONTH_STAGES as readonly string[]).includes(m.stage) ? m.stage : "Waiting on Client Items" })),
   };
 }
 const assignmentStmts = (db: Db, w: BooksWorkspace) => [

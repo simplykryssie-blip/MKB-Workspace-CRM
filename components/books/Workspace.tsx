@@ -54,7 +54,7 @@ import { QBO_ACCESS, QBO_STATUS, REPORT_TYPES, REVIEW_KIND, STAGE_META, TASK_TYP
 import { fileSize, fmtDate, fmtDateTime, relTime, usd } from "@/lib/format";
 import { formatPhone } from "@/lib/validation";
 import type { Client } from "@/lib/types";
-import { DELIVERY_META, MonthStepper, OwnerBadge, QboBadge, RECON_META, REVIEW_META, StageBadge, money } from "./BooksBits";
+import { DELIVERY_META, MonthStepper, OwnerBadge, QboBadge, RECON_META, REVIEW_META, StageBadge, TurnLegend, money } from "./BooksBits";
 import { AddReviewItemDialog, CompleteTaskDialog, DiscrepancyDialog, ExtraChargeDialog, FinalApprovalDialog, ReopenDialog, RequestDocDialog, ResolveItemDialog, StageOverrideDialog, StatementDialog } from "./BooksDialogs";
 
 const TABS = [
@@ -213,7 +213,7 @@ function OverviewTab({ w, c, m, go }: { w: BooksWorkspace; c: Client; m: BooksMo
       <Card>
         <CardHeader icon={ClipboardList} title={`Current month · ${periodLabel(m.period)}`} subtitle={`Close target ${fmtDate(closeTarget(m.period), { month: "short", day: "numeric" })}`} action={<Button size="sm" variant="ghost" onClick={() => go("close")}>Monthly close</Button>} />
         <div className="space-y-3 px-5 pb-5 sm:px-6">
-          <div className="flex flex-wrap items-center gap-2"><StageBadge stage={m.stage} /><OwnerBadge owner={next.owner} /></div>
+          <div className="flex flex-wrap items-center gap-2"><StageBadge stage={m.stage} /><OwnerBadge owner={next.owner} /><TurnLegend className="ml-auto" /></div>
           <p className="text-[14px] text-ink">{next.text}</p>
           <MonthStepper m={m} />
           <dl className="grid grid-cols-3 gap-3 border-t border-line pt-3 text-center">
@@ -273,8 +273,8 @@ function CloseTab({ w, m, go, open }: { w: BooksWorkspace; m: BooksMonth; go: (t
   let primary: Act = null;
   let secondary: Act = null;
   switch (m.stage) {
-    case "Client Entry in Progress":
-      text = `Waiting on the client to finish entry in QuickBooks and submit ${label}. ${tasks.length} task(s) open.`;
+    case "Waiting on Client Items":
+      text = `Waiting on the client's items for ${label} (bank feeds, receipts, notes on cash or unusual activity). ${tasks.length} task(s) open.`;
       primary = { label: "Remind client", icon: Send, run: () => { const n = books.remindClient(w.id, m.id); toast(`Reminder sent (${n} open task${n === 1 ? "" : "s"})`); } };
       secondary = { label: "Submit on client's behalf", run: () => { if (confirm(`Mark ${label} as submitted on the client's behalf?`)) { books.submitMonth(w.id, m.id, "staff"); toast("Ready for MKB Review"); } } };
       break;

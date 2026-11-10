@@ -16,7 +16,7 @@ const addDays = (iso: string, n: number, h = 10) => {
   return t.toISOString();
 };
 const clamp = (iso: string) => (iso > SAMPLE_NOW.toISOString() ? addDays(SAMPLE_NOW.toISOString(), -1, 9) : iso);
-const ORDER = ["Client Entry in Progress", "Ready for MKB Review", "MKB Reviewing", "Reconciliation in Progress", "Client Follow-up Needed", "MKB Final Review", "Reports Ready", "Month Closed"] as MonthStage[];
+const ORDER = ["Waiting on Client Items", "Ready for MKB Review", "MKB Reviewing", "Reconciliation in Progress", "Client Follow-up Needed", "MKB Final Review", "Reports Ready", "Month Closed"] as MonthStage[];
 
 function buildMonth(seed: BooksSeed, wsId: string, mo: BooksSeed["months"][number], mi: number): { month: BooksMonth; tasks: ClientTask[] } {
   const id = `${wsId}-${mo.period}`;
@@ -70,12 +70,12 @@ function buildMonth(seed: BooksSeed, wsId: string, mo: BooksSeed["months"][numbe
 
   // Client tasks: standard entry tasks + any review items sent to the client.
   const label = periodLabel(mo.period);
-  const entryDone = idx >= 1 && mo.stage !== "Client Entry in Progress";
+  const entryDone = idx >= 1 && mo.stage !== "Waiting on Client Items";
   const created = addDays(end, -29, 8);
   const tasks: ClientTask[] = [
-    { id: `${id}-t-entry`, period: mo.period, type: "entry", title: `Enter all ${label} transactions in QuickBooks`, detail: "Add or match every bank and card transaction for the month.", status: entryDone ? "done" : "open", createdAt: created, completedAt: entryDone ? history[1]?.at : undefined, completedBy: entryDone ? "client" : undefined, docIds: [] },
-    { id: `${id}-t-cat`, period: mo.period, type: "categorize", title: `Categorize outstanding ${label} transactions`, detail: "Clear the 'For review' list and Uncategorized accounts.", status: entryDone ? "done" : "open", createdAt: created, completedAt: entryDone ? history[1]?.at : undefined, completedBy: entryDone ? "client" : undefined, docIds: [] },
-    { id: `${id}-t-submit`, period: mo.period, type: "submit", title: `Submit ${label} for MKB review`, detail: "Confirm your entries are complete.", status: entryDone ? "done" : "open", createdAt: created, completedAt: entryDone ? history[1]?.at : undefined, completedBy: entryDone ? "client" : undefined, docIds: [] },
+    { id: `${id}-t-entry`, period: mo.period, type: "entry", title: `Keep your ${label} bank and card feeds connected in QuickBooks`, detail: "Make sure every account in your plan is connected so transactions download. Tell us if a bank stops syncing.", standard: true, status: entryDone ? "done" : "open", createdAt: created, completedAt: entryDone ? history[1]?.at : undefined, completedBy: entryDone ? "client" : undefined, docIds: [] },
+    { id: `${id}-t-cat`, period: mo.period, type: "receipts", title: `Upload your ${label} receipts`, detail: "Receipts and bills for the month's business purchases.", standard: true, status: entryDone ? "done" : "open", createdAt: created, completedAt: entryDone ? history[1]?.at : undefined, completedBy: entryDone ? "client" : undefined, docIds: [] },
+    { id: `${id}-t-submit`, period: mo.period, type: "submit", title: `Let MKB know ${label} is ready`, detail: "Confirm your feeds, receipts and notes are in so we can start your review.", standard: true, status: entryDone ? "done" : "open", createdAt: created, completedAt: entryDone ? history[1]?.at : undefined, completedBy: entryDone ? "client" : undefined, docIds: [] },
   ];
   items.forEach((it) => {
     if (it.status === "open" || (it.status === "resolved" && !it.clientResponse && !it.resolution?.startsWith("Client"))) return;

@@ -19,8 +19,8 @@ import { CompleteTaskDialog } from "./BooksDialogs";
 /** Plain-language month status for the client — no internal detail. */
 function clientStatus(m: BooksMonth): { text: string; tone: "warning" | "info" | "success" } {
   switch (m.stage) {
-    case "Client Entry in Progress":
-      return { text: "Your turn — enter & submit", tone: "warning" };
+    case "Waiting on Client Items":
+      return { text: "Your turn — send your items", tone: "warning" };
     case "Client Follow-up Needed":
       return { text: "MKB has questions for you", tone: "warning" };
     case "Reports Ready":
@@ -53,7 +53,7 @@ export function ClientTaskCenter({ id }: { id: string }) {
   const reports = w.months.flatMap((m) => m.reports.filter((r) => r.delivery !== "not_delivered")).sort((a, b) => b.period.localeCompare(a.period));
   const msgs = workspaceMessages(w, c);
   const task = w.tasks.find((t) => t.id === taskId) ?? null;
-  const entryMonths = w.months.filter((m) => m.stage === "Client Entry in Progress");
+  const entryMonths = w.months.filter((m) => m.stage === "Waiting on Client Items");
 
   return (
     <>
@@ -109,7 +109,7 @@ export function ClientTaskCenter({ id }: { id: string }) {
                 </li>
               ))}
             </ul>
-            {entryMonths.length > 0 && <p className="border-t border-line px-5 py-3 text-[12.5px] text-muted sm:px-6">Submitting a month tells MKB your entries are complete. You can keep using QuickBooks as usual.</p>}
+            {entryMonths.length > 0 && <p className="border-t border-line px-5 py-3 text-[12.5px] text-muted sm:px-6">Submitting a month tells MKB your feeds, receipts and notes are in. We do the categorizing and bookkeeping — you can keep using QuickBooks as usual.</p>}
           </Card>
           {done.length > 0 && (
             <Card>

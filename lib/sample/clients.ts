@@ -54,7 +54,7 @@ export const STAGES: Record<ServiceKey, string[]> = {
   // Tax engagements follow the return workflow ("Rejected" is a status, not a stage).
   tax: ["Intake", "Awaiting Documents", "Ready for Review", "In Preparation", "Awaiting Client Approval", "Ready to E-file", "Submitted", "Accepted", "Completed"],
   // Bookkeeping engagements mirror the current month's close stage (see lib/books/config.ts).
-  books: ["Client Entry in Progress", "Ready for MKB Review", "MKB Reviewing", "Reconciliation in Progress", "Client Follow-up Needed", "MKB Final Review", "Reports Ready", "Month Closed"],
+  books: ["Waiting on Client Items", "Ready for MKB Review", "MKB Reviewing", "Reconciliation in Progress", "Client Follow-up Needed", "MKB Final Review", "Reports Ready", "Month Closed"],
   // Business services engagements mirror their service request status (see lib/biz/config.ts).
   biz: [...BIZ_FLOW],
   // Expungement engagements mirror the client's expungement matter (see lib/expunge/derive.ts).

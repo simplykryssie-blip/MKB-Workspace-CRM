@@ -16,7 +16,8 @@ import { balanceDue, currentMonth, nextAction, openTasks, useBooks } from "@/lib
 import { MONTH_STAGES, REVIEW_KIND, closeTarget, periodEnd, periodLabel, type BooksMonth, type BooksWorkspace } from "@/lib/books/config";
 import { fmtDate, usd } from "@/lib/format";
 import type { Client } from "@/lib/types";
-import { DELIVERY_META, OwnerBadge, QboBadge, RECON_META, REVIEW_META, StageBadge, money } from "./BooksBits";
+import { STAGE_META } from "@/lib/books/config";
+import { DELIVERY_META, OwnerBadge, QboBadge, RECON_META, REVIEW_META, StageBadge, TURN, TurnLegend, money } from "./BooksBits";
 import { StartWorkspace } from "./StartWorkspace";
 import { IntakesCard } from "./IntakesCard";
 import { useTeam } from "@/lib/store/team-store";
@@ -109,7 +110,7 @@ function Overview({ byId, go }: { byId: Map<string, Client>; go: (t: Tab) => voi
   const kpi = {
     clients: new Set(workspaces.map((w) => w.clientId)).size,
     businesses: workspaces.length,
-    awaitingClient: open.filter(({ m }) => m.stage === "Client Entry in Progress" && ended(m)).length,
+    awaitingClient: open.filter(({ m }) => m.stage === "Waiting on Client Items" && ended(m)).length,
     awaitingReview: open.filter(({ m }) => m.stage === "Ready for MKB Review").length,
     recons: open.reduce((s, { m }) => s + m.recons.filter((r) => r.status === "in_progress" || r.status === "discrepancy").length, 0),
     questions: workspaces.reduce((s, w) => s + w.tasks.filter((t) => t.status === "open" && (t.reviewItemId || t.requestDocId)).length, 0),
@@ -127,7 +128,7 @@ function Overview({ byId, go }: { byId: Map<string, Client>; go: (t: Tab) => voi
   ];
 
   const queue = open
-    .filter(({ m }) => includeCurrent || ended(m) || m.stage !== "Client Entry in Progress")
+    .filter(({ m }) => includeCurrent || ended(m) || m.stage !== "Waiting on Client Items")
     .map((x) => ({ ...x, next: nextAction(x.w, x.m) }))
     .filter((x) => owner === "all" || x.next.owner === owner)
     .filter((x) => staff === "all" || x.m.assignedTo === staff)
@@ -150,6 +151,7 @@ function Overview({ byId, go }: { byId: Map<string, Client>; go: (t: Tab) => voi
 
       <Card>
         <CardHeader icon={ListChecks} title="Work queue" subtitle="Every open month, its next action, and who is responsible" />
+        <TurnLegend className="px-5 pb-3 sm:px-6" />
         <div className="flex flex-wrap items-center gap-2 px-5 pb-3 sm:px-6">
           <div role="radiogroup" aria-label="Responsible" className="flex rounded-xl border border-line bg-surface-2 p-0.5">
             {(["all", "MKB", "Client"] as const).map((o) => (
@@ -220,7 +222,7 @@ function Overview({ byId, go }: { byId: Map<string, Client>; go: (t: Tab) => voi
             return (
               <li key={s} className="grid grid-cols-[150px_minmax(0,1fr)_28px] items-center gap-3 sm:grid-cols-[210px_minmax(0,1fr)_28px]">
                 <span className="truncate text-[13px] text-ink-2">{s}</span>
-                <span className="h-3 overflow-hidden rounded-full bg-surface-2 ring-1 ring-line"><span className="block h-full rounded-full" style={{ width: `${(n / max) * 100}%`, minWidth: n ? 6 : 0, background: s === "Client Follow-up Needed" ? "var(--warning)" : "var(--svc-books)" }} /></span>
+                <span className="h-3 overflow-hidden rounded-full bg-surface-2 ring-1 ring-line"><span className="block h-full rounded-full" style={{ width: `${(n / max) * 100}%`, minWidth: n ? 6 : 0, background: TURN[STAGE_META[s].owner].bar }} /></span>
                 <span className="text-right text-[13px] font-semibold text-ink tabular-nums">{n}</span>
               </li>
             );

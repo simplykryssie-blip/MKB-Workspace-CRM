@@ -195,7 +195,7 @@ function Field({ q, idp, value, onChange, err, prefilled, row, secure, reveal, s
   const label = (
     <div className="mb-2">
       <label htmlFor={id} id={`${id}-l`} className="block text-[15px] font-semibold text-ink">{q.label}{q.optional && <span className="ml-1.5 text-[12px] font-normal text-muted">(optional)</span>}</label>
-      {q.help && <p className="mt-0.5 text-[12.5px] text-muted">{q.help}</p>}
+      {q.help && <p className="mt-0.5 whitespace-pre-line text-[12.5px] text-muted">{q.help}</p>}
       {prefilled && <p className="mt-0.5 text-[12px] font-medium text-success-ink">From your MKB profile — change it if it&rsquo;s out of date.</p>}
     </div>
   );
