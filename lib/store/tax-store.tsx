@@ -252,10 +252,10 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     /* ---------------- Organizer ---------------- */
     sendOrganizer(id: string) {
       const r = R(id);
+      // Documents are requested only once the client submits the interview (its answers decide what's
+      // needed, photo ID and prior-year return included) — nothing is asked for before then.
       up(id, (x) => log({ ...x, organizer: { ...x.organizer, status: "sent", sentAt: nowIso() } }, "message", "Organizer sent to client portal"));
       clients().logActivity(r.clientId, "message", `${ORGANIZERS[r.kind].title} sent for ${label(r)}`);
-      a.requestAllMissing(id);
-      if (r.status === "Intake") moveTo(id, "Awaiting Documents", "organizer and document requests sent");
     },
     saveOrganizer(id: string, answers: Record<string, string>, submit: boolean) {
       up(id, (x) =>
