@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/Card";
 import { useToast } from "@/components/ui/Toast";
 import { useClientGate } from "@/components/team/AccessGuard";
 import { useClients } from "@/lib/store/clients-store";
-import { useTax, waitForReturnSave } from "@/lib/store/tax-store";
+import { itemStatus, useTax, waitForReturnSave } from "@/lib/store/tax-store";
 import { useTeam } from "@/lib/store/team-store";
 import { FORM_LABEL, type EngagementAcceptance, type TaxReturn } from "@/lib/tax/config";
 import { fillLetter, taxLetterFor } from "@/lib/engagement/letters";
@@ -463,21 +463,41 @@ function Answered({ qs, get }: { qs: Q[]; get: (q: Q) => string | undefined }) {
 function Submitted({ r, by }: { r: TaxReturn; by: "client" | "staff" }) {
   const tax = useTax();
   const toast = useToast();
-  const needed = r.checklist.filter((i) => i.required && !i.docId && !i.waivedReason && !i.archived);
+  const client = useClients().clients.find((c) => c.id === r.clientId);
+  const items = r.checklist.filter((i) => i.required && !i.waivedReason && !i.archived);
+  const state = (i: (typeof items)[number]) => itemStatus(i, client);
+  const open = items.filter((i) => ["needed", "requested", "rejected"].includes(state(i)));
+  const LABEL: Record<string, { text: string; tone: "warning" | "success" | "info" | "danger" | "neutral" }> = { needed: { text: "Not requested yet", tone: "neutral" }, requested: { text: "Waiting on client", tone: "warning" }, rejected: { text: "Needs a new copy", tone: "danger" }, received: { text: "Received", tone: "success" }, reviewed: { text: "Reviewed", tone: "success" } };
   return (
     <div className="space-y-5">
       <Card className="p-6 text-center">
         <CheckCircle2 size={36} className="mx-auto text-success" />
         <h2 className="mt-2 text-[20px] font-bold text-ink">Interview submitted</h2>
-        <p className="mt-1 text-[13.5px] text-muted">Submitted {r.organizer.submittedAt ? fmtDate(r.organizer.submittedAt) : ""}{r.organizer.interview?.consentName ? ` · confirmed by ${r.organizer.interview.consentName}` : ""}. Your preparer reviews everything together and will send any questions in one request.</p>
+        <p className="mt-1 text-[13.5px] text-muted">Submitted {r.organizer.submittedAt ? fmtDate(r.organizer.submittedAt) : ""}{r.organizer.interview?.consentName ? ` · confirmed by ${r.organizer.interview.consentName}` : ""}.{by === "client" ? " Your preparer reviews everything together and will send any questions in one request." : ""}</p>
+        {by === "staff" && (
+          <div className="mt-4 flex flex-wrap justify-center gap-2">
+            <Button variant="primary" icon={Eye} href={`/services/tax-preparation/returns/${r.id}#organizer`}>View answers & flags</Button>
+            <Button href={`/services/tax-preparation/returns/${r.id}#documents`}>Documents</Button>
+          </div>
+        )}
       </Card>
       <Card className="p-5 sm:p-6">
-        <h3 className="text-[15px] font-semibold text-ink">Upload your documents ({needed.length} remaining)</h3>
+        <h3 className="text-[15px] font-semibold text-ink">{by === "staff" ? `Documents for this return (${open.length} outstanding)` : `Upload your documents (${open.length} remaining)`}</h3>
         <ul className="mt-3 divide-y divide-line">
-          {needed.length === 0 && <li className="py-3 text-[13.5px] text-success-ink">Everything has been uploaded. Thank you!</li>}
-          {needed.map((i) => <li key={i.id} className="flex items-center gap-3 py-2.5"><span className="min-w-0 flex-1 text-[13.5px] text-ink">{i.name}{i.sensitive && <span className="ml-2"><Badge tone="neutral">Sensitive</Badge></span>}</span><Button size="sm" icon={FileUp} onClick={() => { tax.receiveItem(r.id, i.id); toast(`Uploaded ${i.name} (sample)`); }}>Upload</Button></li>)}
+          {items.length === 0 && <li className="py-3 text-[13.5px] text-muted">No documents on the checklist.</li>}
+          {by === "client" && items.length > 0 && open.length === 0 && <li className="py-3 text-[13.5px] text-success-ink">Everything has been uploaded. Thank you!</li>}
+          {(by === "staff" ? items : open).map((i) => {
+            const st = LABEL[state(i)] ?? { text: state(i), tone: "neutral" as const };
+            return (
+              <li key={i.id} className="flex items-center gap-3 py-2.5">
+                <span className="min-w-0 flex-1 text-[13.5px] text-ink">{i.name}{i.sensitive && <span className="ml-2"><Badge tone="neutral">Sensitive</Badge></span>}</span>
+                <Badge tone={st.tone}>{st.text}</Badge>
+                {!BACKEND && by === "client" && <Button size="sm" icon={FileUp} onClick={() => { tax.receiveItem(r.id, i.id); toast(`Uploaded ${i.name} (sample)`); }}>Upload</Button>}
+              </li>
+            );
+          })}
         </ul>
-        <p className="mt-2 text-[12px] text-muted">Sample preview — uploads aren&rsquo;t stored. {by === "staff" && "Staff can also mark documents received on the return."}</p>
+        <p className="mt-2 text-[12px] text-muted">{BACKEND ? (by === "staff" ? "The client uploads these in their portal. Mark documents received or waive them on the return's Documents tab." : "Upload these under Documents in your client portal.") : "Sample preview — uploads aren\u2019t stored."}</p>
       </Card>
     </div>
   );
