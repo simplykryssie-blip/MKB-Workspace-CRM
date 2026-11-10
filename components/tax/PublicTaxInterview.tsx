@@ -1,5 +1,6 @@
 "use client";
 
+import { NextStopButton, type NextStop } from "@/components/portal/NextStop";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, CheckCircle2, FileSignature, FileUp, Lock, Send } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -24,7 +25,7 @@ type Loaded = {
   answers: Answers; prefilled: string[]; rev: number;
   letter: { key: string; service: Letter; terms: Letter } | null;
 };
-type Done = { documents: string[]; emailed: boolean };
+type Done = { documents: string[]; emailed: boolean; next?: NextStop };
 class LinkError extends Error { constructor(public status: number, message: string) { super(message); } }
 
 export function PublicTaxInterview({ token }: { token: string }) {
@@ -59,9 +60,10 @@ export function PublicTaxInterview({ token }: { token: string }) {
               <div className="mt-4 rounded-xl border border-line bg-surface-2 p-4">
                 <p className="text-[14px] font-semibold text-ink">Please upload these in your client portal</p>
                 <ul className="mt-1.5 grid gap-1 sm:grid-cols-2">{done.documents.map((d) => <li key={d} className="text-[13.5px] text-ink-2">• {d}</li>)}</ul>
-                <p className="mt-2 text-[12.5px] text-muted">We&rsquo;ll email you when your portal is ready. Please don&rsquo;t email tax documents.</p>
+                <p className="mt-2 text-[12.5px] text-muted">{done.next?.portal ? "Upload them under Documents in your portal." : "We’ll email you when your portal is ready."} Please don&rsquo;t email tax documents.</p>
               </div>
             )}
+            <NextStopButton next={done.next} />
             <p className="mt-4 text-[13.5px] text-muted">This link is now closed. Questions? Call us at 833-379-3320.</p>
           </Card>
         ) : err ? (

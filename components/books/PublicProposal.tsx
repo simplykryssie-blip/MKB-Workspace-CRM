@@ -1,5 +1,6 @@
 "use client";
 
+import { NextStopButton, type NextStop } from "@/components/portal/NextStop";
 import { useEffect, useState } from "react";
 import { CheckCircle2, FileSignature, Lock, Send } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -26,7 +27,7 @@ export function PublicProposal({ token }: { token: string }) {
   const base = `/api/public/proposal/${encodeURIComponent(token)}`;
   const [data, setData] = useState<Loaded | null>(null);
   const [err, setErr] = useState<{ status: number; message: string } | null>(null);
-  const [done, setDone] = useState<{ emailed: boolean } | null>(null);
+  const [done, setDone] = useState<{ emailed: boolean; next?: NextStop } | null>(null);
   const load = () => fetch(base, { cache: "no-store", referrerPolicy: "no-referrer" }).then(async (r) => { const j = (await r.json().catch(() => ({}))) as Loaded & { error?: string }; if (!r.ok) setErr({ status: r.status, message: j.error ?? "We couldn't open this link." }); else setData(j); }).catch(() => setErr({ status: 0, message: "Couldn't reach MKB — check your internet connection and try again." }));
   useEffect(() => { void load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -41,6 +42,7 @@ export function PublicProposal({ token }: { token: string }) {
           <Card className="p-6 sm:p-8">
             <h1 className="flex items-center gap-2 text-[22px] font-bold text-ink"><CheckCircle2 size={24} className="text-success" /> Thank you{data ? `, ${data.firstName}` : ""} — you&rsquo;re all signed.</h1>
             <p className="mt-2 text-[14.5px] text-ink-2">We received your signed proposal and engagement letter. {done.emailed ? "A signed copy is on its way to your email." : "We'll email you a signed copy shortly."} Our team will be in touch to connect your accounts and set your first monthly close date.</p>
+            <NextStopButton next={done.next} />
             <p className="mt-3 text-[13.5px] text-muted">This link is now closed. Questions? Call us at 833-379-3320.</p>
           </Card>
         ) : err ? (
@@ -60,7 +62,7 @@ export function PublicProposal({ token }: { token: string }) {
 
 const amount = (l: Omit<ProposalLine, "id">) => (l.billing === "quote" ? "Custom quote" : `${l.startingAt ? "from " : ""}${money(l.amount)}`);
 
-function Sign({ data, base, onDone, onErr }: { data: Loaded; base: string; onDone: (d: { emailed: boolean }) => void; onErr: (e: { status: number; message: string }) => void }) {
+function Sign({ data, base, onDone, onErr }: { data: Loaded; base: string; onDone: (d: { emailed: boolean; next?: NextStop }) => void; onErr: (e: { status: number; message: string }) => void }) {
   const p = data.proposal;
   const t = proposalTotals(p);
   const [accepted, setAccepted] = useState(false);
@@ -72,8 +74,8 @@ function Sign({ data, base, onDone, onErr }: { data: Loaded; base: string; onDon
     setBusy(true); setMsg(null);
     try {
       const r = await fetch(`${base}/sign`, { method: "POST", headers: { "content-type": "application/json" }, referrerPolicy: "no-referrer", body: JSON.stringify({ name: name.trim(), signature: drawn, version: p.version, engagement: { version: data.letters.books.version, termsVersion: data.letters.terms.version } }) });
-      const j = (await r.json().catch(() => ({}))) as { emailed?: boolean; error?: string };
-      if (r.ok) return onDone({ emailed: !!j.emailed });
+      const j = (await r.json().catch(() => ({}))) as { emailed?: boolean; error?: string; next?: NextStop };
+      if (r.ok) return onDone({ emailed: !!j.emailed, next: j.next });
       if (r.status === 410 || r.status === 404) return onErr({ status: r.status, message: j.error ?? "This link isn't active." });
       setMsg(j.error ?? "Couldn't sign — please try again.");
     } catch { setMsg("Couldn't reach MKB — check your connection and try again."); }

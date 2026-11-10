@@ -16,6 +16,13 @@ export function publicAssetOrigin(env: AppEnv) {
 export const portalOrigin = (env: AppEnv) => env.PORTAL_ORIGIN ?? env.APP_ORIGIN ?? "https://app.mkbfinancialgroup.com";
 export const portalUrl = (env: AppEnv) => `${portalOrigin(env)}/portal`;
 
+/** For a thank-you screen: where the "back" button goes — their portal (sign-in or dashboard), or the website for someone without one. */
+export async function nextStop(env: AppEnv, clientId: string): Promise<{ portal: "active" | "invited" | null; url: string }> {
+  const c = await one<{ portal: string; status: string }>(env.DB, "SELECT portal, status FROM clients WHERE id = ?", clientId);
+  const portal = c && c.status !== "prospect" && (c.portal === "active" || c.portal === "invited") ? (c.portal as "active" | "invited") : null;
+  return { portal, url: portal ? portalUrl(env) : publicAssetOrigin(env) };
+}
+
 export async function loadWording(env: AppEnv, key: TemplateKey) {
   const r = await one<{ data: string; updated_at: string; updated_by: string | null }>(env.DB, "SELECT data, updated_at, updated_by FROM email_templates WHERE key = ?", key).catch(() => null);
   return { wording: wordingFor(key, r ? json<Partial<EmailWording>>(r.data, {}) : null), updatedAt: r?.updated_at, updatedBy: r?.updated_by ?? undefined, custom: !!r };

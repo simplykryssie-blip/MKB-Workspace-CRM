@@ -22,7 +22,7 @@ import { cancelLinks, createLink, latestLink, openLink, useLink } from "./secure
 import { linkOrigin } from "./books-intake";
 import { currentLetters, letterVersion } from "./engagement";
 import { loadFees } from "./settings";
-import { sendTemplate } from "./email";
+import { sendTemplate, nextStop } from "./email";
 import { notify } from "./notifications";
 import { buildIntakePdf, buildLetterPdf } from "./intake-pdf";
 import { applyInterviewToProfile, storeClientPdfAs, loadReturn, toReturn, type TaxRow } from "./tax";
@@ -237,5 +237,5 @@ export async function publicSubmitTaxInterview(env: AppEnv, token: string, ip: s
   const lead = c.status === "prospect";
   await notify(env, { module: "tax" }, { kind: "intake", title: `${c.name} submitted their ${r.taxYear} tax interview`, body: lead ? "A lead (not a client yet) — review it, then accept or decline on the lead" : `${requested.length} document${requested.length === 1 ? "" : "s"} requested · ready for your review`, href: lead ? `/leads/${(await one<{ lead_id: string | null }>(env.DB, "SELECT lead_id FROM clients WHERE id = ?", c.id))?.lead_id ?? ""}` : `/services/tax-preparation/returns/${r.id}`, ...{} });
   await audit(env.DB, actor, { action: "Record update", resource: `Tax return ${r.id}`, department: "tax", meta: `Interview submitted online and signed (drawn)${letterParts ? `; engagement letter v${engagement.version} signed` : ""}; ${requested.length} documents requested${to ? (emailed ? "; emailed" : "; email queued") : ""}` });
-  return { submitted: true, documents: outstanding, emailed, profileUpdated: profile?.updated ?? [] };
+  return { submitted: true, documents: outstanding, emailed, profileUpdated: profile?.updated ?? [], next: await nextStop(env, c.id) };
 }

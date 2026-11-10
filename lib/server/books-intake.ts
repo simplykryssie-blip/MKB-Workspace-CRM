@@ -16,7 +16,7 @@ import { sha256Bytes, signatureFrom } from "./signature";
 import { hasSensitivePerm } from "./identity";
 import { rateLimit } from "./core";
 import { CLIENT_SQL, canOpen, type ClientRow } from "./clients";
-import { sendTemplate } from "./email";
+import { sendTemplate, nextStop } from "./email";
 import { letterVersion } from "./engagement";
 import { audit, requirePermission, requireStaff, type Actor, type LinkActor } from "./identity";
 import { buildIntakePdf, buildLetterPdf } from "./intake-pdf";
@@ -352,7 +352,7 @@ export async function publicSubmitIntake(env: AppEnv, token: string, ip: string,
   const out = await completeSubmit(env, { kind: "link", actor, sentBy: l.createdBy }, r, c, b);
   await useLink(env, l.id);
   // Only what the thank-you screen needs.
-  return { submitted: true, documents: out.documents, emailed: out.emailed };
+  return { submitted: true, documents: out.documents, emailed: out.emailed, next: await nextStop(env, c.id) };
 }
 
 /* ================================================================ review → proposal → signature
@@ -531,7 +531,7 @@ export async function publicSignProposal(env: AppEnv, token: string, ip: string,
   await run(env.DB, "INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'intake', ?, 'client', NULL, ?)", randomId("x"), c.id, `Signed the bookkeeping proposal (${p.plan}) and engagement letter online`, t);
   await notify(env, { module: "books" }, { kind: "intake", title: `${bizName} signed their bookkeeping proposal`, body: `${p.plan} · ${money(proposalTotals(p).monthly)}/month — ready to start bookkeeping`, href: `/services/bookkeeping/intake/${r.id}` });
   await audit(env.DB, actor, { action: "Record update", resource: `Bookkeeping intake ${r.id}`, meta: `Proposal v${p.version} + engagement letter v${lt.version} signed (drawn) by ${name}${emailed ? "; copy emailed" : ""}` });
-  return { signed: true, emailed };
+  return { signed: true, emailed, next: await nextStop(env, c.id) };
 }
 
 /** A client's (or prospect's) intakes with their link status — for the lead page. */
