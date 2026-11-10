@@ -108,8 +108,9 @@ export function LeadIntakesCard({ lead, intakes: h }: { lead: Lead; intakes: Ret
             const done = t.status === "submitted" || t.status === "reviewed";
             return (
               <li key={t.id} className="flex flex-wrap items-center gap-3 px-5 py-3 sm:px-6">
-                <span className="min-w-0 flex-1"><span className="block truncate text-[14px] font-medium text-ink">{t.taxYear} tax interview ({t.form})</span><span className="block text-[12px] text-muted">{done ? `Submitted ${t.submittedAt ? relTime(t.submittedAt) : ""} — review the signed PDF` : t.link ? `Sent to ${t.link.email}${t.link.openedAt ? " · opened" : ""}${t.updatedAt ? ` · updated ${relTime(t.updatedAt)}` : ""}` : "Not sent"}</span></span>
-                {done && t.pdfFileId && d?.prospect && <Button size="sm" href={`/api/clients/${d.prospect.clientId}/files/${t.pdfFileId}`}>View answers (PDF)</Button>}
+                <span className="min-w-0 flex-1"><span className="block truncate text-[14px] font-medium text-ink">{t.taxYear} tax interview ({t.form})</span><span className="block text-[12px] text-muted">{done ? `Submitted ${t.submittedAt ? relTime(t.submittedAt) : ""} — review the signed PDF` : t.link ? `Sent to ${t.link.email}${t.updatedAt ? ` · updated ${relTime(t.updatedAt)}` : t.link.openedAt ? " · opened, not started" : " · not started yet"}` : "Not sent"}</span></span>
+                {done && t.pdfFileId && d?.prospect ? <Button size="sm" href={`/api/clients/${d.prospect.clientId}/files/${t.pdfFileId}`}>View answers (PDF)</Button>
+                  : t.updatedAt ? <a className="inline-flex h-8 items-center rounded-xl border border-line px-3 text-[13px] font-semibold text-ink-2 hover:bg-surface-hover" href={`/api/leads/${lead.id}/tax/${t.id}`} target="_blank" rel="noopener">View answers so far</a> : null}
                 {done ? <Badge tone="info">Submitted — review</Badge> : t.link?.state === "active" ? <Badge tone="warning">{t.link.openedAt ? "Lead filling in" : "Link sent"}</Badge> : t.link?.state === "expired" ? <Badge tone="warning">Link expired</Badge> : <Badge tone="warning">Not sent</Badge>}
               </li>
             );

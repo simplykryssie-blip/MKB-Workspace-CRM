@@ -41,6 +41,8 @@ export type IntakePdfInput = {
   /** Other interviews (e.g. bookkeeping intake): their own sections and title instead of the tax return's. */
   sections?: import("@/lib/tax/interview/engine").Section[];
   title?: string;
+  /** Not submitted yet: a copy of the answers saved so far. */
+  draft?: boolean;
 };
 
 /** Branded page writer shared by the intake copy and engagement letters. */
@@ -130,14 +132,15 @@ async function makeWriter(docTitle: string, headerRight: string) {
 }
 
 export async function buildIntakePdf(x: IntakePdfInput): Promise<Uint8Array> {
-  const title = x.title ?? `${x.taxYear} Tax Interview`;
+  const title = (x.title ?? `${x.taxYear} Tax Interview`) + (x.draft ? " (in progress)" : "");
   const { text, heading, row, space, finish, signature, fonts: { bold, serif } } = await makeWriter(`${title} — ${x.clientName}`, title);
   text(title, { size: 20, font: serif, gap: 8 });
   text(x.clientName, { size: 12, font: bold, gap: 10 });
   const when = new Date(x.submittedAt).toLocaleString("en-US", { dateStyle: "long", timeStyle: "short", timeZone: "America/Chicago" });
   if (!x.sections) row("Return", `${x.returnId} · Form ${x.form}`);
-  row("Submitted", `${when} (Central)`);
-  row("Completed by", x.enteredBy === "staff" ? "MKB staff with the client" : "The client, online");
+  row(x.draft ? "Answers saved" : "Submitted", `${when} (Central)`);
+  if (x.draft) row("Status", "Not submitted or signed yet — answers so far");
+  else row("Completed by", x.enteredBy === "staff" ? "MKB staff with the client" : "The client, online");
   if (x.consentName) row(x.signaturePng ? "Confirmed accurate and signed by (printed name)" : "Confirmed accurate by (typed name)", x.consentName);
   if (x.signaturePng) { space(4); await signature(x.signaturePng, `Signature of ${x.consentName ?? "the client"}`); }
   if (x.engagement) row("Engagement letter accepted", `${x.engagement.title} (version ${x.engagement.version}) — ${x.engagement.acceptedName}, ${new Date(x.engagement.acceptedAt).toLocaleDateString("en-US", { dateStyle: "long" })}`);

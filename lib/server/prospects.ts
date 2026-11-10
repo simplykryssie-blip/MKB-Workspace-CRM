@@ -19,6 +19,8 @@ import { createReturn, toReturn, type TaxRow } from "./tax";
 import { latestLink } from "./secure-links";
 import { sendTaxInterviewLink } from "./tax-link";
 import { ensure8821 } from "./f8821";
+import { buildIntakePdf } from "./intake-pdf";
+import type { Answers } from "@/lib/tax/interview/engine";
 
 /** Client statuses that are not (yet) clients — hidden from every client list. */
 export const HIDDEN_CLIENT_STATUSES = ["prospect", "declined"] as const;
@@ -151,6 +153,22 @@ async function prospectReturn(env: AppEnv, a: Extract<Actor, { kind: "staff" }>,
     activity: [{ id: randomId("x"), kind: "intake", text: `Return created for lead ${l.name} — TY ${year} ${form} (not a client yet)`, at: t, actor: "staff" }], createdAt: t,
   };
   return createReturn(env, a, r);
+}
+
+/** The lead's tax interview as a PDF: the signed copy once submitted, otherwise the answers saved so far. */
+export async function leadTaxAnswersPdf(env: AppEnv, a: Actor, leadId: string, returnId: string) {
+  requirePermission(a, "leads", "view");
+  requirePermission(a, "tax", "view");
+  requireStaff(a);
+  const p = await prospectOf(env, leadId);
+  const row = p ? await one<TaxRow>(env.DB, "SELECT * FROM tax_returns WHERE id = ? AND client_id = ?", returnId, p.id) : null;
+  if (!p || !row) throw notFound("Interview not found.");
+  const r = toReturn(row);
+  const c = await one<{ name: string }>(env.DB, "SELECT name FROM clients WHERE id = ?", p.id);
+  const answers = (r.organizer.interview?.answers ?? {}) as Answers;
+  const bytes = await buildIntakePdf({ clientName: c?.name ?? "", taxYear: r.taxYear, form: r.form, returnId: r.id, answers, submittedAt: r.organizer.interview?.updatedAt ?? now(), enteredBy: "client", documents: [], draft: true });
+  await audit(env.DB, a, { action: "Client record access", resource: `Tax return ${r.id}`, department: "tax", meta: `Viewed the lead's interview answers so far (PDF)` });
+  return new Response(bytes as unknown as BodyInit, { headers: { "content-type": "application/pdf", "content-disposition": `inline; filename="MKB-Tax-Interview-${r.taxYear}-in-progress.pdf"`, "cache-control": "private, no-store", "x-content-type-options": "nosniff" } });
 }
 
 /** Accept as client: the prospect becomes a client (answers, signed PDF, documents, EIN stay on the record). */
