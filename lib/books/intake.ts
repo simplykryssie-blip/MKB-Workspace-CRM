@@ -274,7 +274,7 @@ const goals: Section = {
   group: "What you need",
   covers: ["Monthly reports", "Review meetings", "Plan sizing"],
   questions: [
-    { id: "frequency", label: "How often would you like your books updated?", type: "choice", options: ["Monthly (included in every plan)", "Every two weeks", "Weekly"], help: "More frequent updates are an add-on. You'll see the price in your quote." },
+    { id: "frequency", label: "How often would you like your books updated?", type: "choice", options: ["Quarterly", "Monthly (included in every plan)", "Every two weeks", "Weekly"], help: "More frequent updates are an add-on. You'll see the price in your quote." },
     { id: "addons", label: "Which add-on services would you like? (choose all that apply)", type: "multi", optional: true, options: ADDON_OPTIONS, help: "Optional. Prices are shown on your quote before you submit." },
     { id: "volume", label: "About how many transactions go through the business accounts each month?", type: "choice", options: ["Under 150", "150 – 400", "400 – 750", "750 – 1,500", "Over 1,500", "Not sure"], help: "Count every deposit, card swipe and payment across all accounts. A busy checking account plus one credit card is often 150–400." },
     { id: "reports", label: "Which reports do you want each month? (choose all that apply)", type: "multi", options: ["Profit and Loss", "Balance Sheet", "Cash Flow Statement", "Who owes us (A/R aging)", "Who we owe (A/P aging)", "Budget vs. actual", "Sales by customer", "Expenses by vendor", "Profit by job or location"] },
