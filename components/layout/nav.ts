@@ -16,6 +16,13 @@ import {
   Users,
   Layers,
   Globe,
+  Building,
+  ClipboardCheck,
+  Handshake,
+  Landmark,
+  Package,
+  SlidersHorizontal,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 
@@ -26,6 +33,8 @@ export type NavItem = {
   badge?: number;
   /** Live badge computed in the sidebar (e.g. follow-ups due). */
   badgeKey?: "leadsDue";
+  /** Active only on this exact address (not its sub-pages). */
+  exact?: boolean;
   /** CSS var for a small service-color dot */
   dot?: string;
   children?: NavItem[];
@@ -72,6 +81,26 @@ export const NAV: { section?: string; items: NavItem[] }[] = [
     items: [
       { label: "Team & Permissions", href: "/team", icon: ShieldCheck },
       { label: "Settings", href: "/settings", icon: Settings },
+    ],
+  },
+];
+
+/** Monarch Tax Suite — the service bureau workspace. */
+export const MONARCH_NAV: { section?: string; items: NavItem[] }[] = [
+  {
+    items: [
+      { label: "Onboarding", href: "/monarch", icon: ClipboardCheck, exact: true },
+      { label: "Offices", href: "/monarch/offices", icon: Building },
+      { label: "Sales & Payments", href: "/monarch/sales", icon: Wallet },
+      { label: "Resellers & Commissions", href: "/monarch/resellers", icon: Handshake },
+      { label: "Bank reports", href: "/monarch/bank-reports", icon: Landmark },
+    ],
+  },
+  {
+    section: "Administration",
+    items: [
+      { label: "Packages", href: "/monarch/packages", icon: Package },
+      { label: "Setup", href: "/monarch/setup", icon: SlidersHorizontal },
     ],
   },
 ];

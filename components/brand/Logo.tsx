@@ -43,3 +43,23 @@ export function Logo({ collapsed = false }: { collapsed?: boolean }) {
     </div>
   );
 }
+
+/** Monarch Tax Suite logo (navy lettering on the light sidebar, original white in dark mode). */
+const M_RATIO = 480 / 108;
+const M_MONO = 147 / 96;
+export function MonarchLogo({ collapsed = false }: { collapsed?: boolean }) {
+  if (collapsed)
+    return (
+      <>
+        <img src="/brand/monarch-mono-light.webp" alt="Monarch Tax Suite" width={Math.round(24 * M_MONO)} height={24} className="block select-none dark:hidden" draggable={false} />
+        <img src="/brand/monarch-mono-dark.webp" alt="Monarch Tax Suite" width={Math.round(24 * M_MONO)} height={24} className="hidden select-none dark:block" draggable={false} />
+      </>
+    );
+  const w = 200;
+  return (
+    <div className="flex w-full flex-col items-center">
+      <img src="/brand/monarch-logo-light.webp" alt="Monarch Tax Suite" width={w} height={Math.round(w / M_RATIO)} className="block h-auto select-none dark:hidden" style={{ width: w }} draggable={false} />
+      <img src="/brand/monarch-logo-dark.webp" alt="Monarch Tax Suite" width={w} height={Math.round(w / M_RATIO)} className="hidden h-auto select-none dark:block" style={{ width: w }} draggable={false} />
+    </div>
+  );
+}

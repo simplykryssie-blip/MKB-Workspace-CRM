@@ -46,11 +46,11 @@ export type IntakePdfInput = {
 };
 
 /** Branded page writer shared by the intake copy and engagement letters. */
-async function makeWriter(docTitle: string, headerRight: string) {
+async function makeWriter(docTitle: string, headerRight: string, brand: { name: string; tagline: string } = { name: FIRM.name, tagline: FIRM.tagline }) {
   const pdf = await PDFDocument.create();
   pdf.setTitle(safe(docTitle));
-  pdf.setAuthor(FIRM.name);
-  pdf.setCreator(FIRM.name);
+  pdf.setAuthor(brand.name);
+  pdf.setCreator(brand.name);
   const [reg, bold, serif] = await Promise.all([pdf.embedFont(StandardFonts.Helvetica), pdf.embedFont(StandardFonts.HelveticaBold), pdf.embedFont(StandardFonts.TimesRoman)]);
   let page!: PDFPage;
   let y = 0;
@@ -58,8 +58,8 @@ async function makeWriter(docTitle: string, headerRight: string) {
     page = pdf.addPage([W, H]);
     page.drawRectangle({ x: 0, y: H - 64, width: W, height: 64, color: rgb(0.043, 0.043, 0.043) });
     page.drawRectangle({ x: 0, y: H - 68, width: W, height: 4, color: GOLD });
-    page.drawText(FIRM.name, { x: M, y: H - 36, size: 17, font: serif, color: rgb(1, 1, 1) });
-    page.drawText(FIRM.tagline.replace(/•/g, "·"), { x: M, y: H - 52, size: 7.5, font: bold, color: rgb(0.96, 0.83, 0.48) });
+    page.drawText(brand.name, { x: M, y: H - 36, size: 17, font: serif, color: rgb(1, 1, 1) });
+    page.drawText(brand.tagline.replace(/•/g, "·"), { x: M, y: H - 52, size: 7.5, font: bold, color: rgb(0.96, 0.83, 0.48) });
     const hr = safe(headerRight);
     page.drawText(hr, { x: W - M - bold.widthOfTextAtSize(hr, 10), y: H - 40, size: 10, font: bold, color: rgb(1, 1, 1) });
     y = H - 96;
@@ -92,7 +92,7 @@ async function makeWriter(docTitle: string, headerRight: string) {
   const finish = (clientName: string) => {
     const pages = pdf.getPages();
     pages.forEach((p, i) => {
-      const f = safe(`Confidential — prepared for ${clientName} · ${FIRM.name} · ${FIRM.phone}`);
+      const f = safe(`Confidential — prepared for ${clientName} · ${brand.name}${brand.name === FIRM.name ? ` · ${FIRM.phone}` : ""}`);
       p.drawText(f, { x: M, y: 30, size: 7.5, font: reg, color: MUTED });
       const pn = `Page ${i + 1} of ${pages.length}`;
       p.drawText(pn, { x: W - M - reg.widthOfTextAtSize(pn, 7.5), y: 30, size: 7.5, font: reg, color: MUTED });
@@ -241,4 +241,24 @@ export async function buildInvoicePdf(x: InvoicePdfInput): Promise<Uint8Array> {
     if (x.payUrl) text(`Pay online: ${x.payUrl}`, { size: 9, color: GOLD, gap: 4 });
   }
   return finish(x.billTo[0] ?? "Client");
+}
+
+/** Monarch Tax Suite service bureau agreement, signed online through the office's upload link. */
+export async function buildMonarchAgreementPdf(x: { officeName: string; text: string; version: number; signedName: string; signedAt: string; ip: string; signaturePng: Uint8Array }): Promise<Uint8Array> {
+  const { text, heading, row, space, finish, signature, fonts: { serif } } = await makeWriter(`Service bureau agreement — ${x.officeName}`, "Service Bureau Agreement", { name: "Monarch Tax Suite", tagline: "SOFTWARE • TOOLS • GROWTH" });
+  text("Service Bureau Agreement", { size: 17, font: serif, gap: 6 });
+  text(`Version ${x.version} · ${x.officeName}`, { size: 8.5, color: MUTED, gap: 8 });
+  for (const b of parseLetter(x.text)) {
+    if (b.kind === "h") heading(b.text);
+    else if (b.kind === "li") text(`•  ${b.text}`, { size: 10, x: M + 10, gap: 3 });
+    else { text(b.text, { size: 10, gap: 3 }); space(5); }
+  }
+  heading("Signature");
+  await signature(x.signaturePng, `Signature of ${x.signedName}`);
+  row("Signed by (printed name)", x.signedName);
+  row("For", x.officeName);
+  row("Date and time", `${new Date(x.signedAt).toLocaleString("en-US", { dateStyle: "long", timeStyle: "short", timeZone: "America/Chicago" })} (Central)`);
+  row("How", "Signed online through the office's private Monarch link (drawn signature)");
+  row("Connection", x.ip);
+  return finish(x.officeName);
 }

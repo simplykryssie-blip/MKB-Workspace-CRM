@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronDown, ChevronsLeft, ChevronsRight, ExternalLink, X } from "lucide-react";
-import { useState } from "react";
-import { Logo } from "@/components/brand/Logo";
-import { NAV, type NavItem } from "./nav";
+import { ArrowLeftRight, Check, ChevronDown, ChevronsLeft, ChevronsRight, ExternalLink, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Logo, MonarchLogo } from "@/components/brand/Logo";
+import { MONARCH_NAV, NAV, type NavItem } from "./nav";
 import { useLeads } from "@/lib/store/leads-store";
 import { followUpBucket } from "@/lib/sample/leads";
 import { useTeam } from "@/lib/store/team-store";
@@ -27,9 +27,13 @@ export function Sidebar({ collapsed, onToggleCollapsed, mobileOpen, onCloseMobil
   const books = useBooks();
   // Navigation follows permissions: hidden modules aren't offered (the route guard still blocks direct links).
   const allowed = (href: string) => { const mod = moduleForPath(href); return !mod || team.can(mod); };
+  const pathname = usePathname();
+  const monarch = pathname === "/monarch" || pathname.startsWith("/monarch/");
+  const canMonarch = team.acting.kind === "member" && team.can("monarch");
+  const Brand = monarch ? MonarchLogo : Logo;
   const nav = team.acting.kind === "client"
     ? [{ section: "My portal", items: clientPortalLinks(team.acting.clientId, books.workspaces, tax.returns).map((l) => ({ label: l.label, href: l.href, icon: UserRound })) }]
-    : NAV.map((g) => ({ ...g, items: g.items.map((i) => (i.children ? { ...i, children: i.children.filter((c) => allowed(c.href)) } : i)).filter((i) => (i.children ? i.children.length > 0 : allowed(i.href))) })).filter((g) => g.items.length > 0);
+    : (monarch ? MONARCH_NAV : NAV).map((g) => ({ ...g, items: g.items.map((i) => (i.children ? { ...i, children: i.children.filter((c) => allowed(c.href)) } : i)).filter((i) => (i.children ? i.children.length > 0 : allowed(i.href))) })).filter((g) => g.items.length > 0);
   return (
     <>
       {/* Mobile scrim */}
@@ -51,17 +55,19 @@ export function Sidebar({ collapsed, onToggleCollapsed, mobileOpen, onCloseMobil
         <div className="flex h-full flex-col md:sticky md:top-0 md:h-screen">
         <div className={`flex min-h-[76px] shrink-0 items-center border-b py-3 border-rail-line ${collapsed ? "justify-center px-2" : "px-5 md:justify-center md:px-2 lg:justify-start lg:px-5"}`}>
           <div className={collapsed ? "" : "md:hidden lg:block"}>
-            <Logo collapsed={collapsed} />
+            <Brand collapsed={collapsed} />
           </div>
           {!collapsed && (
             <div className="hidden md:block lg:hidden">
-              <Logo collapsed />
+              <Brand collapsed />
             </div>
           )}
           <button onClick={onCloseMobile} className="ml-auto grid h-9 w-9 self-start place-items-center rounded-lg text-rail-muted hover:bg-rail-hover md:hidden" aria-label="Close menu">
             <X size={18} />
           </button>
         </div>
+
+        {canMonarch && <WorkspaceSwitch monarch={monarch} collapsed={collapsed} onNavigate={onCloseMobile} />}
 
         <nav className="rail-scroll flex-1 overflow-y-auto px-3 pb-1.5 pt-3">
           {nav.map((group, gi) => (
@@ -114,7 +120,7 @@ function NavRow({ item, collapsed, onNavigate }: { item: NavItem; collapsed: boo
   const { leads } = useLeads();
   const liveBadge = item.badgeKey === "leadsDue" ? leads.filter((l) => l.status === "open" && ["overdue", "today"].includes(followUpBucket(l))).length : undefined;
   const badge = liveBadge ?? item.badge;
-  const active = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href + "/"));
+  const active = pathname === item.href || (!item.exact && item.href !== "/dashboard" && pathname.startsWith(item.href + "/"));
   const hasChildren = !!item.children?.length;
   const childActive = item.children?.some((c) => pathname.startsWith(c.href)) ?? false;
   const [open, setOpen] = useState(true);
@@ -199,5 +205,48 @@ function ChildRow({ item, collapsed, onNavigate }: { item: NavItem; collapsed: b
         <span className={collapsed ? "md:hidden" : "md:hidden lg:inline"}>{item.label}</span>
       </Link>
     </li>
+  );
+}
+
+/** Switches between the MKB workspace and Monarch Tax Suite (same app, same sign-in). */
+function WorkspaceSwitch({ monarch, collapsed, onNavigate }: { monarch: boolean; collapsed: boolean; onNavigate: () => void }) {
+  const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+  useEffect(() => setOpen(false), [pathname]);
+  const label = monarch ? "Monarch Tax Suite" : "MKB Financial Group";
+  const options = [
+    { href: "/dashboard", label: "MKB Financial Group", on: !monarch },
+    { href: "/monarch", label: "Monarch Tax Suite", on: monarch },
+  ];
+  return (
+    <div className="relative shrink-0 border-b border-rail-line px-3 py-2.5">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        title={`Workspace: ${label} — switch`}
+        className={`flex w-full items-center gap-2.5 rounded-xl border border-rail-line px-3 py-2 text-left text-rail-ink hover:bg-rail-hover ${collapsed ? "md:justify-center md:px-0" : "md:justify-center md:px-0 lg:justify-start lg:px-3"}`}
+      >
+        <ArrowLeftRight size={16} className="shrink-0 text-rail-muted" />
+        <span className={`min-w-0 flex-1 ${collapsed ? "md:hidden" : "md:hidden lg:block"}`}>
+          <span className="block text-[10.5px] font-semibold uppercase tracking-[0.12em] text-rail-section">Workspace</span>
+          <span className="block truncate text-[13.5px] font-semibold">{label}</span>
+        </span>
+        <ChevronDown size={15} className={`shrink-0 text-rail-muted transition-transform ${open ? "rotate-180" : ""} ${collapsed ? "md:hidden" : "md:hidden lg:block"}`} />
+      </button>
+      {open && (
+        <ul role="menu" className="absolute left-3 right-3 top-full z-20 mt-1 min-w-[220px] rounded-xl border border-line bg-surface p-1 shadow-soft">
+          {options.map((o) => (
+            <li key={o.href} role="none">
+              <Link role="menuitem" href={o.href} onClick={() => { setOpen(false); onNavigate(); }} className="flex items-center gap-2 rounded-lg px-3 py-2 text-[13.5px] font-medium text-ink hover:bg-surface-hover">
+                <span className="flex-1">{o.label}</span>
+                {o.on && <Check size={15} className="text-accent" />}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

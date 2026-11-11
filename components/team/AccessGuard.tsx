@@ -30,6 +30,7 @@ export function moduleForPath(path: string): ModuleKey | null {
     ["/documents", "documents"],
     ["/invoices", "billing"],
     ["/billing", "billing"],
+    ["/monarch", "monarch"],
     ["/tasks", "dashboard"],
     ["/team", "team"],
     ["/settings", "settings"],
