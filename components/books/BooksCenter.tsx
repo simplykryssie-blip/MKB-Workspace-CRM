@@ -355,7 +355,7 @@ function ReviewCenter({ byId }: { byId: Map<string, Client> }) {
                   <td className="px-5 py-3"><div className="font-semibold text-ink">{a.name} ••{a.mask}</div><div className="text-[12px] text-muted">{w.businessName} · {a.kind === "bank" ? "Bank" : "Credit card"}</div></td>
                   <td className="px-3 py-3 tabular-nums">{periodLabel(m.period, true)}</td>
                   <td className="px-3 py-3">{r.statementDate ? fmtDate(r.statementDate) : "—"}</td>
-                  <td className="px-3 py-3 text-right tabular-nums">{money(r.endingBalance)}{r.sample && <span className="ml-1 text-[10.5px] text-faint">sample</span>}</td>
+                  <td className="px-3 py-3 text-right tabular-nums">{money(r.endingBalance)}{r.sample && !BACKEND && <span className="ml-1 text-[10.5px] text-faint">sample</span>}</td>
                   <td className="px-3 py-3"><Badge tone={RECON_META[r.status].tone}>{RECON_META[r.status].label}</Badge>{r.discrepancy && <div className="mt-0.5 text-[12px] text-danger-ink">{money(r.discrepancy.amount)} — {r.discrepancy.note}</div>}</td>
                   <td className="px-3 py-3 text-[12.5px]">{r.completedAt ? `${fmtDate(r.completedAt, { month: "short", day: "numeric" })} · ${staffById(r.by ?? m.assignedTo).name.split(" ")[0]}` : "—"}</td>
                   <td className="px-5 py-3 text-right"><Button size="sm" href={wsHref(w, m, "review")}>Open</Button></td>

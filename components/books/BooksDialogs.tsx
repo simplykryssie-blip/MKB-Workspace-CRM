@@ -1,5 +1,6 @@
 "use client";
 
+import { BACKEND } from "@/lib/sync/remote";
 import { useEffect, useState } from "react";
 import { FileText, ShieldCheck, UploadCloud, X } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
@@ -184,7 +185,7 @@ export function RequestDocDialog({ w, period, open, onClose }: { w: BooksWorkspa
   );
 }
 
-/** Used by staff and by the client portal preview. Files stay in the browser. */
+/** Used by staff and by the client view. In the live CRM the files are stored on the client's record. */
 export function CompleteTaskDialog({ w, task, by, onClose }: { w: BooksWorkspace; task: ClientTask | null; by: "client" | "staff"; onClose: () => void }) {
   const books = useBooks();
   const toast = useToast();
@@ -207,7 +208,7 @@ export function CompleteTaskDialog({ w, task, by, onClose }: { w: BooksWorkspace
           <input type="file" multiple className="sr-only" aria-label="Attach files" onChange={(e) => setFiles([...files, ...Array.from(e.target.files ?? [])])} />
           <UploadCloud size={24} className="text-muted" />
           <span className="mt-1 text-[13.5px] font-medium text-ink">{needsFile ? "Attach the file(s)" : "Attach supporting files (optional)"}</span>
-          <span className="text-[12px] text-muted">Preview mode — files stay in your browser and are not stored.</span>
+          <span className="text-[12px] text-muted">{BACKEND ? "Files are stored privately on the client's record." : "Preview mode — files stay in your browser and are not stored."}</span>
         </label>
         {files.length > 0 && (
           <ul className="space-y-1">

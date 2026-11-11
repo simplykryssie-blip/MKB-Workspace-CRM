@@ -90,7 +90,7 @@ export type BooksReport = {
   preparedAt?: string;
   approvedBy?: string;
   deliveredAt?: string;
-  /** File on the client profile once prepared (placeholder in the preview). */
+  /** The report file on the client record (hidden from the client until made available or delivered). */
   docId?: string;
 };
 
@@ -105,7 +105,7 @@ export type Reconciliation = {
   accountId: string;
   status: ReconStatus;
   statementDate?: string;
-  /** Entered by MKB from the bank/card statement. Sample values are fictional. */
+  /** Entered by MKB from the bank/card statement (`sample` marks fictional demo values). */
   endingBalance?: number;
   discrepancy?: { amount: number; note: string };
   completedAt?: string;
@@ -221,7 +221,7 @@ export type BooksWorkspace = {
   startedAt: string;
 };
 
-/** Permission keys for the future roles system (enforced server-side in Phase 3). */
+/** Permission keys (the server enforces access through the roles system). */
 export const BOOKS_PERMISSIONS = {
   view: "books.workspaces.view",
   review: "books.review.manage",

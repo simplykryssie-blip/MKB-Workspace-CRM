@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Bookkeeping Workspace store (Phase 2 — in-browser sample data only).
+ * Bookkeeping Workspace store: in the live CRM it syncs with the server; in the demo it uses sample data.
  *
  * Single source of truth:
  *  - Statements, receipts and requests are documents on the central client profile

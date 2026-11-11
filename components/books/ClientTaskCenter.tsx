@@ -58,7 +58,7 @@ export function ClientTaskCenter({ id }: { id: string }) {
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-accent/30 bg-accent-soft/60 px-4 py-2.5 text-[13px] text-accent-ink">
-        <span className="font-semibold">Client portal preview</span> — what {c.contactName ?? c.name} sees for {w.businessName}. Internal MKB notes and review details are not shown.
+        <span className="font-semibold">Client view</span> — what {c.contactName ?? c.name} sees for {w.businessName}. Internal MKB notes and review details are not shown.
         <Link href={`/services/bookkeeping/${w.id}#tasks`} className="ml-auto inline-flex items-center gap-1 font-semibold hover:underline"><ArrowLeft size={14} /> Back to MKB workspace</Link>
       </div>
 

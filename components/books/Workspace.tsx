@@ -497,7 +497,7 @@ function ReviewTab({ w, m, open }: { w: BooksWorkspace; m: BooksMonth; open: (d:
                 <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${a.kind === "bank" ? "bg-svc-books-soft text-svc-books" : "bg-svc-tax-soft text-svc-tax"}`}>{a.kind === "bank" ? <Building2 size={17} /> : <CreditCard size={17} />}</span>
                 <div className="min-w-0 flex-1 basis-[55%] sm:basis-auto">
                   <div className="text-[14px] font-semibold text-ink">{a.name} ••{a.mask}</div>
-                  <div className="text-[12px] text-muted">{a.institution} · statement {r.statementDate ? fmtDate(r.statementDate) : "—"} · ending balance {money(r.endingBalance)}{r.sample ? " (sample)" : ""}</div>
+                  <div className="text-[12px] text-muted">{a.institution} · statement {r.statementDate ? fmtDate(r.statementDate) : "—"} · ending balance {money(r.endingBalance)}{r.sample && !BACKEND ? " (sample)" : ""}</div>
                   {r.discrepancy && <div className="text-[12.5px] font-medium text-danger-ink">Discrepancy {money(r.discrepancy.amount)} — {r.discrepancy.note}</div>}
                   {r.completedAt && <div className="text-[12px] text-success-ink">Reconciled {fmtDate(r.completedAt)} by {staffById(r.by ?? m.assignedTo).name}</div>}
                 </div>
