@@ -416,7 +416,10 @@ function SectionForm({ s, onChange, disabled }: { s: Section; onChange: (p: Part
       {(t === "pricing" || t === "cards") && <TextArea label="Small print under the cards" value={s.note ?? ""} disabled={disabled} onChange={(e) => onChange({ note: e.target.value })} />}
       {t === "form" && (siteKey === "monarch"
         ? <p className="rounded-xl bg-accent-soft px-3 py-2 text-[13px] text-accent-ink">Monarch&rsquo;s contact form: name, office, email, phone, city, number of locations and a message. Each answer becomes a new &ldquo;Interested&rdquo; office on Monarch&rsquo;s Onboarding board.</p>
-        : <TextField label="Form link name" hint="from Forms, e.g. contact" value={s.formSlug ?? ""} disabled={disabled} onChange={(e) => onChange({ formSlug: e.target.value })} />
+        : <>
+          <TextField label="Form link name" hint="from Forms, e.g. contact" value={s.formSlug ?? ""} disabled={disabled} onChange={(e) => onChange({ formSlug: e.target.value })} />
+          <TextField label="After submitting, go to" hint="optional — a page address like /calculator (for funnels)" value={s.afterHref ?? ""} disabled={disabled} onChange={(e) => onChange({ afterHref: e.target.value })} />
+        </>
       )}
       {t === "embed" && (
         <>

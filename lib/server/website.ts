@@ -141,7 +141,7 @@ export async function importMkb(env: AppEnv, a: Actor) {
   for (const p of MKB_PAGES) {
     const d = JSON.stringify(cleanSections(p.draft));
     // Draft-only pages (e.g. the WISP funnel) are loaded without a published copy.
-    st.push(env.DB.prepare("INSERT INTO website_pages (id, site, slug, title, description, nav, position, draft, published, rev, updated_at, updated_by, published_at) VALUES (?, 'mkb', ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)").bind(p.id, p.slug, p.title, p.description, p.nav ? 1 : 0, p.position, d, p.published ? d : null, t, by, p.published ? t : null));
+    st.push(env.DB.prepare("INSERT INTO website_pages (id, site, slug, title, description, nav, hide_nav, position, draft, published, rev, updated_at, updated_by, published_at) VALUES (?, 'mkb', ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)").bind(p.id, p.slug, p.title, p.description, p.nav ? 1 : 0, p.hideNav ? 1 : 0, p.position, d, p.published ? d : null, t, by, p.published ? t : null));
   }
   if (!(await one(env.DB, "SELECT 1 FROM forms WHERE slug = 'contact'"))) {
     const stage = await one<{ id: string }>(env.DB, "SELECT id FROM lead_stages ORDER BY position LIMIT 1");
@@ -160,6 +160,7 @@ export async function importMkb(env: AppEnv, a: Actor) {
       JSON.stringify({ ownerId: by, stageId: stage?.id ?? "st-new", source: "Website", sourceDetail: "Website contact form", tags: ["Website"], followUpHours: 24 }),
       "Thank you! We'll be in touch within one business day.", t, t, t));
   }
+  st.push(...(await calculatorFormStatements(env, by, t)));
   await env.DB.batch(st);
   await audit(env.DB, a, { action: "Website publish", resource: "Public website", meta: `Loaded MKB's website (${MKB_PAGES.length} pages)` });
 }
@@ -177,6 +178,21 @@ export async function startMonarch(env: AppEnv, a: Actor) {
   for (const p of MONARCH_PAGES) st.push(env.DB.prepare("INSERT INTO website_pages (id, site, slug, title, description, nav, hide_nav, position, draft, rev, updated_at, updated_by) VALUES (?, 'monarch', ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)").bind(p.id, p.slug, p.title, p.description, p.nav ? 1 : 0, p.hideNav ? 1 : 0, p.position, JSON.stringify(cleanSections(p.draft)), t, by));
   await env.DB.batch(st);
   await audit(env.DB, a, { action: "Website update", resource: "Monarch website", meta: `Started from the template (${MONARCH_PAGES.length} draft pages)` });
+}
+
+/** The lead form on the tax calculator funnel's first page (answers become MKB leads). */
+export async function calculatorFormStatements(env: AppEnv, ownerId: string | null, t: string): Promise<D1PreparedStatement[]> {
+  if (await one(env.DB, "SELECT 1 FROM forms WHERE slug = 'tax-calculator'")) return [];
+  const stage = await one<{ id: string }>(env.DB, "SELECT id FROM lead_stages ORDER BY position LIMIT 1");
+  const fields = [
+    { id: "fld-calc1", type: "text", label: "Full name", required: true, map: "fullName" },
+    { id: "fld-calc2", type: "email", label: "Email", required: true, map: "email" },
+    { id: "fld-calc3", type: "phone", label: "Phone", required: true, map: "phone" },
+    { id: "fld-calc4", type: "consent", label: "I agree that MKB Financial Group may contact me by phone, text or email about my taxes. Message and data rates may apply. I can opt out at any time.", required: true, map: "none" },
+  ];
+  return [env.DB.prepare("INSERT INTO forms (id, name, slug, title, intro, status, fields, services, routing, thank_you, created_at, updated_at, published_at) VALUES (?, 'Tax calculator', 'tax-calculator', 'Open the free tax calculator', NULL, 'published', ?, '[\"tax\"]', ?, 'Thanks! Opening the calculator…', ?, ?, ?)").bind(
+    `form-calc${Date.now().toString(36)}`, JSON.stringify(fields),
+    JSON.stringify({ ownerId, stageId: stage?.id ?? "st-new", source: "Website", sourceDetail: "Tax calculator", tags: ["Website", "Tax calculator"], followUpHours: 24 }), t, t, t)];
 }
 
 /* ---------------------------------------------------------------- images */

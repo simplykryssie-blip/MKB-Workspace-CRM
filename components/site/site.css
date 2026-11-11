@@ -156,3 +156,18 @@
 .mkbsite .wisp .wisp-note { margin: 0; font-size: 12px; color: #666; line-height: 1.5; }
 .mkbsite .wisp ul { margin: 6px 0 14px; padding-left: 20px; line-height: 1.6; }
 .mkbsite .wisp ul li { list-style: disc; }
+
+/* Menu: one line per item; switch to the MENU button before items get squeezed */
+.mkbsite .header .wrap.bar { width: min(calc(100% - 40px), 1320px); }
+.mkbsite .links { gap: 15px; font-size: 10px; letter-spacing: .04em; flex-wrap: nowrap; }
+.mkbsite .links a { white-space: nowrap; }
+@media (max-width: 1180px) {
+  .mkbsite .links { display: none; }
+  .mkbsite .menu { display: block; }
+}
+/* MKB: a larger logo that hangs slightly over the top banner */
+.mkbsite.site-mkb .header .logo { position: relative; z-index: 31; align-self: flex-start; padding-top: 8px; }
+.mkbsite.site-mkb .header .logo img { height: 104px; margin-bottom: -34px; filter: drop-shadow(0 4px 10px rgba(0,0,0,.18)); }
+@media (max-width: 600px) {
+  .mkbsite.site-mkb .header .logo img { height: 72px; margin-bottom: -22px; }
+}

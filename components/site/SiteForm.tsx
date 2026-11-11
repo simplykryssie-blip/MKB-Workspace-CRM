@@ -11,7 +11,7 @@ import type { LeadForm } from "@/lib/forms/config";
  * endpoint as the form's own link, so they become Leads (rate-limited, spam trap,
  * never reads anything back). In the editor preview nothing is sent.
  */
-export function SiteForm({ slug, preview }: { slug: string; preview?: boolean }) {
+export function SiteForm({ slug, preview, afterHref }: { slug: string; preview?: boolean; afterHref?: string }) {
   const sample = SAMPLE_FORMS.find((f) => f.slug === slug) ?? SAMPLE_FORMS[0];
   const [form, setForm] = useState<LeadForm | null | undefined>(BACKEND ? undefined : sample);
   useEffect(() => {
@@ -22,6 +22,8 @@ export function SiteForm({ slug, preview }: { slug: string; preview?: boolean })
     if (!BACKEND || preview) return;
     const r = await fetch(`/api/public/forms/${encodeURIComponent(slug)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ data, honeypot, embed: true }) });
     if (!r.ok) return ((await r.json().catch(() => ({}))) as { error?: string }).error ?? "Something went wrong. Please try again or call us.";
+    // Funnels: go straight on to the next page.
+    if (afterHref) window.location.assign(afterHref);
   };
   if (form === undefined) return <p style={{ color: "#777" }}>Loading…</p>;
   if (!form)

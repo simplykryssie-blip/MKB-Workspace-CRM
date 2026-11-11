@@ -39,6 +39,8 @@ export type Section = {
   note?: string;
   image?: string;
   formSlug?: string;
+  /** Contact form: page to open after someone submits (funnels). */
+  afterHref?: string;
   html?: string;
   height?: number;
 };
@@ -123,6 +125,7 @@ export function cleanSection(x: Partial<Section>): Section {
   if ([2, 3, 4].includes(Number(x.columns))) out.columns = Number(x.columns) as 2 | 3 | 4;
   if (cleanImage(x.image)) out.image = cleanImage(x.image);
   if (s(x.formSlug, 60)) out.formSlug = slugifyPage(s(x.formSlug, 60));
+  if (type === "form" && cleanHref(x.afterHref)) out.afterHref = cleanHref(x.afterHref);
   if (type === "embed") {
     out.html = typeof x.html === "string" ? x.html.slice(0, 60000) : "";
     out.height = Math.min(4000, Math.max(200, Math.round(Number(x.height) || 900)));

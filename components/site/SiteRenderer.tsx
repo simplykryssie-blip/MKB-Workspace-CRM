@@ -19,7 +19,7 @@ export function SiteRenderer({ settings: st, page, sections, nav, base, preview,
   const booking = st.bookingLabel && st.bookingHref ? { label: st.bookingLabel, href: st.bookingHref } : null;
   const year = new Date().getFullYear();
   return (
-    <div className="mkbsite">
+    <div className={`mkbsite site-${site}`}>
       {banner}
       {st.topBar && <div className="topbar">{st.topBar}</div>}
       <header className="header">
@@ -66,11 +66,11 @@ export function SiteRenderer({ settings: st, page, sections, nav, base, preview,
             </div>
             <div>
               <h4>SERVICES</h4>
-              {nav.filter((p) => !["about", "resources", "calculator"].includes(p.slug)).map((p) => <a key={p.slug} href={L(`/${p.slug}`)}>{p.title}</a>)}
+              {nav.filter((p) => !["about", "resources", "calculator", "tax-calculator"].includes(p.slug)).map((p) => <a key={p.slug} href={L(`/${p.slug}`)}>{p.title}</a>)}
             </div>
             <div>
               <h4>EXPLORE</h4>
-              {nav.filter((p) => ["about", "resources", "calculator"].includes(p.slug)).map((p) => <a key={p.slug} href={L(`/${p.slug}`)}>{p.title}</a>)}
+              {nav.filter((p) => ["about", "resources", "calculator", "tax-calculator"].includes(p.slug)).map((p) => <a key={p.slug} href={L(`/${p.slug}`)}>{p.title}</a>)}
               {headerCta && <a href={L(headerCta.href)} {...ext(headerCta.href)}>{headerCta.label}</a>}
               {booking && booking.href !== headerCta?.href && <a href={L(booking.href)} {...ext(booking.href)}>{booking.label}</a>}
               {st.portalHref && <a href={L(st.portalHref)} {...ext(st.portalHref)}>Client Portal Sign In</a>}
@@ -193,7 +193,7 @@ function SectionView({ s, L, ext, base, preview, site }: { s: Section; L: (h: st
           <div className="wrap">
             <Head s={s} />
             {s.body && <div className="lead">{paras(s.body)}</div>}
-            <div className="formbox">{site === "monarch" ? <MonarchSiteForm preview={preview} /> : <SiteForm slug={s.formSlug ?? ""} preview={preview} />}</div>
+            <div className="formbox">{site === "monarch" ? <MonarchSiteForm preview={preview} /> : <SiteForm slug={s.formSlug ?? ""} preview={preview} afterHref={s.afterHref ? L(s.afterHref) : undefined} />}</div>
           </div>
         </section>
       );
