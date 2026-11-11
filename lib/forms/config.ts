@@ -89,7 +89,7 @@ export type LeadForm = {
   fields: FormField[];
   /** Services added to every lead from this form. */
   services: ServiceKey[];
-  routing: { ownerId: string; stageId: string; source: string; sourceDetail?: string; tags: string[]; followUpHours: number };
+  routing: { ownerId: string; stageId: string; source: string; sourceDetail?: string; tags: string[]; followUpHours: number; autoIntake?: AutoIntake };
   thankYou: string;
   createdAt: string;
   updatedAt: string;
@@ -127,6 +127,22 @@ export const sensitiveReason = (f: Pick<FormField, "label" | "help" | "options">
 /** Date fields are blocked when the label suggests a date of birth (caught above); other dates are fine. */
 
 export const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 48) || "form";
+/**
+ * "Start" forms: after submitting, the visitor is emailed their private intake
+ * link automatically (the tax interview or the bookkeeping intake) — the public
+ * form only asks for contact details, never sensitive information.
+ * Tax: `returnFieldId` is the question whose answer (one of TAX_RETURN_CHOICES)
+ * picks the return; `yearFieldId` is sent only when the answer is "Most recent tax year".
+ */
+export type AutoIntake = { kind: "tax" | "books"; returnFieldId?: string; yearFieldId?: string };
+export const TAX_RETURN_CHOICES: Record<string, string> = {
+  "Personal return": "1040",
+  "Self-employed or single-member LLC (Schedule C)": "1040 + Sch C",
+  "S corporation": "1120-S",
+  "Partnership or multi-member LLC": "1065",
+  "C corporation": "1120",
+};
+export const MOST_RECENT_YEAR = "Most recent tax year";
 export const publicPath = (slug: string) => `/f/${slug}`;
 /**
  * Where a form's public page lives. On the live workspace that's MKB's website

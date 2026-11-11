@@ -12,7 +12,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useForms } from "@/lib/store/forms-store";
 import { useLeads } from "@/lib/store/leads-store";
 import { useTeam } from "@/lib/store/team-store";
-import { FIELD_TYPES, MAP_TARGETS, OUTCOME_META, publicOrigin, fid, hasOptions, publicPath, sensitiveReason, type FieldType, type FormField, type LeadForm, type Submission } from "@/lib/forms/config";
+import { FIELD_TYPES, MAP_TARGETS, MOST_RECENT_YEAR, OUTCOME_META, TAX_RETURN_CHOICES, publicOrigin, fid, hasOptions, publicPath, sensitiveReason, type FieldType, type FormField, type LeadForm, type Submission } from "@/lib/forms/config";
 import { SERVICES } from "@/lib/sample-data";
 import { relTime } from "@/lib/format";
 import type { ServiceKey } from "@/lib/types";
@@ -179,6 +179,14 @@ function Settings({ f, can }: { f: LeadForm; can: boolean }) {
             <TextField id="fs-campaign" label="Campaign / detail" value={v.routing.sourceDetail ?? ""} onChange={(e) => setV({ ...v, routing: { ...v.routing, sourceDetail: e.target.value || undefined } })} placeholder="e.g. Spring Facebook ad" />
           </div>
           <SelectField id="fs-follow" label="Follow-up reminder for the assignee" value={String(v.routing.followUpHours)} onChange={(e) => setV({ ...v, routing: { ...v.routing, followUpHours: Number(e.target.value) } })} options={[["4", "Within 4 hours"], ["24", "Within 1 business day"], ["48", "Within 2 business days"]]} />
+          <SelectField id="fs-auto" label="After they submit, automatically email" value={v.routing.autoIntake?.kind ?? ""} onChange={(e) => { const k = e.target.value; const choice = v.fields.filter((x) => x.type === "radio" || x.type === "select"); setV({ ...v, routing: { ...v.routing, autoIntake: k === "tax" ? { kind: "tax", returnFieldId: v.routing.autoIntake?.returnFieldId ?? choice[0]?.id, yearFieldId: v.routing.autoIntake?.yearFieldId } : k === "books" ? { kind: "books" } : undefined } }); }} options={[["", "Nothing — we follow up ourselves"], ["tax", "Their private tax interview link"], ["books", "Their private bookkeeping intake link"]]} />
+          {v.routing.autoIntake?.kind === "tax" && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <SelectField id="fs-auto-ret" label="Question that picks the return" value={v.routing.autoIntake.returnFieldId ?? ""} onChange={(e) => setV({ ...v, routing: { ...v.routing, autoIntake: { ...v.routing.autoIntake!, returnFieldId: e.target.value || undefined } } })} options={[["", "Choose…"], ...v.fields.filter((x) => x.type === "radio" || x.type === "select").map((x) => [x.id, x.label] as [string, string])]} />
+              <SelectField id="fs-auto-year" label="Question that picks the tax year (optional)" value={v.routing.autoIntake.yearFieldId ?? ""} onChange={(e) => setV({ ...v, routing: { ...v.routing, autoIntake: { ...v.routing.autoIntake!, yearFieldId: e.target.value || undefined } } })} options={[["", "None — always the most recent year"], ...v.fields.filter((x) => x.type === "radio" || x.type === "select").map((x) => [x.id, x.label] as [string, string])]} />
+              <p className="text-[12.5px] text-muted sm:col-span-2">The return question&rsquo;s answers must be: {Object.keys(TAX_RETURN_CHOICES).join(" · ")} (anything else, like &ldquo;Not sure&rdquo;, means you follow up). The year question sends only for &ldquo;{MOST_RECENT_YEAR}&rdquo;.</p>
+            </div>
+          )}
           <TextField id="fs-tags" label="Tags (comma-separated)" value={v.routing.tags.join(", ")} onChange={(e) => setV({ ...v, routing: { ...v.routing, tags: e.target.value.split(",").map((t) => t.trim()).filter(Boolean) } })} />
           <div>
             <span className="mb-1.5 block text-[13px] font-medium text-ink-2">Services added to every lead from this form</span>

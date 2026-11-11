@@ -49,6 +49,43 @@ forms = [
    f("crdays", "checkboxes", "Which days work best?", options=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"], required=True),
    f("crtime", "radio", "What time of day?", options=["Morning", "Afternoon", "Either"], required=True),
    NOTES("cr"), CONSENT("cr")]),
+  ("start-tax-prep", "Start: Tax preparation", "Start your tax preparation", "Start: Tax prep", ["tax"],
+   [f("tsh", "heading", "About you"), f("tsname", "text", "Your full name", "fullName", True), f("tsemail", "email", "Email (we'll send your secure link here)", "email", True), f("tsphone", "phone", "Phone", "phone", True),
+    f("tsh2", "heading", "Your return"),
+    f("tsret", "radio", "Which return do you need?", options=["Personal return", "Self-employed or single-member LLC (Schedule C)", "S corporation", "Partnership or multi-member LLC", "C corporation", "Not sure"], required=True),
+    f("tsbiz1", "text", "Business name", "businessName", True, showIf={"fieldId": "fld-tsret", "equals": "S corporation"}),
+    f("tsbiz2", "text", "Business name", "businessName", True, showIf={"fieldId": "fld-tsret", "equals": "Partnership or multi-member LLC"}),
+    f("tsbiz3", "text", "Business name", "businessName", True, showIf={"fieldId": "fld-tsret", "equals": "C corporation"}),
+    f("tsyear", "radio", "Which tax year?", options=["Most recent tax year", "An earlier year"], required=True),
+    f("tsnote", "paragraph", "Next, we'll email you a private link to your secure tax interview. That's where you'll answer the detailed questions and sign — it's protected, so nothing sensitive goes through this page."),
+    CONSENT("ts")], {"kind": "tax", "returnFieldId": "fld-tsret", "yearFieldId": "fld-tsyear"},
+   "Thank you! Watch your email for your private tax interview link — it usually arrives within a few minutes. If you chose \"Not sure\" or an earlier year, we'll reach out within one business day."),
+  ("start-bookkeeping", "Start: Bookkeeping", "Start your bookkeeping", "Start: Bookkeeping", ["books"],
+   [f("sbh", "heading", "About you and your business"), f("sbname", "text", "Your full name", "fullName", True), f("sbemail", "email", "Email (we'll send your secure link here)", "email", True), f("sbphone", "phone", "Phone", "phone", True),
+    f("sbbiz", "text", "Business name", "businessName", True),
+    f("sbtype", "select", "Business type", "entityType", True, ["Sole proprietor", "LLC", "S corporation", "C corporation", "Partnership", "Nonprofit", "Not sure"]),
+    f("sbnote", "paragraph", "Next, we'll email you a private link to your secure bookkeeping intake. You'll tell us about your accounts and how the business runs there, then we'll send your price."),
+    CONSENT("sb")], {"kind": "books"},
+   "Thank you! Watch your email for your private bookkeeping intake link — it usually arrives within a few minutes."),
+  ("start-payroll", "Start: Payroll", "Start your payroll", "Start: Payroll", ["books"],
+   [f("sph", "heading", "About you and your business"), f("spname", "text", "Your full name", "fullName", True), f("spemail", "email", "Email", "email", True), f("spphone", "phone", "Phone", "phone", True),
+    f("spbiz", "text", "Business name", "businessName", True), EMP("sp"), FREQ("sp"),
+    f("spneeds", "checkboxes", "Payroll services you need", options=["Payroll processing", "Payroll tax compliance (federal + 1 state)", "Payroll bookkeeping", "Not sure — help me decide"], required=True),
+    f("spnote", "paragraph", "We'll reach out within one business day to set up your payroll. Employee details are collected later through your secure client portal — please don't include them here."),
+    CONSENT("sp")], None, "Thank you! We'll reach out within one business day to get your payroll started."),
+  ("start-business-solutions", "Start: Business Solutions", "Start your business filing", "Start: Business Solutions", ["biz"],
+   [f("ssh", "heading", "About you"), f("ssname", "text", "Your full name", "fullName", True), f("ssemail", "email", "Email", "email", True), f("ssphone", "phone", "Phone", "phone", True),
+    f("ssbiz", "text", "Business name (or the name you want)", "businessName"),
+    f("ssneed", "checkboxes", "What do you need?", options=["Form an LLC or corporation", "IRS employer ID number application", "Trade name / registration", "Annual report", "Amendment, name change or dissolution", "Operating agreement or resolutions", "Not sure"], required=True),
+    f("ssstate", "select", "Which state?", "state", True, ["Louisiana", "Texas", "Another state"]),
+    f("ssnote", "paragraph", "We'll reach out within one business day to confirm what's needed and the state filing fees before anything is filed."),
+    CONSENT("ss")], None, "Thank you! We'll reach out within one business day."),
+  ("start-record-relief", "Start: Record Relief", "Start your Record Relief paperwork", "Start: Record Relief", ["expunge"],
+   [f("srh", "heading", "About you"), f("srname", "text", "Your full name", "fullName", True), f("sremail", "email", "Email", "email", True), f("srphone", "phone", "Phone", "phone", True),
+    f("srla", "radio", "Is the record you're asking about in Louisiana?", options=["Yes", "No", "Not sure"], required=True),
+    f("srother", "paragraph", "We currently assist with Louisiana records only, so we may not be able to help — but we'll reply and let you know.", showIf={"fieldId": "fld-srla", "equals": "No"}),
+    f("srnote", "paragraph", "Please don't include case details here. After we talk, we'll invite you to your secure client portal to share documents. MKB is not a law firm and does not give legal advice."),
+    CONSENT("sr")], None, "Thank you! We'll reach out within one business day to talk through next steps."),
   ("combined-inquiry", "Bookkeeping + Payroll inquiry", "Bookkeeping + Payroll — request a combined quote", "Bookkeeping + Payroll", ["books"],
    CONTACT("cb") + [f("cbh2", "heading", "Your business"), ENT("cb"), EMP("cb"), TX("cb"), ACCTS("cb"), COND("cb"),
    f("cbbehind", "select", "About how far behind are the books?", options=["Under 6 months", "6–12 months", "More than a year", "Not sure"], showIf={"fieldId": "fld-cbcond", "equals": "More than a year behind / needs cleanup"}),
@@ -59,13 +96,17 @@ forms = [
    SAFE("cb"), NOTES("cb"), CONSENT("cb")]),
 ]
 sql = []
-for slug, name, title, tag, services, fields in forms:
+for row in forms:
+    slug, name, title, tag, services, fields = row[:6]
+    auto = row[6] if len(row) > 6 else None
     routing = {"ownerId": owner, "stageId": stage, "source": "Website", "sourceDetail": name, "tags": ["Website", tag], "followUpHours": 24}
-    thanks = "Thank you! We received your request and will follow up within one business day."
+    if auto: routing["autoIntake"] = auto
+    thanks = row[7] if len(row) > 7 else "Thank you! We received your request and will follow up within one business day."
     sql.append(f"INSERT INTO forms (id, name, slug, title, intro, status, fields, services, routing, thank_you, created_at, updated_at, published_at) VALUES ({q('form-' + slug)}, {q(name)}, {q(slug)}, {q(title)}, NULL, 'published', {q(json.dumps(fields))}, {q(json.dumps(services))}, {q(json.dumps(routing))}, {q(thanks)}, {q(t)}, {q(t)}, {q(t)}) ON CONFLICT(slug) DO UPDATE SET name = excluded.name, title = excluded.title, fields = excluded.fields, routing = excluded.routing, thank_you = excluded.thank_you, status = 'published', updated_at = excluded.updated_at;")
 import re
 SENS=re.compile(r"\b(ssn|social security|tax ?id|itin|\bein\b|bank|routing|account number|credit card|card number|password|date of birth|birth ?date|dob|arrest|conviction|convicted|criminal|charges?|offense|felony|misdemeanor|diagnos|medical record)", re.I)
-for slug,_,_,_,_,fields in forms:
+for row in forms:
+  slug, fields = row[0], row[5]
   for x in fields:
     t=" ".join([x["label"],x.get("help","")]+x.get("options",[]))
     m=SENS.search(t)

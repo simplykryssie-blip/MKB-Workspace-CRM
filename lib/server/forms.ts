@@ -4,12 +4,53 @@
  * rate-limited, checked against the published form, and can only create or add to
  * a lead — never read anything back. Server-only.
  */
-import { FIELD_TYPES, MAP_TARGETS, slugify, type FormField, type LeadForm, type Submission } from "@/lib/forms/config";
+import { FIELD_TYPES, MAP_TARGETS, MOST_RECENT_YEAR, TAX_RETURN_CHOICES, slugify, type AutoIntake, type FormField, type LeadForm, type Submission } from "@/lib/forms/config";
 import { digits, extractLead, publishIssues, validateSubmission, visibleFields } from "@/lib/forms/logic";
 import { all, badRequest, HttpError, json, notFound, now, one, rateLimit, run, str, addMinutes, type AppEnv } from "./core";
 import { randomId } from "./crypto";
 import { notify } from "./notifications";
-import { audit, requirePermission, type Actor } from "./identity";
+import { audit, loadMember, loadPolicy, requirePermission, type Actor } from "./identity";
+import { sendLeadIntake } from "./prospects";
+
+/** Keeps a valid "send the intake automatically" setting (anything else is dropped). */
+function autoIntakeOf(v: unknown): { autoIntake?: AutoIntake } {
+  if (!v || typeof v !== "object") return {};
+  const o = v as Record<string, unknown>;
+  if (o.kind !== "tax" && o.kind !== "books") return {};
+  const id = (x: unknown) => (typeof x === "string" && /^[A-Za-z0-9_-]{1,60}$/.test(x) ? x : undefined);
+  return { autoIntake: { kind: o.kind, ...(o.kind === "tax" ? { returnFieldId: id(o.returnFieldId), yearFieldId: id(o.yearFieldId) } : {}) } };
+}
+
+/**
+ * A "start" form's automatic intake: emails the lead their private intake link
+ * (tax interview or bookkeeping intake), sent as the lead's owner. When it can't
+ * be sent (e.g. "Not sure" which return, an earlier tax year, or the lead already
+ * submitted one), a note on the lead says so and staff send it from the lead.
+ */
+async function sendAutoIntake(env: AppEnv, f: LeadForm, leadId: string, data: Record<string, string>, ip: string) {
+  const ai = f.routing.autoIntake;
+  if (!ai) return;
+  const db = env.DB;
+  const note = (body: string) => db.prepare("INSERT INTO lead_notes (id, lead_id, author_id, body, at) VALUES (?, ?, (SELECT owner_id FROM leads WHERE id = ?), ?, ?)").bind(randomId("n"), leadId, leadId, body, now()).run();
+  const label = ai.kind === "tax" ? "tax interview" : "bookkeeping intake";
+  let extra: { taxYear?: number; form?: string } = {};
+  if (ai.kind === "tax") {
+    const form = TAX_RETURN_CHOICES[(ai.returnFieldId && data[ai.returnFieldId]) || ""];
+    const recent = !ai.yearFieldId || data[ai.yearFieldId] === MOST_RECENT_YEAR;
+    if (!form || !recent) { await note(`The tax interview wasn't sent automatically (${!form ? "they weren't sure which return they need" : "they asked about an earlier tax year"}). Follow up, then send it from this lead.`); return; }
+    extra = { taxYear: new Date().getFullYear() - 1, form };
+  }
+  try {
+    const lead = await one<{ owner_id: string }>(db, "SELECT owner_id FROM leads WHERE id = ?", leadId);
+    const member = lead && (await loadMember(db, lead.owner_id));
+    const user = member && (await one<{ id: string }>(db, "SELECT id FROM users WHERE member_id = ? AND kind = 'staff'", member.id));
+    if (!member || !user) throw new Error("the lead's owner has no staff sign-in");
+    const actor: Actor = { kind: "staff", userId: user.id, member, policy: await loadPolicy(db), ip };
+    await sendLeadIntake(env, actor, leadId, { kind: ai.kind, ...extra });
+  } catch (e) {
+    await note(`The ${label} couldn't be sent automatically: ${e instanceof Error ? e.message : "unknown error"} Send it from this lead.`);
+  }
+}
 
 type FormRow = { id: string; name: string; slug: string; title: string; intro: string | null; status: LeadForm["status"]; fields: string; services: string; routing: string; thank_you: string; created_at: string; updated_at: string; published_at: string | null };
 const toForm = (r: FormRow): LeadForm => ({ id: r.id, name: r.name, slug: r.slug, title: r.title, intro: r.intro ?? undefined, status: r.status, fields: json(r.fields, []), services: json(r.services, []), routing: json(r.routing, { ownerId: "s-mk", stageId: "st-new", source: "Website", tags: [], followUpHours: 24 }), thankYou: r.thank_you, createdAt: r.created_at, updatedAt: r.updated_at, publishedAt: r.published_at ?? undefined });
@@ -47,7 +88,7 @@ async function cleanForm(env: AppEnv, f: LeadForm, id: string) {
     status: (["draft", "published", "archived"] as const).includes(f.status) ? f.status : "draft",
     fields: cleanFields(f.fields),
     services: (Array.isArray(f.services) ? f.services : []).filter((x) => ["tax", "books", "biz", "expunge"].includes(x)),
-    routing: { ownerId: str(r.ownerId, 60) || "s-mk", stageId: str(r.stageId, 60) || "st-new", source: str(r.source, 60) || "Website", sourceDetail: str(r.sourceDetail, 120) || undefined, tags: (Array.isArray(r.tags) ? r.tags : []).map((t) => str(t, 40)).slice(0, 10), followUpHours: [4, 24, 48].includes(Number(r.followUpHours)) ? Number(r.followUpHours) : 24 },
+    routing: { ownerId: str(r.ownerId, 60) || "s-mk", stageId: str(r.stageId, 60) || "st-new", source: str(r.source, 60) || "Website", sourceDetail: str(r.sourceDetail, 120) || undefined, tags: (Array.isArray(r.tags) ? r.tags : []).map((t) => str(t, 40)).slice(0, 10), followUpHours: [4, 24, 48].includes(Number(r.followUpHours)) ? Number(r.followUpHours) : 24, ...autoIntakeOf(r.autoIntake) },
     thank_you: str(f.thankYou, 500) || "Thank you! We'll be in touch.",
   };
 }
@@ -133,6 +174,7 @@ async function process(env: AppEnv, f: LeadForm, raw: Record<string, unknown>, c
       db.prepare("UPDATE leads SET interests = ?, tags = ?, rev = rev + 1, last_activity_at = ? WHERE id = ?").bind(JSON.stringify(interests), JSON.stringify(tags), t, lead.id),
     ]);
     if (channel !== "Staff test") await notify(env, { module: "leads" }, { kind: "form", title: `An open lead submitted the “${f.name}” form again`, href: `/leads/${lead.id}` });
+    if (channel !== "Staff test") await sendAutoIntake(env, f, lead.id, data, ip);
     return { id: subId, outcome: "existing_lead" as const, leadId: lead.id };
   }
   // New lead, routed by the form's settings (falling back safely if the owner or stage changed).
@@ -150,6 +192,7 @@ async function process(env: AppEnv, f: LeadForm, raw: Record<string, unknown>, c
   ]);
   await audit(db, { kind: "anonymous", ip }, { action: "Record update", resource: `Lead ${leadId}`, meta: `Created from the “${f.name}” form (${channel})` });
   if (channel !== "Staff test") await notify(env, { module: "leads" }, { kind: "lead", title: `New lead: ${(L.bizName || L.name || "Website visitor").slice(0, 80)}`, body: `From the “${f.name}” form`, href: `/leads/${leadId}` });
+  if (channel !== "Staff test") await sendAutoIntake(env, f, leadId, data, ip);
   return { id: subId, outcome: "new_lead" as const, leadId };
 }
 
