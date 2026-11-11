@@ -128,7 +128,15 @@ export const sensitiveReason = (f: Pick<FormField, "label" | "help" | "options">
 
 export const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 48) || "form";
 export const publicPath = (slug: string) => `/f/${slug}`;
-export const PUBLIC_ORIGIN = "https://forms.mkb-sample.example.com"; // Phase 3: MKB's real domain
+/**
+ * Where a form's public page lives. On the live workspace that's MKB's website
+ * (www.mkbfinancialgroup.com/f/<slug>); on preview and local copies it's the
+ * address you're using, so links point at that copy's own forms.
+ */
+export const publicOrigin = () => {
+  if (typeof window === "undefined") return "https://www.mkbfinancialgroup.com";
+  return window.location.hostname === "app.mkbfinancialgroup.com" ? "https://www.mkbfinancialgroup.com" : window.location.origin;
+};
 
 export const PREFERRED_CONTACT = ["Phone call", "Text message", "Email"];
 

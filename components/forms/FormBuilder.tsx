@@ -12,7 +12,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useForms } from "@/lib/store/forms-store";
 import { useLeads } from "@/lib/store/leads-store";
 import { useTeam } from "@/lib/store/team-store";
-import { FIELD_TYPES, MAP_TARGETS, OUTCOME_META, PUBLIC_ORIGIN, fid, hasOptions, publicPath, sensitiveReason, type FieldType, type FormField, type LeadForm, type Submission } from "@/lib/forms/config";
+import { FIELD_TYPES, MAP_TARGETS, OUTCOME_META, publicOrigin, fid, hasOptions, publicPath, sensitiveReason, type FieldType, type FormField, type LeadForm, type Submission } from "@/lib/forms/config";
 import { SERVICES } from "@/lib/sample-data";
 import { relTime } from "@/lib/format";
 import type { ServiceKey } from "@/lib/types";
@@ -165,7 +165,7 @@ function Settings({ f, can }: { f: LeadForm; can: boolean }) {
           <TextField id="fs-name" label="Internal name" value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} />
           <TextField id="fs-title" label="Title shown to visitors" value={v.title} onChange={(e) => setV({ ...v, title: e.target.value })} />
           <TextArea id="fs-intro" label="Introduction" value={v.intro ?? ""} onChange={(e) => setV({ ...v, intro: e.target.value })} />
-          <TextField id="fs-slug" label="Link name" hint={`${PUBLIC_ORIGIN}${publicPath(v.slug)}`} value={v.slug} onChange={(e) => setV({ ...v, slug: e.target.value })} />
+          <TextField id="fs-slug" label="Link name" hint={`${publicOrigin()}${publicPath(v.slug)}`} value={v.slug} onChange={(e) => setV({ ...v, slug: e.target.value })} />
           <TextArea id="fs-thanks" label="Thank-you message" value={v.thankYou} onChange={(e) => setV({ ...v, thankYou: e.target.value })} />
         </fieldset>
       </Card>
@@ -194,7 +194,7 @@ function Settings({ f, can }: { f: LeadForm; can: boolean }) {
 
 function Share({ f }: { f: LeadForm }) {
   const toast = useToast();
-  const url = `${PUBLIC_ORIGIN}${publicPath(f.slug)}`;
+  const url = `${publicOrigin()}${publicPath(f.slug)}`;
   const embed = `<iframe src="${url}?embed=1" title="${f.title.replace(/"/g, "&quot;")}" style="width:100%;min-height:780px;border:0" loading="lazy"></iframe>`;
   const copy = (t: string, what: string) => { navigator.clipboard?.writeText(t).catch(() => {}); toast(`${what} copied`); };
   return (
