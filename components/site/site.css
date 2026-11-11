@@ -165,9 +165,11 @@
   .mkbsite .links { display: none; }
   .mkbsite .menu { display: block; }
 }
-/* MKB: a larger logo that hangs slightly over the top banner */
-.mkbsite.site-mkb .header .logo { position: relative; z-index: 31; align-self: flex-start; padding-top: 8px; }
-.mkbsite.site-mkb .header .logo img { height: 104px; margin-bottom: -34px; filter: drop-shadow(0 4px 10px rgba(0,0,0,.18)); }
+/* MKB: a larger logo on a white tab that hangs over the top banner, so the
+   small "FINANCIAL GROUP" line under the letters stays readable */
+.mkbsite.site-mkb .header .logo { position: relative; z-index: 31; align-self: flex-start; background: #fff; padding: 10px 18px 12px; margin-top: 4px; border-radius: 0 0 14px 14px; box-shadow: 0 10px 24px rgba(0,0,0,.18); }
+.mkbsite.site-mkb .header .logo img { height: 128px; display: block; }
 @media (max-width: 600px) {
-  .mkbsite.site-mkb .header .logo img { height: 72px; margin-bottom: -22px; }
+  .mkbsite.site-mkb .header .logo { padding: 6px 12px 8px; }
+  .mkbsite.site-mkb .header .logo img { height: 84px; }
 }
