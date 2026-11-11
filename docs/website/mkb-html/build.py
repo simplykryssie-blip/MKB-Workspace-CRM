@@ -101,7 +101,7 @@ h3{font-size:25px;line-height:1.2;color:#FBF7EE;margin-bottom:10px}
 
 /* ---------- hero ---------- */
 .hero{position:relative;overflow:hidden;background:#070707;min-height:640px;display:flex;align-items:center}
-.hero .photo{position:absolute;inset:0 0 0 auto;width:58%;background-size:cover;background-position:center 8%}
+.hero .photo{position:absolute;inset:0 0 0 auto;width:58%;background-size:cover;background-position:center top}
 .hero .photo::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,#070707 0%,rgba(7,7,7,.92) 14%,rgba(7,7,7,.45) 42%,rgba(7,7,7,.12) 70%,rgba(7,7,7,.35) 100%),linear-gradient(0deg,rgba(7,7,7,.75),rgba(7,7,7,0) 30%)}
 .hero .glow{position:absolute;inset:auto auto -30% -10%;width:70%;height:90%;background:radial-gradient(closest-side,rgba(201,150,60,.16),rgba(201,150,60,0));pointer-events:none}
 .hero .wrap{position:relative;z-index:2;padding:110px 0 96px}
@@ -147,7 +147,7 @@ h3{font-size:25px;line-height:1.2;color:#FBF7EE;margin-bottom:10px}
 /* split */
 .split{display:grid;grid-template-columns:1.05fr .95fr;gap:72px;align-items:center}
 .portrait{position:relative;border-radius:12px;overflow:hidden}
-.portrait img{width:100%;height:100%;object-fit:cover}
+.portrait img{width:100%;height:100%;object-fit:cover;object-position:center top}
 .portrait.framed{padding:1px;background:var(--gold-foil)}
 .portrait.framed img{border-radius:11px}
 .portrait.tall img{aspect-ratio:4/5}
@@ -181,7 +181,7 @@ h3{font-size:25px;line-height:1.2;color:#FBF7EE;margin-bottom:10px}
 .on-light .notice p{color:var(--ink-2)}
 
 /* faq */
-.faq{display:grid;gap:12px;max-width:880px}
+.faq{display:grid;gap:12px;max-width:880px;width:100%}
 .faq details{border-radius:10px;background:#FFFDF8;border:1px solid #E4DCCB;padding:0 24px}
 .faq summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;gap:20px;align-items:center;padding:20px 0;font:600 16.5px/1.4 var(--sans);color:var(--ink)}
 .faq summary::-webkit-details-marker{display:none}
@@ -219,6 +219,30 @@ h3{font-size:25px;line-height:1.2;color:#FBF7EE;margin-bottom:10px}
 .social a{width:40px;height:40px;display:grid;place-items:center;border-radius:50%;border:1px solid #2e2920;margin:0}
 .social svg{width:17px;height:17px;stroke:#E8C46B;fill:none;stroke-width:1.7}
 
+/* timeline, tables, resources */
+.timeline{display:grid;grid-template-columns:repeat(4,1fr);gap:22px;counter-reset:t}
+.timeline .card{padding-top:30px}
+.timeline .step{display:flex;align-items:center;gap:14px;margin-bottom:16px}
+.timeline .step b{width:44px;height:44px;flex:none;display:grid;place-items:center;border-radius:50%;font:700 19px/1 var(--sans);color:#1B1306;text-shadow:0 1px 0 rgba(255,240,190,.6);background:var(--foil-sheen),var(--gold-foil);box-shadow:inset 0 1px 0 rgba(255,248,215,.8)}
+.tbl{width:100%;border-collapse:collapse;font-size:15px}
+.tbl th{text-align:left;font:700 11px/1 var(--sans);letter-spacing:.2em;text-transform:uppercase;color:#8A5F1D;padding:14px 16px;border-bottom:1px solid #D9CFBB}
+.tbl td{padding:14px 16px;border-bottom:1px solid #E4DCCB;color:var(--ink-2);vertical-align:top}
+.tbl td:first-child{white-space:nowrap;font:600 17px/1.3 var(--serif);color:var(--ink)}
+.tblwrap{overflow-x:auto;border-radius:10px;background:#FFFDF8;border:1px solid #E4DCCB}
+.jump{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
+.jump a{padding:10px 16px;border-radius:30px;font:600 13px/1 var(--sans);color:#E9E2D2;background:linear-gradient(#0D0C0B,#0D0C0B) padding-box,var(--gold-foil) border-box;border:1px solid transparent}
+.jump a:hover{color:#F6DFA0}
+.links-grid a{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px 18px;border-radius:10px;background:#FFFDF8;border:1px solid #E4DCCB;color:var(--ink);font-weight:600}
+.links-grid a small{display:block;font-weight:400;color:var(--ink-2);font-size:13px;margin-top:2px}
+.links-grid a:hover{border-color:#C9A253}
+.links-grid a svg{width:16px;height:16px;flex:none;color:#8A5F1D}
+.check2{columns:2;column-gap:40px}
+.check2 li{break-inside:avoid}
+.printbtn{border:0;cursor:pointer}
+@media print{.site-header,.site-footer,.cta,.hero,.jump,.printbtn{display:none!important}body{background:#fff;color:#000}.sec{padding:20px 0!important;background:#fff!important}}
+@media (max-width:980px){.timeline{grid-template-columns:repeat(2,1fr)}.check2{columns:1}}
+@media (max-width:640px){.timeline{grid-template-columns:1fr}}
+
 /* funnel pages: no menu */
 .slim .bar{justify-content:center}
 
@@ -229,7 +253,7 @@ h3{font-size:25px;line-height:1.2;color:#FBF7EE;margin-bottom:10px}
   .split{grid-template-columns:1fr;gap:42px}
   .foot{grid-template-columns:1fr 1fr}
   .hero{flex-direction:column;align-items:stretch}
-  .hero .photo{position:relative;inset:auto;width:100%;height:440px;background-position:center 12%}
+  .hero .photo{position:relative;inset:auto;width:100%;height:460px;background-position:center top}
   .hero .photo::after{background:linear-gradient(0deg,#070707 0%,rgba(7,7,7,.25) 45%,rgba(7,7,7,0) 70%)}
   .hero .photo+.glow+.wrap{padding-top:8px}
 }
@@ -285,7 +309,7 @@ NAV = [
 
 def header(slim=False):
   if slim:
-    return f'<header class="site-header slim"><div class="wrap bar"><a class="brand" href="/" aria-label="MKB Financial Group home"><img src="{M}mkb-logo-header.webp" alt="MKB Financial Group" width="600" height="297"></a></div></header>'
+    return f'<header class="site-header slim"><div class="wrap bar"><a class="brand" href="/" aria-label="MKB Financial Group home"><img src="{M}mkb-logo-header.webp" alt="MKB Financial Group" width="600" height="273"></a></div></header>'
   items = []
   for label, href, sub in NAV:
     if sub:
@@ -300,7 +324,7 @@ def header(slim=False):
     else:
       mob.append(f'<a href="{href}">{e(label)}</a>')
   return f'''<header class="site-header"><div class="wrap bar" style="position:relative">
-<a class="brand" href="/" aria-label="MKB Financial Group home"><img src="{M}mkb-logo-header.webp" alt="MKB Financial Group" width="600" height="297"></a>
+<a class="brand" href="/" aria-label="MKB Financial Group home"><img src="{M}mkb-logo-header.webp" alt="MKB Financial Group" width="600" height="273"></a>
 <nav aria-label="Main"><ul class="nav">{"".join(items)}</ul></nav>
 <div class="header-cta"><a class="portal" href="{PORTAL}">{LOCK}Client Portal</a><a class="metallic-gold-button" href="/contact">Book a Consultation</a></div>
 <details class="mnav"><summary aria-label="Open menu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></summary><div class="panel">{"".join(mob)}<div class="btns"><a class="metallic-gold-button" href="/contact">Book a Consultation</a><a class="portal" href="{PORTAL}" style="justify-content:center">{LOCK}Client Portal</a></div></div></details>
@@ -311,7 +335,7 @@ def footer(slim=False):
     return f'<footer class="site-footer" style="padding:40px 0"><div class="wrap"><hr class="metallic-gold-divider"><div class="legal"><span>© 2026 MKB Financial Group. All rights reserved.</span><span>{PHONE} · {EMAIL}</span></div></div></footer>'
   return f'''<footer class="site-footer"><div class="wrap">
 <div class="foot">
- <div><a class="logo" href="/"><img src="{M}mkb-logo-gold.webp" alt="MKB Financial Group — Strategy, Growth, Legacy" width="900" height="518"></a><p class="blurb">Professional financial services for entrepreneurs building something real.</p></div>
+ <div><a class="logo" href="/"><img src="{M}mkb-logo-gold.webp" alt="MKB Financial Group — Strategy, Growth, Legacy" width="900" height="485"></a><p class="blurb">Professional financial services for entrepreneurs building something real.</p></div>
  <div><h4 class="metallic-gold-text">Services</h4><a href="/bookkeeping">Bookkeeping</a><a href="/business-services">Business Services</a><a href="/tax-preparation">Tax Preparation</a><a href="/payroll">Payroll</a><a href="/record-expungement">Record Relief</a></div>
  <div><h4 class="metallic-gold-text">Explore</h4><a href="/about">About MKB</a><a href="/resources">Resources</a><a href="/tax-calculator">Tax Calculator</a><a href="/contact">Book a Consultation</a><a href="{PORTAL}">Client Portal Sign In</a></div>
  <div><h4 class="metallic-gold-text">Contact</h4><a href="tel:8333793320">{PHONE}</a><a href="mailto:{EMAIL}">{EMAIL}</a><p>Louisiana • Texas • Virtual</p>
@@ -443,18 +467,24 @@ pages["payroll"] = page("Payroll | MKB Financial Group", "Payroll processing fro
   + f'''<section class="sec cream on-light" id="pricing"><div class="wrap">{head("Full payroll processing", "Priced by the size of your team.", center=True)}
 <div class="grid g4">{pricing([("1–5 workers", "Starter", "$175", "/month", "Recurring payroll processing for 1–5 workers. Includes employees, contractors paid through payroll, and owners processed through payroll."), ("6–10 workers", "Growing", "$275", "/month", "Recurring payroll processing for 6–10 workers with the same core processing scope."), ("11–25 workers", "Expanding", "$425", "/month", "Recurring payroll processing for 11–25 workers as payroll volume increases."), ("26–50 workers", "Established", "$650", "/month", "Recurring payroll processing for 26–50 workers. Higher-volume payroll requires an organized recurring process.")])}</div>
 <p class="note center">Worker count includes employees, contractors paid through payroll, and owners processed through payroll. Owner draws/distributions remain bookkeeping transactions unless the owner is processed through payroll.</p></div></section>
-<section class="sec light on-light"><div class="wrap">{head("Payroll tax compliance", "Federal + 1 state base scope.", center=True)}
-<div class="grid g4">{pricing([("1–5 workers", "1–5", "$125", "/month", ""), ("6–10 workers", "6–10", "$175", "/month", ""), ("11–25 workers", "11–25", "$250", "/month", ""), ("26–50 workers", "26–50", "$350", "/month", "")])}</div></div></section>
+<section class="sec light on-light"><div class="wrap">{head("Payroll tax compliance", "Stay on top of payroll taxes.", "Federal + 1 state base scope, priced by the size of your team.", center=True)}
+<div class="grid g4">{pricing([("1–5 workers", "Starter Compliance", "$125", "/month", "Payroll tax compliance for teams of 1–5 workers. Federal and one state included."), ("6–10 workers", "Growing Compliance", "$175", "/month", "Payroll tax compliance for teams of 6–10 workers. Federal and one state included."), ("11–25 workers", "Expanding Compliance", "$250", "/month", "Payroll tax compliance for teams of 11–25 workers. Federal and one state included."), ("26–50 workers", "Established Compliance", "$350", "/month", "Payroll tax compliance for teams of 26–50 workers. Federal and one state included.")])}
+<p class="note center">Payroll tax compliance is a separate service from payroll processing. Pair it with a processing package to keep payroll and payroll taxes handled together.</p></div></div></section>
 <section class="sec dark2"><div class="wrap">{head("Three different services", "Run it. File it. Record it.")}{cards([("Processing", "Run Payroll", "Recurring payroll processing within the selected worker tier."), ("Compliance", "Handle Payroll Taxes", "Payroll tax compliance is a separate service."), ("Bookkeeping", "Record Payroll", "Payroll bookkeeping records and reconciles payroll activity when included.")], 3)}</div></section>
 <section class="sec charcoal"><div class="wrap" style="max-width:900px">{notice("Your payroll doesn’t stop at payday.", ["Payroll activity affects financial statements. Connecting payroll to bookkeeping keeps the financial side organized."])}</div></section>
 {cta(f"Your team deserves a {gold('payroll system that works.')}")}''')
 
 pages["record-expungement"] = page("Record Relief | MKB Financial Group", "Administrative help and document preparation for people seeking a record expungement. MKB is not a law firm and does not give legal advice.",
-  hero("Record Relief", f"Help with the paperwork behind a {gold('fresh start.')}", "MKB Financial Group provides administrative assistance and document preparation for people pursuing a record expungement. We help you gather your information, request your records and prepare your paperwork — and we keep you updated along the way.", btn("Book a Consultation", "/contact"))
-  + f'''<section class="sec dark2"><div class="wrap">{head("How we help", "Administrative assistance, step by step.")}{cards([("1", "Intake", "We collect your information and organize it in one place."), ("2", "Records requests", "We help you request the records and court documents needed for your paperwork."), ("3", "Document preparation", "We prepare your documents from the information you provide, for you to review before anything is used."), ("4", "Updates", "You can see where your paperwork stands in your client portal.")], 4)}</div></section>
-<section class="sec dark"><div class="wrap" style="max-width:900px"><span class="eyebrow gold">Important</span>{notice("What we do — and what we don’t", ["MKB Financial Group provides administrative assistance and document preparation. MKB is not a law firm and does not provide legal advice or representation.", "We do not decide whether you are eligible for an expungement, and completing our intake does not mean you are eligible. Courts and agencies make their own determinations, and we cannot promise an outcome or a timeline.", "For legal advice about your situation, please consult a licensed attorney."])}</div></section>
-<section class="sec cream on-light"><div class="wrap">{head("Questions", "Common questions.")}{faq([("Can you tell me if I’m eligible?", "No. We can’t determine eligibility or give legal advice. Eligibility is decided under the law that applies to your record, by the court or agency involved. For advice about your situation, consult a licensed attorney."), ("Do you guarantee my record will be expunged?", "No. Courts and agencies make their own decisions, and we cannot promise any outcome."), ("How long does it take?", "It depends on the agencies and courts involved, including how long records requests take. We can’t promise a timeframe, but you can follow your progress in your client portal."), ("Are you a law firm?", "No. MKB Financial Group is not a law firm and does not provide legal advice or representation.")])}</div></section>
-{cta(f"Have questions about our {gold('record relief')} assistance?")}''')
+  hero("Record Relief", f"Help with the paperwork behind a {gold('fresh start.')}", "MKB Financial Group provides administrative assistance and document preparation for people pursuing a record expungement. We help you gather your information, request your records and prepare your paperwork — and we keep you updated along the way.", btn("Book a Consultation", "/contact") + obtn("How it works", "#how"), photo="founder-reading.webp")
+  + f'''<section class="sec dark2" id="how"><div class="wrap">{head("How we help", "Administrative assistance, step by step.", "A clear process, with you informed at every stage.", center=True)}
+<div class="timeline">''' + "".join(f'<div class="card"><div class="step"><b>{n}</b>{icon(ic, 32)}</div><h3>{t}</h3><p>{b}</p></div>' for n, ic, t, b in [("1", "clarity", "Intake", "We collect your information and organize it in one place, so nothing gets lost along the way."), ("2", "tax", "Records requests", "We help you request the records and court documents needed for your paperwork."), ("3", "structure", "Document preparation", "We prepare your documents from the information you provide, for you to review before anything is used."), ("4", "ahead", "Updates", "You can see where your paperwork stands in your client portal, step by step.")]) + f'''</div></div></section>
+<section class="sec light on-light"><div class="wrap split"><div>{head("Who this is for", "Organized help for a paperwork-heavy process.", "Record relief involves forms, records requests, deadlines and follow-up. We handle the administrative side so you can stay focused on moving forward.")}
+<ul class="ticks"><li>People with an arrest or conviction record who want help organizing the paperwork.</li><li>People who need help requesting their records and court documents.</li><li>Anyone who wants the administrative steps handled carefully and kept on track.</li></ul></div>
+<div class="card"><span class="num">BEFORE YOU START</span><h3>What to have ready</h3><ul class="ticks"><li>A government-issued photo ID.</li><li>Your current contact information.</li><li>Any court papers, case numbers or arrest records you already have.</li><li>The parish or county and approximate dates of the record you&rsquo;re asking about.</li><li>Your questions — write them down so we can go over them together.</li></ul><p style="margin-top:14px">Don&rsquo;t have everything? That&rsquo;s okay — helping you request what&rsquo;s missing is part of the process.</p></div></div></section>
+<section class="sec dark"><div class="wrap split"><div class="portrait framed" style="max-width:520px"><img src="{M}founder-headshot.webp" alt="The founder of MKB Financial Group" loading="lazy" width="583" height="572"></div>
+<div><span class="eyebrow gold">Important</span>{notice("What we do — and what we don’t", ["MKB Financial Group provides administrative assistance and document preparation. MKB is not a law firm and does not provide legal advice or representation.", "We do not decide whether you are eligible for an expungement, and completing our intake does not mean you are eligible. Courts and agencies make their own determinations, and we cannot promise an outcome or a timeline.", "For legal advice about your situation, please consult a licensed attorney."])}</div></div></section>
+<section class="sec cream on-light"><div class="wrap">{head("Questions", "Common questions.", center=True)}<div style="display:grid;justify-items:center">{faq([("Can you tell me if I’m eligible?", "No. We can’t determine eligibility or give legal advice. Eligibility is decided under the law that applies to your record, by the court or agency involved. For advice about your situation, consult a licensed attorney."), ("Do you guarantee my record will be expunged?", "No. Courts and agencies make their own decisions, and we cannot promise any outcome."), ("How long does it take?", "It depends on the agencies and courts involved, including how long records requests take. We can’t promise a timeframe, but you can follow your progress in your client portal."), ("Are you a law firm?", "No. MKB Financial Group is not a law firm and does not provide legal advice or representation."), ("What does it cost?", "We’ll go over our fees before any work begins. Court and agency fees, if any, are separate.")])}</div></div></section>
+{cta(f"Ready to get your paperwork {gold('organized?')}")}''')
 
 pages["about"] = page("About MKB | MKB Financial Group", "MKB Financial Group helps business owners understand, organize and strengthen the financial side of their businesses.",
   hero("About MKB Financial Group", f"We didn’t build MKB just to {gold('file tax returns.')}", "MKB was built to help business owners understand, organize, and strengthen the financial side of their businesses.", btn("Book a Consultation", "/contact"), photo="founder-office-folder.webp")
@@ -466,13 +496,51 @@ pages["about"] = page("About MKB | MKB Financial Group", "MKB Financial Group he
 <section class="sec cream on-light"><div class="wrap">{head("Who we serve", "Wherever you are in the journey.", center=True)}{cards([("01", "New Entrepreneurs", "Starting and establishing a financial foundation."), ("02", "Growing Businesses", "Building stronger systems as the business changes."), ("03", "Established Businesses", "Maintaining organization as complexity increases.")], 3)}</div></section>
 {cta(f"You’re building something. Let’s build the {gold('foundation')} with it.")}''')
 
-pages["resources"] = page("Resources | MKB Financial Group", "Bookkeeping basics, tax and payroll explainers, a business owner checklist and answers to common questions.",
-  hero("MKB Resources", f"Understand your business beyond the {gold('bank balance.')}", "Practical information for business owners who want to understand their books, taxes, payroll, financial responsibilities, and the decisions that come with running a business.", btn("Free Tax Calculator", "/tax-calculator") + obtn("Book a Consultation", "/contact"))
-  + f'''<section class="sec dark2"><div class="wrap">{head("Start here", "Resources built around the questions business owners actually ask.")}{cards([("01 • Bookkeeping", "Know your numbers.", "Learn how to read your P&L, Balance Sheet, Cash Flow, reconcile accounts, organize receipts, and understand what your books are telling you."), ("02 • Tax", "Prepare and plan.", "Understand tax documents, preparation, estimated-tax concepts, deductions, and why tax planning should happen before the filing deadline."), ("03 • Payroll", "Keep payroll organized.", "Learn the difference between payroll processing, payroll tax compliance, and payroll bookkeeping—and why each matters."), ("04 • Business", "Build the foundation.", "Business setup, financial systems, banking, QuickBooks organization, and the administrative practices that support growth.")], 4)}</div></section>
-<section class="sec cream on-light"><div class="wrap">{head("Bookkeeping basics", "Your books are more than a record of what already happened.", "Use financial statements to understand revenue, expenses, profitability, cash position, and trends. Good bookkeeping gives you organized information to work from.")}{cards([("01", "Profit & Loss", "Understand income and expenses."), ("02", "Balance Sheet", "Understand what the business owns and owes."), ("03", "Cash Flow", "Understand how money moves."), ("04", "Reconciliations", "Make sure records agree with financial accounts.")], 4)}</div></section>
-<section class="sec dark"><div class="wrap" style="max-width:900px"><span class="eyebrow gold">Tax & compliance</span>{notice("Tax season should not be the first time you look at your numbers.", ["Organized records make tax preparation easier to support. Planning is different from preparation: preparation reports what happened; planning considers future decisions and their potential tax effects.", "For specific tax advice, filing requirements, deadlines, or current law, work with your tax professional based on your circumstances."])}</div></section>
-<section class="sec light on-light"><div class="wrap">{head("Business owner checklist", "A simple rhythm for staying on top of it.")}{cards([("Monthly", "Close the books.", "Reconcile accounts, review financial statements, categorize outstanding items, and identify unusual activity."), ("Quarterly", "Review the direction.", "Look at revenue, expenses, cash, profitability, and major changes in the business."), ("Annually", "Prepare for the next year.", "Organize tax documents, review systems, evaluate recurring costs, and plan the financial priorities ahead.")], 3)}</div></section>
-<section class="sec cream on-light"><div class="wrap">{head("Frequently asked questions", "Quick answers.")}{faq([("What is bookkeeping?", "Bookkeeping is the ongoing organization and recording of financial activity so a business has reliable financial records."), ("How often should a business reconcile its accounts?", "Frequency depends on transaction volume and business needs. MKB’s core bookkeeping service is monthly, with biweekly and weekly upgrades available."), ("What financial statements should a business owner review?", "Common core statements include the Profit & Loss, Balance Sheet, and Cash Flow statement."), ("Is bookkeeping the same as tax preparation?", "No. Bookkeeping organizes financial records throughout the year. Tax preparation uses relevant financial and tax information to prepare and file a return."), ("Is payroll included with bookkeeping?", "Payroll processing and payroll tax compliance are separate services. Payroll bookkeeping addresses the recording and reconciliation of payroll activity."), ("Can MKB help if my books are behind?", "Yes. Catch-up and historical cleanup are available as separate, assessment-based services."), ("Can MKB tell me what I should do for my specific tax situation?", "MKB can explain the services it provides and help organize information. Specific tax advice depends on your circumstances and the scope of services engaged.")])}</div></section>
+EXT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg>'
+def links(items): return '<div class="grid g2 links-grid">' + "".join(f'<a href="{h}" target="_blank" rel="noopener noreferrer"><span>{e(t)}<small>{e(d)}</small></span>{EXT}</a>' for t, d, h in items) + '</div>'
+def table(rows, cols): return '<div class="tblwrap"><table class="tbl"><thead><tr>' + "".join(f"<th>{c}</th>" for c in cols) + '</tr></thead><tbody>' + "".join("<tr>" + "".join(f"<td>{e(c)}</td>" for c in r) + "</tr>" for r in rows) + '</tbody></table></div>'
+
+pages["resources"] = page("Resources | MKB Financial Group", "Key tax dates, a tax document checklist, record-keeping guide, payroll basics, a business setup checklist and links to official IRS, Louisiana and Texas websites.",
+  hero("MKB Resources", f"Tools and checklists for {gold('business owners.')}", "Key tax dates, what documents to gather, how long to keep records, payroll basics, a business setup checklist, and the official websites you’ll actually use.", btn("Free Tax Calculator", "/tax-calculator") + obtn("Book a Consultation", "/contact"))
+  + f'''<section class="sec dark2" style="padding:48px 0"><div class="wrap jump"><a href="#dates">Key tax dates</a><a href="#documents">Tax document checklist</a><a href="#records">How long to keep records</a><a href="#payroll">Payroll basics</a><a href="#setup">Business setup checklist</a><a href="#statements">Reading your statements</a><a href="#links">Official websites</a></div></section>
+
+<section class="sec cream on-light" id="dates"><div class="wrap">{head("Calendar", "Key federal tax dates.", "For calendar-year taxpayers. When a date falls on a weekend or legal holiday, the deadline moves to the next business day. Always confirm current deadlines at IRS.gov.")}
+{table([("January 15", "4th-quarter estimated tax payment (for the prior year)."), ("January 31", "W-2s and 1099-NECs due to workers and to the IRS/SSA. Form 941 (4th quarter) and Form 940 (annual federal unemployment) due."), ("March 15", "Partnership (Form 1065) and S corporation (Form 1120-S) returns — or extensions — due."), ("April 15", "Individual returns (Form 1040) and calendar-year C corporation returns (Form 1120) — or extensions — due. 1st-quarter estimated tax payment due."), ("April 30", "Form 941 for the 1st quarter."), ("June 15", "2nd-quarter estimated tax payment."), ("July 31", "Form 941 for the 2nd quarter."), ("September 15", "3rd-quarter estimated tax payment. Extended partnership and S corporation returns due."), ("October 15", "Extended individual returns due (and extended calendar-year C corporation returns)."), ("October 31", "Form 941 for the 3rd quarter.")], ["Date", "What’s due"])}</div></section>
+
+<section class="sec light on-light" id="documents"><div class="wrap">{head("Checklist", "Tax document checklist.", "What to gather before your appointment. Not every item applies to everyone.")}
+<div class="grid g2">
+<div class="card"><span class="num">INDIVIDUALS</span><h3>Personal return</h3><ul class="ticks"><li>Photo ID for you (and your spouse), and Social Security cards or ITIN letters for everyone on the return</li><li>Last year’s tax return</li><li>W-2s from every job</li><li>1099s — 1099-NEC, 1099-K, 1099-INT, 1099-DIV, 1099-R, 1099-G, SSA-1099</li><li>1098 mortgage interest and property tax statements</li><li>1098-T (tuition) and 1098-E (student loan interest)</li><li>1095-A if you had Marketplace health coverage</li><li>Childcare provider name, address, tax ID and amount paid</li><li>Records of estimated tax payments you made</li><li>Bank routing and account number for direct deposit</li></ul></div>
+<div class="card"><span class="num">BUSINESS OWNERS</span><h3>Business or self-employment</h3><ul class="ticks"><li>Profit & Loss and Balance Sheet for the year (or your books)</li><li>1099-NEC and 1099-K forms you received</li><li>Business bank and credit card statements</li><li>Receipts and records for business expenses</li><li>Mileage log and vehicle information</li><li>Home office square footage and home expenses, if you use one</li><li>Payroll reports, W-2s and 1099s you issued</li><li>Asset purchases (equipment, vehicles) with dates and amounts</li><li>Prior-year business return and EIN letter</li><li>Estimated tax payments made for the business</li></ul></div>
+</div>
+<div class="actions" style="margin-top:26px"><button class="metallic-gold-button printbtn" onclick="window.print()">Print this page</button></div></div></section>
+
+<section class="sec dark2" id="records"><div class="wrap split"><div>{head("Record keeping", f"How long to {gold('keep your records.')}", "General IRS guidelines for federal tax records. Keep records longer if they support something that affects a future return.")}</div>
+<ul class="ticks"><li><b style="color:#F4EBD6">3 years</b> from when you filed — the general rule for most tax records.</li><li><b style="color:#F4EBD6">6 years</b> if income you should have reported was left off and it’s more than 25% of what you did report.</li><li><b style="color:#F4EBD6">7 years</b> if you claimed a loss from worthless securities or a bad debt deduction.</li><li><b style="color:#F4EBD6">At least 4 years</b> for employment tax records after the tax is due or paid.</li><li><b style="color:#F4EBD6">Property records</b> until the period of limitations ends for the year you sell or dispose of the property.</li><li><b style="color:#F4EBD6">Indefinitely</b> if a return wasn’t filed or was fraudulent.</li></ul></div></section>
+
+<section class="sec cream on-light" id="payroll"><div class="wrap">{head("Payroll", "Payroll basics for employers.", "The core forms and steps that come with having employees.")}
+<div class="grid g3">
+<div class="card"><span class="num">WHEN YOU HIRE</span><h3>New employees</h3><ul class="ticks"><li>Form W-4 — federal withholding</li><li>Form I-9 — employment eligibility</li><li>State new-hire reporting (Louisiana and Texas both require it)</li><li>Their pay rate, schedule and payment method</li></ul></div>
+<div class="card"><span class="num">EVERY PAYROLL</span><h3>Each pay period</h3><ul class="ticks"><li>Withhold federal income tax, Social Security and Medicare</li><li>Withhold state income tax where it applies (Louisiana has one; Texas does not)</li><li>Deposit payroll taxes on your required schedule</li><li>Keep pay stubs and payroll records</li></ul></div>
+<div class="card"><span class="num">QUARTERLY & YEARLY</span><h3>Reporting</h3><ul class="ticks"><li>Form 941 — each quarter</li><li>State unemployment reports — each quarter</li><li>Form 940 — once a year</li><li>W-2s to employees and the SSA by January 31</li></ul></div>
+</div></div></section>
+
+<section class="sec light on-light" id="setup"><div class="wrap">{head("Checklist", "Business setup checklist.", "The foundation every new business should have in place.")}
+<div class="card"><ul class="ticks check2"><li>Choose your business structure (sole proprietor, LLC, corporation).</li><li>Register your business with your state (links below).</li><li>Get your EIN — it’s free from the IRS.</li><li>Open a separate business bank account.</li><li>Set up a bookkeeping system from day one.</li><li>Keep receipts and records for every business expense.</li><li>Get local licenses and permits for your city or parish/county.</li><li>Register for sales tax if you sell taxable goods or services.</li><li>Set up payroll before you hire your first employee.</li><li>Put your filing deadlines and annual report date on a calendar.</li></ul></div></div></section>
+
+<section class="sec dark2" id="statements"><div class="wrap">{head("Know your numbers", "Reading your financial statements.", "What each statement tells you — and what to look for.")}
+{cards([("Profit & Loss", "Are you making money?", "Shows income and expenses over a period. Look at whether revenue is growing, which expenses are rising, and your profit margin month to month."), ("Balance Sheet", "What does the business own and owe?", "Shows assets, liabilities and equity at a point in time. Watch cash on hand, money owed to you, and debts coming due."), ("Cash Flow", "Where did the cash go?", "Shows how money moved in and out. A business can be profitable and still run short on cash — this statement shows why."), ("Reconciliation", "Do your books match the bank?", "Compares your records to bank and credit card statements so errors and missing transactions get caught early.")], 4)}</div></section>
+
+<section class="sec cream on-light" id="links"><div class="wrap">{head("Official websites", "Where to go — and where to look things up.", "Bookmark these. They’re the official sources for refunds, payments, registrations and state taxes.")}
+<span class="eyebrow gold">IRS</span>
+{links([("Where’s My Refund?", "Check the status of your federal refund", "https://www.irs.gov/wheres-my-refund"), ("IRS Direct Pay", "Pay federal taxes from your bank account", "https://www.irs.gov/payments/direct-pay"), ("Get your tax transcript", "Past returns and account information", "https://www.irs.gov/individuals/get-transcript"), ("Apply for an EIN", "Free from the IRS — never pay a third party", "https://www.irs.gov/businesses/small-businesses-self-employed/get-an-employer-identification-number"), ("Tax Withholding Estimator", "Check your W-4 withholding", "https://www.irs.gov/individuals/tax-withholding-estimator"), ("Small business tax center", "IRS guides for business owners", "https://www.irs.gov/businesses/small-businesses-self-employed")])}
+<span class="eyebrow gold" style="margin-top:34px">Louisiana</span>
+{links([("geauxBIZ — Secretary of State", "Register and maintain your Louisiana business", "https://geauxbiz.sos.la.gov"), ("Louisiana Department of Revenue", "State income, sales and withholding tax", "https://revenue.louisiana.gov"), ("Louisiana Workforce Commission", "Unemployment insurance and new-hire reporting", "https://www.laworks.net")])}
+<span class="eyebrow gold" style="margin-top:34px">Texas</span>
+{links([("Texas Secretary of State — SOSDirect", "Register and maintain your Texas business", "https://www.sos.state.tx.us/corp/sosda/index.shtml"), ("Texas Comptroller", "Sales tax, franchise tax and permits", "https://comptroller.texas.gov"), ("Texas Workforce Commission", "Unemployment tax and employer resources", "https://www.twc.texas.gov")])}
+</div></section>
+
+<section class="sec light on-light"><div class="wrap">{head("Frequently asked questions", "Quick answers.")}{faq([("What is bookkeeping?", "Bookkeeping is the ongoing organization and recording of financial activity so a business has reliable financial records."), ("How often should a business reconcile its accounts?", "Frequency depends on transaction volume and business needs. MKB’s core bookkeeping service is monthly, with biweekly and weekly upgrades available."), ("Is bookkeeping the same as tax preparation?", "No. Bookkeeping organizes financial records throughout the year. Tax preparation uses relevant financial and tax information to prepare and file a return."), ("Is payroll included with bookkeeping?", "Payroll processing and payroll tax compliance are separate services. Payroll bookkeeping addresses the recording and reconciliation of payroll activity."), ("Can MKB help if my books are behind?", "Yes. Catch-up and historical cleanup are available as separate, assessment-based services."), ("Can MKB tell me what I should do for my specific tax situation?", "MKB can explain the services it provides and help organize information. Specific tax advice depends on your circumstances and the scope of services engaged.")])}
+<p class="note">These resources are general information, not tax or legal advice. Rules change — confirm details with the official sources above or with your tax professional.</p></div></section>
 {cta(f"You don’t have to know everything about business. You just need to know {gold('where to start.')}")}''')
 
 pages["contact"] = page("Book a Consultation | MKB Financial Group", "Tell MKB Financial Group about your business — we'll follow up within one business day.",

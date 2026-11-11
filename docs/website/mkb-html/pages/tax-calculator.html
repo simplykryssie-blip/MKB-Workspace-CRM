@@ -105,7 +105,7 @@ h3{font-size:25px;line-height:1.2;color:#FBF7EE;margin-bottom:10px}
 
 /* ---------- hero ---------- */
 .hero{position:relative;overflow:hidden;background:#070707;min-height:640px;display:flex;align-items:center}
-.hero .photo{position:absolute;inset:0 0 0 auto;width:58%;background-size:cover;background-position:center 8%}
+.hero .photo{position:absolute;inset:0 0 0 auto;width:58%;background-size:cover;background-position:center top}
 .hero .photo::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,#070707 0%,rgba(7,7,7,.92) 14%,rgba(7,7,7,.45) 42%,rgba(7,7,7,.12) 70%,rgba(7,7,7,.35) 100%),linear-gradient(0deg,rgba(7,7,7,.75),rgba(7,7,7,0) 30%)}
 .hero .glow{position:absolute;inset:auto auto -30% -10%;width:70%;height:90%;background:radial-gradient(closest-side,rgba(201,150,60,.16),rgba(201,150,60,0));pointer-events:none}
 .hero .wrap{position:relative;z-index:2;padding:110px 0 96px}
@@ -151,7 +151,7 @@ h3{font-size:25px;line-height:1.2;color:#FBF7EE;margin-bottom:10px}
 /* split */
 .split{display:grid;grid-template-columns:1.05fr .95fr;gap:72px;align-items:center}
 .portrait{position:relative;border-radius:12px;overflow:hidden}
-.portrait img{width:100%;height:100%;object-fit:cover}
+.portrait img{width:100%;height:100%;object-fit:cover;object-position:center top}
 .portrait.framed{padding:1px;background:var(--gold-foil)}
 .portrait.framed img{border-radius:11px}
 .portrait.tall img{aspect-ratio:4/5}
@@ -185,7 +185,7 @@ h3{font-size:25px;line-height:1.2;color:#FBF7EE;margin-bottom:10px}
 .on-light .notice p{color:var(--ink-2)}
 
 /* faq */
-.faq{display:grid;gap:12px;max-width:880px}
+.faq{display:grid;gap:12px;max-width:880px;width:100%}
 .faq details{border-radius:10px;background:#FFFDF8;border:1px solid #E4DCCB;padding:0 24px}
 .faq summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;gap:20px;align-items:center;padding:20px 0;font:600 16.5px/1.4 var(--sans);color:var(--ink)}
 .faq summary::-webkit-details-marker{display:none}
@@ -223,6 +223,30 @@ h3{font-size:25px;line-height:1.2;color:#FBF7EE;margin-bottom:10px}
 .social a{width:40px;height:40px;display:grid;place-items:center;border-radius:50%;border:1px solid #2e2920;margin:0}
 .social svg{width:17px;height:17px;stroke:#E8C46B;fill:none;stroke-width:1.7}
 
+/* timeline, tables, resources */
+.timeline{display:grid;grid-template-columns:repeat(4,1fr);gap:22px;counter-reset:t}
+.timeline .card{padding-top:30px}
+.timeline .step{display:flex;align-items:center;gap:14px;margin-bottom:16px}
+.timeline .step b{width:44px;height:44px;flex:none;display:grid;place-items:center;border-radius:50%;font:700 19px/1 var(--sans);color:#1B1306;text-shadow:0 1px 0 rgba(255,240,190,.6);background:var(--foil-sheen),var(--gold-foil);box-shadow:inset 0 1px 0 rgba(255,248,215,.8)}
+.tbl{width:100%;border-collapse:collapse;font-size:15px}
+.tbl th{text-align:left;font:700 11px/1 var(--sans);letter-spacing:.2em;text-transform:uppercase;color:#8A5F1D;padding:14px 16px;border-bottom:1px solid #D9CFBB}
+.tbl td{padding:14px 16px;border-bottom:1px solid #E4DCCB;color:var(--ink-2);vertical-align:top}
+.tbl td:first-child{white-space:nowrap;font:600 17px/1.3 var(--serif);color:var(--ink)}
+.tblwrap{overflow-x:auto;border-radius:10px;background:#FFFDF8;border:1px solid #E4DCCB}
+.jump{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
+.jump a{padding:10px 16px;border-radius:30px;font:600 13px/1 var(--sans);color:#E9E2D2;background:linear-gradient(#0D0C0B,#0D0C0B) padding-box,var(--gold-foil) border-box;border:1px solid transparent}
+.jump a:hover{color:#F6DFA0}
+.links-grid a{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px 18px;border-radius:10px;background:#FFFDF8;border:1px solid #E4DCCB;color:var(--ink);font-weight:600}
+.links-grid a small{display:block;font-weight:400;color:var(--ink-2);font-size:13px;margin-top:2px}
+.links-grid a:hover{border-color:#C9A253}
+.links-grid a svg{width:16px;height:16px;flex:none;color:#8A5F1D}
+.check2{columns:2;column-gap:40px}
+.check2 li{break-inside:avoid}
+.printbtn{border:0;cursor:pointer}
+@media print{.site-header,.site-footer,.cta,.hero,.jump,.printbtn{display:none!important}body{background:#fff;color:#000}.sec{padding:20px 0!important;background:#fff!important}}
+@media (max-width:980px){.timeline{grid-template-columns:repeat(2,1fr)}.check2{columns:1}}
+@media (max-width:640px){.timeline{grid-template-columns:1fr}}
+
 /* funnel pages: no menu */
 .slim .bar{justify-content:center}
 
@@ -233,7 +257,7 @@ h3{font-size:25px;line-height:1.2;color:#FBF7EE;margin-bottom:10px}
   .split{grid-template-columns:1fr;gap:42px}
   .foot{grid-template-columns:1fr 1fr}
   .hero{flex-direction:column;align-items:stretch}
-  .hero .photo{position:relative;inset:auto;width:100%;height:440px;background-position:center 12%}
+  .hero .photo{position:relative;inset:auto;width:100%;height:460px;background-position:center top}
   .hero .photo::after{background:linear-gradient(0deg,#070707 0%,rgba(7,7,7,.25) 45%,rgba(7,7,7,0) 70%)}
   .hero .photo+.glow+.wrap{padding-top:8px}
 }
@@ -253,7 +277,7 @@ h3{font-size:25px;line-height:1.2;color:#FBF7EE;margin-bottom:10px}
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="mkbGoldStroke" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9B6B20"/><stop offset=".22" stop-color="#F2DC98"/><stop offset=".38" stop-color="#C49A43"/><stop offset=".55" stop-color="#F8E7A9"/><stop offset=".72" stop-color="#B88932"/><stop offset="1" stop-color="#7A511B"/></linearGradient></defs></svg>
-<header class="site-header slim"><div class="wrap bar"><a class="brand" href="/" aria-label="MKB Financial Group home"><img src="/site/media/mkb-logo-header.webp" alt="MKB Financial Group" width="600" height="297"></a></div></header>
+<header class="site-header slim"><div class="wrap bar"><a class="brand" href="/" aria-label="MKB Financial Group home"><img src="/site/media/mkb-logo-header.webp" alt="MKB Financial Group" width="600" height="273"></a></div></header>
 <main>
 <section class="hero plain"><div class="glow"></div><div class="wrap"><div class="copy">
 <span class="eyebrow gold">Free tax estimator</span>
