@@ -148,6 +148,19 @@ function Detail({ d, o }: { d: MonarchData; o: Office }) {
             </ul>
           </Card>
 
+          {(() => {
+            const keys = new Set(items.map((i) => i.key));
+            const other = o.files.filter((f) => !keys.has(f.item));
+            return other.length ? (
+              <Card>
+                <CardHeader title="Files" subtitle="Other files for this office (e.g. their WISP from the website)" />
+                <ul className="border-t border-line">
+                  {other.map((f) => <li key={f.id} className="flex items-center gap-2 border-b border-line px-5 py-2.5 text-[13px] last:border-0 sm:px-6"><FileText size={14} className="shrink-0 text-muted" /><a href={`/api/monarch/offices/${o.id}/files/${f.id}?inline=1`} target="_blank" rel="noopener" className="min-w-0 flex-1 truncate font-semibold text-accent hover:underline">{f.name}</a><span className="shrink-0 text-[12px] text-muted">{shortDate(f.at)}</span></li>)}
+                </ul>
+              </Card>
+            ) : null;
+          })()}
+
           <Notes o={o} />
 
           <Card className="px-5 py-4 sm:px-6">

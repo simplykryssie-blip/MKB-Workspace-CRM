@@ -59,15 +59,32 @@ const mentorship: Section[] = [
   ] },
 ];
 
-/** The WISP funnel pages (same pages as on the old Monarch site). */
-const wisp = WISP_PAGES.map((p, i): SitePage => ({
-  ...structuredClone(p),
-  id: `pg-m-${p.slug}`,
-  title: p.slug === "wisp-next-steps" ? "WISP Next Steps" : p.title,
-  nav: p.slug === "wisp-builder",
-  position: 10 + i,
-  published: null,
-}));
+/**
+ * The WISP funnel (same pages as on the old Monarch site): landing page →
+ * WISP Generator (answers become Monarch leads) → next steps. The menu is
+ * hidden on these pages so visitors stay on the path.
+ */
+const wisp = WISP_PAGES.map((p, i): SitePage => {
+  const base: SitePage = { ...structuredClone(p), id: `pg-m-${p.slug}`, title: p.slug === "wisp-next-steps" ? "WISP Next Steps" : p.title, nav: false, hideNav: true, position: 10 + i, published: null };
+  if (p.slug === "wisp-builder")
+    base.draft = [
+      { id: id(), type: "hero", eyebrow: "Monarch Tax Suite • WISP Builder", title: "Protect the business behind the return.", body: "Build a practical Written Information Security Plan for your tax practice. Answer a guided set of questions, review your security readiness, and get your WISP as a PDF you can save and review.", buttons: [{ label: "Start My WISP →", href: "/wisp-generator", style: "gold" }], image: CHESS },
+      { id: id(), type: "cards", tone: "light", eyebrow: "What you'll complete", title: "A guided process. Not a cybersecurity exam.", columns: 3, items: [
+        { label: "01 / Your practice", title: "Tell us about your firm.", body: "Business details, who's responsible for security, and how your practice is set up." },
+        { label: "02 / Security", title: "Walk through your safeguards.", body: "MFA, devices, backups, access, training, vendors and more." },
+        { label: "03 / Readiness", title: "See what needs attention.", body: "Get your WISP and a readiness snapshot based on your answers." },
+      ] },
+      { id: id(), type: "cta", title: "Ready to build your plan?", body: "Free · about 10 minutes · your WISP as a PDF", buttons: [{ label: "Start My WISP →", href: "/wisp-generator", style: "dark" }] },
+    ];
+  if (p.slug === "wisp-generator")
+    base.draft = [
+      { id: id(), type: "hero", eyebrow: "Monarch Tax Suite • WISP Builder", title: "Build your Written Information Security Plan.", body: "Answer a few questions about your practice and your safeguards. You'll get your WISP as a PDF, a readiness score, and a list of what to work on next — free.", buttons: [], image: CHESS },
+      { id: id(), type: "wisp", tone: "warm", title: "Your WISP in about 10 minutes" },
+    ];
+  if (p.slug === "wisp-next-steps")
+    base.draft = [...base.draft, { id: id(), type: "cta", eyebrow: "Grow with Monarch", title: "Ready to make your next move?", body: "Professional tax software, systems and mentorship for tax professionals.", buttons: [{ label: "Become a Monarch Partner →", href: "/contact", style: "dark" }] }];
+  return base;
+});
 
 export const MONARCH_PAGES: SitePage[] = [
   page("", "Home", "Professional tax software, business systems, resources and mentorship for tax professionals ready to grow.", 0, [

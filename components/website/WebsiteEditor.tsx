@@ -310,6 +310,7 @@ function PageForm({ page, onChange, setSections, onDelete, disabled, canDelete, 
           {isHome ? <TextField label="Web address" value="/ (home)" disabled /> : <TextField label="Web address" hint={`/${page.slug}`} value={page.slug} disabled={disabled} onChange={(e) => onChange({ slug: slugifyPage(e.target.value) })} onBlur={(e) => onChange({ slug: slugifyPage(e.target.value) || slugifyPage(page.title) })} />}
           <div className="sm:col-span-2"><TextArea label="Search engine description (1–2 sentences)" value={page.description} disabled={disabled} onChange={(e) => onChange({ description: e.target.value })} /></div>
           {!isHome && <Checkbox label="Show in the menu" checked={page.nav} disabled={disabled} onChange={(e) => onChange({ nav: e.target.checked })} />}
+          {!isHome && <Checkbox label="Funnel page — hide the menu" hint="Visitors see only your logo and this page’s buttons, so they stay on the path" checked={!!page.hideNav} disabled={disabled} onChange={(e) => onChange({ hideNav: e.target.checked })} />}
           <TextField label="Menu order" type="number" min={0} max={999} value={page.position} disabled={disabled} onChange={(e) => onChange({ position: Number(e.target.value) })} />
         </div>
         {page.published ? (

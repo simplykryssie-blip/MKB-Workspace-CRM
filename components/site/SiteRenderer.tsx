@@ -1,5 +1,6 @@
 import { SiteForm } from "./SiteForm";
 import { MonarchSiteForm } from "./MonarchSiteForm";
+import { WispGenerator } from "./WispGenerator";
 import type { Section, SiteKey, SitePage, SiteSettings } from "@/lib/website/types";
 
 /**
@@ -8,9 +9,10 @@ import type { Section, SiteKey, SitePage, SiteSettings } from "@/lib/website/typ
  * prefix ("" on the website's own domain, "/site" inside the app).
  */
 export type NavLink = { slug: string; title: string };
-type Props = { settings: SiteSettings; page: Pick<SitePage, "slug" | "title">; sections: Section[]; nav: NavLink[]; base: string; preview?: boolean; banner?: React.ReactNode; site?: SiteKey };
+type Props = { settings: SiteSettings; page: Pick<SitePage, "slug" | "title" | "hideNav">; sections: Section[]; nav: NavLink[]; base: string; preview?: boolean; banner?: React.ReactNode; site?: SiteKey };
 
-export function SiteRenderer({ settings: st, sections, nav, base, preview, banner, site = "mkb" }: Props) {
+export function SiteRenderer({ settings: st, page, sections, nav, base, preview, banner, site = "mkb" }: Props) {
+  const funnel = !!page.hideNav;
   const L = (href: string) => (href.startsWith("/") && !href.startsWith("/f/") ? `${base}${href === "/" ? "" : href}` || "/" : href);
   const ext = (href: string) => (/^https?:/i.test(href) ? { target: "_blank", rel: "noopener noreferrer" } : {});
   const headerCta = st.ctaLabel && st.ctaHref ? { label: st.ctaLabel, href: st.ctaHref } : null;
@@ -26,6 +28,7 @@ export function SiteRenderer({ settings: st, sections, nav, base, preview, banne
             {/* eslint-disable-next-line @next/next/no-img-element */}
             {st.logo ? <img src={st.logo} alt={st.siteName} /> : <span className="name">{st.siteName}</span>}
           </a>
+          {!funnel && <>
           <nav className="links" aria-label="Main">
             {nav.map((p) => <a key={p.slug} href={L(`/${p.slug}`)}>{p.title}</a>)}
             {st.portalHref && <a href={L(st.portalHref)} {...ext(st.portalHref)}>Client Portal</a>}
@@ -41,6 +44,7 @@ export function SiteRenderer({ settings: st, sections, nav, base, preview, banne
               {booking && <a href={L(booking.href)} {...ext(booking.href)}>{booking.label}</a>}
             </nav>
           </details>
+          </>}
         </div>
       </header>
 
@@ -53,7 +57,7 @@ export function SiteRenderer({ settings: st, sections, nav, base, preview, banne
 
       <footer className="footer">
         <div className="wrap">
-          <div className="foot">
+          {!funnel && <div className="foot">
             <div>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               {st.logo ? <img src={st.logo.replace("/brand/monarch-logo-light.", "/brand/monarch-logo-dark.")} alt={st.siteName} /> : <p style={{ font: "600 20px Georgia, serif", color: "#fff" }}>{st.siteName}</p>}
@@ -81,6 +85,7 @@ export function SiteRenderer({ settings: st, sections, nav, base, preview, banne
               {st.instagram && <a href={st.instagram} target="_blank" rel="noopener noreferrer">Instagram</a>}
             </div>
           </div>
+          }
           <div className="copyright"><span>© {year} {st.siteName}. All rights reserved.</span>{st.tagline && <span>{st.tagline}</span>}</div>
         </div>
       </footer>
@@ -189,6 +194,16 @@ function SectionView({ s, L, ext, base, preview, site }: { s: Section; L: (h: st
             <Head s={s} />
             {s.body && <div className="lead">{paras(s.body)}</div>}
             <div className="formbox">{site === "monarch" ? <MonarchSiteForm preview={preview} /> : <SiteForm slug={s.formSlug ?? ""} preview={preview} />}</div>
+          </div>
+        </section>
+      );
+    case "wisp":
+      return (
+        <section className={`sec ${tone}`}>
+          <div className="wrap">
+            <Head s={s} />
+            {s.body && <div className="lead">{paras(s.body)}</div>}
+            <div className="formbox"><WispGenerator preview={preview} nextHref={L("/wisp-next-steps")} /></div>
           </div>
         </section>
       );

@@ -137,3 +137,22 @@
 .mkbsite .mform .err { color: #a12b1e; margin: 0; font-size: 14px; }
 .mkbsite .mform button { justify-self: start; border: 0; cursor: pointer; }
 .mkbsite .mform.done h3 { margin: 0 0 6px; font-size: 22px; }
+
+/* WISP Generator (Monarch funnel) */
+.mkbsite .wisp .wisp-step { margin: 0; font-size: 11px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; color: #9a650d; }
+.mkbsite .wisp .wisp-bar { height: 6px; background: #eee8dc; border-radius: 9px; overflow: hidden; }
+.mkbsite .wisp .wisp-bar span { display: block; height: 100%; background: linear-gradient(110deg,#6e4105,#b87912,#f7d77f,#b87912); }
+.mkbsite .wisp .wisp-qs { display: grid; gap: 12px; }
+.mkbsite .wisp fieldset { border: 1px solid #e5e1d8; border-radius: 6px; padding: 14px; margin: 0; }
+.mkbsite .wisp legend { font-weight: 700; font-size: 15px; padding: 0 4px; line-height: 1.4; }
+.mkbsite .wisp .wisp-opts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.mkbsite .wisp .wisp-opts label { display: flex; gap: 8px; align-items: center; border: 1px solid #cfcac0; border-radius: 6px; padding: 10px 14px; font-weight: 600; cursor: pointer; min-height: 44px; }
+.mkbsite .wisp .wisp-opts label.on { border-color: #b87912; background: #fbf5e6; }
+.mkbsite .wisp .wisp-opts input { width: 18px; height: 18px; margin: 0; }
+.mkbsite .wisp .wisp-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.mkbsite .wisp .wisp-actions .btn { border: 0; cursor: pointer; }
+.mkbsite .wisp .btn.outline-dark { background: #fff; color: #111; border: 1px solid #111; }
+.mkbsite .wisp .btn:disabled { opacity: .5; cursor: not-allowed; }
+.mkbsite .wisp .wisp-note { margin: 0; font-size: 12px; color: #666; line-height: 1.5; }
+.mkbsite .wisp ul { margin: 6px 0 14px; padding-left: 20px; line-height: 1.6; }
+.mkbsite .wisp ul li { list-style: disc; }

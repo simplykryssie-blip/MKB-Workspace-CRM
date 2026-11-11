@@ -12,9 +12,9 @@ import { all, badRequest, HttpError, json, notFound, now, one, run, str, type Ap
 import { randomId } from "./crypto";
 import { audit, requirePermission, type Actor } from "./identity";
 
-type PageRow = { id: string; slug: string; title: string; description: string; nav: number; position: number; draft: string; published: string | null; rev: number; updated_at: string; published_at: string | null };
+type PageRow = { id: string; slug: string; title: string; description: string; nav: number; hide_nav: number; position: number; draft: string; published: string | null; rev: number; updated_at: string; published_at: string | null };
 type SettingsRow = { draft: string; published: string | null; rev: number; published_at: string | null };
-const toPage = (r: PageRow): SitePage => ({ id: r.id, slug: r.slug, title: r.title, description: r.description, nav: !!r.nav, position: r.position, draft: json(r.draft, []), published: r.published ? json(r.published, []) : null, rev: r.rev, updatedAt: r.updated_at, publishedAt: r.published_at ?? undefined });
+const toPage = (r: PageRow): SitePage => ({ id: r.id, slug: r.slug, title: r.title, description: r.description, nav: !!r.nav, hideNav: !!r.hide_nav, position: r.position, draft: json(r.draft, []), published: r.published ? json(r.published, []) : null, rev: r.rev, updatedAt: r.updated_at, publishedAt: r.published_at ?? undefined });
 const RESERVED = new Set(["api", "site", "login", "f", "dashboard", "clients", "leads", "forms", "team", "services", "website", "_next", "brand", "media"]);
 const memberId = (a: Actor) => (a.kind === "staff" ? a.member.id : null);
 /** Settings row of each website. */
@@ -62,7 +62,7 @@ async function cleanPage(env: AppEnv, p: Partial<SitePage>, id: string, site: Si
   const draft = cleanSections(p.draft);
   const draftJson = JSON.stringify(draft);
   if (draftJson.length > PAGE_LIMIT) throw badRequest("This page is too large. Split it into two pages.");
-  return { slug, title, description: str(p.description, 300), nav: p.nav ? 1 : 0, position: Math.max(0, Math.min(999, Math.round(Number(p.position) || 0))), draftJson };
+  return { slug, title, description: str(p.description, 300), nav: p.nav ? 1 : 0, hideNav: p.hideNav ? 1 : 0, position: Math.max(0, Math.min(999, Math.round(Number(p.position) || 0))), draftJson };
 }
 
 export async function createPage(env: AppEnv, a: Actor, p: Partial<SitePage>, site: SiteKey = "mkb") {
@@ -72,7 +72,7 @@ export async function createPage(env: AppEnv, a: Actor, p: Partial<SitePage>, si
   if (str(p.slug, 60) === "") throw badRequest("Give the page a web address.");
   const c = await cleanPage(env, p, p.id!, site);
   const t = now();
-  await run(env.DB, "INSERT INTO website_pages (id, site, slug, title, description, nav, position, draft, rev, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)", p.id, site, c.slug, c.title, c.description, c.nav, c.position, c.draftJson, t, memberId(a));
+  await run(env.DB, "INSERT INTO website_pages (id, site, slug, title, description, nav, hide_nav, position, draft, rev, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)", p.id, site, c.slug, c.title, c.description, c.nav, c.hideNav, c.position, c.draftJson, t, memberId(a));
   await audit(env.DB, a, { action: "Website update", resource: `Website page “${c.title}”`, meta: "Page created (draft)" });
   return { rev: 1, slug: c.slug };
 }
@@ -82,7 +82,7 @@ export async function savePage(env: AppEnv, a: Actor, id: string, b: { page?: Pa
   const cur = await one<{ rev: number }>(env.DB, "SELECT rev FROM website_pages WHERE id = ? AND site = ? AND deleted_at IS NULL", id, site);
   if (!cur) throw notFound("Page not found.");
   const c = await cleanPage(env, b.page ?? {}, id, site);
-  const r = await run(env.DB, "UPDATE website_pages SET slug = ?, title = ?, description = ?, nav = ?, position = ?, draft = ?, rev = rev + 1, updated_at = ?, updated_by = ? WHERE id = ? AND rev = ? AND deleted_at IS NULL", c.slug, c.title, c.description, c.nav, c.position, c.draftJson, now(), memberId(a), id, Number(b.rev));
+  const r = await run(env.DB, "UPDATE website_pages SET slug = ?, title = ?, description = ?, nav = ?, hide_nav = ?, position = ?, draft = ?, rev = rev + 1, updated_at = ?, updated_by = ? WHERE id = ? AND rev = ? AND deleted_at IS NULL", c.slug, c.title, c.description, c.nav, c.hideNav, c.position, c.draftJson, now(), memberId(a), id, Number(b.rev));
   if (!r.meta.changes) throw new HttpError(409, "Someone else changed this page. The latest version has been loaded.", "conflict");
   return { rev: cur.rev + 1, slug: c.slug };
 }
@@ -174,7 +174,7 @@ export async function startMonarch(env: AppEnv, a: Actor) {
   const t = now();
   const by = memberId(a);
   const st: D1PreparedStatement[] = [env.DB.prepare("INSERT INTO website_settings (id, draft, rev, updated_at, updated_by) VALUES (2, ?, 1, ?, ?) ON CONFLICT(id) DO UPDATE SET draft = excluded.draft, rev = rev + 1, updated_at = excluded.updated_at").bind(JSON.stringify(MONARCH_SETTINGS), t, by)];
-  for (const p of MONARCH_PAGES) st.push(env.DB.prepare("INSERT INTO website_pages (id, site, slug, title, description, nav, position, draft, rev, updated_at, updated_by) VALUES (?, 'monarch', ?, ?, ?, ?, ?, ?, 1, ?, ?)").bind(p.id, p.slug, p.title, p.description, p.nav ? 1 : 0, p.position, JSON.stringify(cleanSections(p.draft)), t, by));
+  for (const p of MONARCH_PAGES) st.push(env.DB.prepare("INSERT INTO website_pages (id, site, slug, title, description, nav, hide_nav, position, draft, rev, updated_at, updated_by) VALUES (?, 'monarch', ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)").bind(p.id, p.slug, p.title, p.description, p.nav ? 1 : 0, p.hideNav ? 1 : 0, p.position, JSON.stringify(cleanSections(p.draft)), t, by));
   await env.DB.batch(st);
   await audit(env.DB, a, { action: "Website update", resource: "Monarch website", meta: `Started from the template (${MONARCH_PAGES.length} draft pages)` });
 }
@@ -207,19 +207,19 @@ export async function getMedia(env: AppEnv, key: string) {
 }
 
 /* ---------------------------------------------------------------- public */
-export type PublicSite = { settings: SiteSettings; page: { slug: string; title: string; description: string }; sections: Section[]; nav: { slug: string; title: string }[] };
+export type PublicSite = { settings: SiteSettings; page: { slug: string; title: string; description: string; hideNav?: boolean }; sections: Section[]; nav: { slug: string; title: string }[] };
 /** What visitors see: published settings and page, or null (not found / never published). */
 export async function publicPage(env: AppEnv, slug: string, site: SiteKey = "mkb"): Promise<PublicSite | null> {
   const [s, pages] = await Promise.all([
     one<{ published: string | null }>(env.DB, "SELECT published FROM website_settings WHERE id = ?", SID(site)),
-    all<{ slug: string; title: string; description: string; nav: number; published: string | null }>(env.DB, "SELECT slug, title, description, nav, published FROM website_pages WHERE site = ? AND deleted_at IS NULL AND published IS NOT NULL ORDER BY position, title", site),
+    all<{ slug: string; title: string; description: string; nav: number; hide_nav: number; published: string | null }>(env.DB, "SELECT slug, title, description, nav, hide_nav, published FROM website_pages WHERE site = ? AND deleted_at IS NULL AND published IS NOT NULL ORDER BY position, title", site),
   ]);
   if (!s?.published) return null;
   const p = pages.find((x) => x.slug === slug);
   if (!p) return null;
   return {
     settings: json(s.published, DEFAULTS(site)),
-    page: { slug: p.slug, title: p.title, description: p.description },
+    page: { slug: p.slug, title: p.title, description: p.description, hideNav: !!p.hide_nav },
     sections: json(p.published, []),
     nav: pages.filter((x) => x.nav && x.slug).map((x) => ({ slug: x.slug, title: x.title })),
   };

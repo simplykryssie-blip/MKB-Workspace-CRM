@@ -13,6 +13,7 @@ export const SECTION_TYPES = [
   { key: "cta", label: "Call to action", hint: "Gold band with a headline and a button." },
   { key: "form", label: "Contact form", hint: "One of your published Forms; answers become Leads." },
   { key: "embed", label: "Custom code", hint: "Your own HTML, shown in a sealed frame." },
+  { key: "wisp", label: "WISP Generator", hint: "Monarch's free WISP builder — answers become Monarch leads." },
 ] as const;
 export type SectionType = (typeof SECTION_TYPES)[number]["key"];
 export const TONES = [
@@ -68,6 +69,8 @@ export type SitePage = {
   title: string;
   description: string;
   nav: boolean;
+  /** Funnel page: hide the menu so visitors stay on the path. */
+  hideNav?: boolean;
   position: number;
   draft: Section[];
   published: Section[] | null;

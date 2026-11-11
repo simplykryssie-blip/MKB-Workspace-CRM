@@ -262,3 +262,66 @@ export async function buildMonarchAgreementPdf(x: { officeName: string; text: st
   row("Connection", x.ip);
   return finish(x.officeName);
 }
+
+/** WISP Generator (Monarch funnel): a Written Information Security Plan built from the practice's answers. */
+export async function buildWispPdf(x: { practice: { businessName: string; ownerName: string; city: string; state: string; qualifiedIndividual: string; people: string; locations: string; software: string }; createdAt: string; areas: { area: string; inPlace: string[] }[]; actions: { area: string; text: string; unsure: boolean }[]; score: number; disclaimer: string }): Promise<Uint8Array> {
+  const { text, heading, row, space, finish, fonts: { serif, bold } } = await makeWriter(`WISP — ${x.practice.businessName}`, "Written Information Security Plan", { name: "Monarch Tax Suite", tagline: "SOFTWARE • TOOLS • GROWTH" });
+  const p = x.practice;
+  const date = new Date(x.createdAt).toLocaleDateString("en-US", { dateStyle: "long", timeZone: "America/Chicago" });
+  text("Written Information Security Plan", { size: 18, font: serif, gap: 6 });
+  text(p.businessName, { size: 12, font: bold, gap: 4 });
+  text(`Prepared ${date}${p.city || p.state ? ` · ${[p.city, p.state].filter(Boolean).join(", ")}` : ""}`, { size: 9, color: MUTED, gap: 10 });
+  heading("1. Purpose and scope");
+  text(`${p.businessName} prepares tax returns and handles clients' personal and financial information, including Social Security numbers, income and bank details. This plan describes how the practice protects that information, as part of its information security program. It covers every person who works for the practice, every location (${p.locations || "not stated"}), all devices and accounts used for client work, and paper records.`, { gap: 3 });
+  space(4);
+  heading("2. Qualified Individual");
+  text(`${p.qualifiedIndividual || p.ownerName} is responsible for overseeing, carrying out and enforcing this plan, and reports on it to the owner at least once a year.`, { gap: 3 });
+  space(4);
+  heading("3. Practice profile");
+  row("Owner", p.ownerName);
+  row("People who handle client data", p.people || "Not stated");
+  row("Locations", p.locations || "Not stated");
+  if (p.software) row("Tax software", p.software);
+  heading("4. Risk assessment summary");
+  text(`Based on the answers given, ${x.score}% of the safeguards reviewed are in place. The safeguards below are in place; the action plan in section 6 lists what still needs attention. The practice repeats this assessment at least once a year and whenever its systems or staff change.`, { gap: 3 });
+  space(4);
+  heading("5. Safeguards in place");
+  if (!x.areas.some((a) => a.inPlace.length)) text("None reported yet — see the action plan.", { gap: 3 });
+  for (const a of x.areas) {
+    if (!a.inPlace.length) continue;
+    text(a.area, { size: 10.5, font: bold, gap: 3 });
+    for (const s of a.inPlace) text(`•  ${s}`, { size: 10, x: M + 10, gap: 3 });
+    space(4);
+  }
+  heading("6. Action plan");
+  if (!x.actions.length) text("No open items. Keep reviewing the safeguards above at least once a year.", { gap: 3 });
+  else { text("Set a target date for each item and record when it's done. Items marked \"confirm\" were answered \"Not sure\".", { size: 9.5, color: MUTED, gap: 5 }); space(2); }
+  for (const a of x.actions) text(`•  ${a.text}${a.unsure ? " (confirm)" : ""}`, { size: 10, x: M + 10, width: W - 2 * M - 20, gap: 4 });
+  space(4);
+  heading("7. Employee training and access");
+  text("Everyone who handles client information is trained on this plan, phishing and scams, and safe handling of client data when they start and at least once a year. Access is given only for what each role requires and is removed on a person's last day.", { gap: 3 });
+  space(4);
+  heading("8. Service providers");
+  text("The practice keeps a list of providers that store or access client information (tax software, cloud storage, email, IT support), confirms they protect that information, and requires it in their agreements.", { gap: 3 });
+  space(4);
+  heading("9. Incident response");
+  for (const s of [
+    "Contain the problem: disconnect affected devices from the network and change passwords for affected accounts.",
+    "Report data theft to the IRS through the IRS Stakeholder Liaison for your state, and to your tax software provider.",
+    "Contact local law enforcement and, if appropriate, the FBI.",
+    "Notify affected clients and your state's authorities as your state's law requires.",
+    "Document what happened and what was done, then update this plan.",
+  ]) text(`•  ${s}`, { size: 10, x: M + 10, gap: 3 });
+  space(4);
+  heading("10. Retention and disposal");
+  text("Client records are kept only as long as needed for business and legal requirements. Paper is shredded and devices are securely wiped or destroyed before disposal.", { gap: 3 });
+  space(4);
+  heading("11. Review");
+  text("This plan is reviewed and updated at least once a year, after any security incident, and when the practice's systems, staff or locations change.", { gap: 3 });
+  space(12);
+  row("Approved by", "_______________________________");
+  row("Date", "_______________________________");
+  space(10);
+  text(x.disclaimer, { size: 8.5, color: MUTED, gap: 3 });
+  return finish(p.businessName);
+}
