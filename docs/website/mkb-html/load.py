@@ -9,7 +9,7 @@ for fn in sorted(os.listdir(f"{S}/out")):
     html = open(f"{S}/out/{fn}").read()
     title = html.split("<title>")[1].split("</title>")[0].split(" | ")[0].replace("&amp;", "&")
     out.append(f"INSERT OR IGNORE INTO website_pages (id, site, slug, title, nav, position, draft, updated_at) VALUES ({q('pg-mkb-' + (slug or 'home'))}, 'mkb', {q(slug)}, {q(title)}, 1, 15, '[]', '{t}');")
-    out.append(f"UPDATE website_pages SET title = {q(title)} WHERE site = 'mkb' AND slug = {q(slug)} AND slug IN ('financial-management', 'business-services', 'tax-preparation', 'record-expungement');")
+    out.append(f"UPDATE website_pages SET title = {q(title)} WHERE site = 'mkb' AND slug = {q(slug)} AND slug IN ('financial-management', 'book-consultation', 'contact', 'business-services', 'tax-preparation', 'record-expungement');")
     d = q(json.dumps([{"id": "sec-doc-" + (slug or "home"), "type": "document", "html": html}], ensure_ascii=False))
     out.append(f"UPDATE website_pages SET draft = {d} WHERE site = 'mkb' AND slug = {q(slug)} AND deleted_at IS NULL;")
     out.append(f"UPDATE website_pages SET published = draft, published_at = '{t}', rev = rev + 1, updated_at = '{t}' WHERE site = 'mkb' AND slug = {q(slug)} AND deleted_at IS NULL;")
