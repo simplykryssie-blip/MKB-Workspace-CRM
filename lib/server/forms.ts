@@ -121,14 +121,16 @@ async function process(env: AppEnv, f: LeadForm, raw: Record<string, unknown>, c
     if (channel !== "Staff test") await notify(env, { module: "crm" }, { kind: "form", title: `A client submitted the “${f.name}” form`, href: `/clients/${client.id}#activity` });
     return { id: subId, outcome: "existing_client" as const, clientId: client.id };
   }
-  const lead = await one<{ id: string; interests: string; owner_id: string }>(db, `SELECT id, interests, owner_id FROM leads WHERE status = 'open' AND ((? != '' AND email = ?) OR (length(?) = 10 AND ${norm} = ?)) LIMIT 1`, L.email, L.email, phoneDigits, phoneDigits);
+  const lead = await one<{ id: string; interests: string; owner_id: string; tags: string }>(db, `SELECT id, interests, owner_id, tags FROM leads WHERE status = 'open' AND ((? != '' AND email = ?) OR (length(?) = 10 AND ${norm} = ?)) LIMIT 1`, L.email, L.email, phoneDigits, phoneDigits);
   if (lead) {
     const interests = [...new Set([...json<string[]>(lead.interests, []), ...L.services])];
+    // The form's tags (e.g. "Payroll Only") are added so the lead shows what was asked for this time.
+    const tags = [...new Set([...json<string[]>(lead.tags, []), ...f.routing.tags])];
     await db.batch([
       save("existing_lead", lead.id),
       db.prepare("INSERT INTO lead_notes (id, lead_id, author_id, body, at) VALUES (?, ?, ?, ?, ?)").bind(randomId("n"), lead.id, lead.owner_id, `New “${f.name}” submission:\n${L.summary}`, t),
       db.prepare("INSERT INTO lead_activity (id, lead_id, kind, text, actor, at) VALUES (?, ?, 'lead', ?, 'client', ?)").bind(randomId("x"), lead.id, `Submitted the “${f.name}” form again`, t),
-      db.prepare("UPDATE leads SET interests = ?, rev = rev + 1, last_activity_at = ? WHERE id = ?").bind(JSON.stringify(interests), t, lead.id),
+      db.prepare("UPDATE leads SET interests = ?, tags = ?, rev = rev + 1, last_activity_at = ? WHERE id = ?").bind(JSON.stringify(interests), JSON.stringify(tags), t, lead.id),
     ]);
     if (channel !== "Staff test") await notify(env, { module: "leads" }, { kind: "form", title: `An open lead submitted the “${f.name}” form again`, href: `/leads/${lead.id}` });
     return { id: subId, outcome: "existing_lead" as const, leadId: lead.id };

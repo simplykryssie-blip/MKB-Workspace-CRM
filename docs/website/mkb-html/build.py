@@ -71,11 +71,12 @@ h3{font-size:25px;line-height:1.2;color:#FBF7EE;margin-bottom:10px}
 
 /* ---------- header ---------- */
 .site-header{position:sticky;top:0;z-index:50;background:rgba(8,8,8,.94);backdrop-filter:saturate(140%) blur(10px);border-bottom:1px solid rgba(201,162,83,.18)}
-.site-header .bar{display:flex;align-items:center;gap:26px;height:92px}
+.site-header .bar{display:flex;align-items:center;gap:18px;height:92px}
+.site-header .wrap{width:min(calc(100% - 40px),1400px)}
 .brand img{height:74px;width:auto;filter:drop-shadow(0 2px 6px rgba(0,0,0,.6))}
 .nav{display:flex;align-items:center;gap:4px;margin-left:auto;list-style:none;padding:0;margin-top:0;margin-bottom:0}
 .nav>li{position:relative}
-.nav>li>a,.nav>li>span{display:flex;align-items:center;gap:6px;padding:12px 11px;font:500 13.5px/1 var(--sans);color:#E9E2D2;cursor:pointer;white-space:nowrap}
+.nav>li>a,.nav>li>span{display:flex;align-items:center;gap:5px;padding:12px 8px;font:500 13px/1 var(--sans);color:#E9E2D2;cursor:pointer;white-space:nowrap}
 .nav>li>a:hover,.nav>li:hover>span,.nav>li:focus-within>span{color:#F6DFA0}
 .nav .caret{width:10px;height:10px;stroke:currentColor;fill:none;stroke-width:2}
 .nav .sub{position:absolute;top:100%;left:0;min-width:240px;list-style:none;margin:0;padding:10px;background:#0F0E0C;border:1px solid transparent;background-clip:padding-box;border-radius:8px;box-shadow:0 24px 50px rgba(0,0,0,.6);opacity:0;visibility:hidden;transform:translateY(6px);transition:all .18s ease}
@@ -243,11 +244,76 @@ h3{font-size:25px;line-height:1.2;color:#FBF7EE;margin-bottom:10px}
 @media (max-width:980px){.timeline{grid-template-columns:repeat(2,1fr)}.check2{columns:1}}
 @media (max-width:640px){.timeline{grid-template-columns:1fr}}
 
+/* ---------- secondary-page compositions ---------- */
+.hero2{position:relative;overflow:hidden;padding:92px 0 96px;background:radial-gradient(110% 120% at 0% 0%,#24190b 0%,#0c0b09 46%,#070707 80%)}
+.hero2::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(115deg,rgba(232,196,107,.035) 0 1px,transparent 1px 140px);pointer-events:none}
+.hero2>.wrap{position:relative;display:grid;grid-template-columns:1.1fr .9fr;gap:70px;align-items:center}
+.hero2.rev>.wrap{grid-template-columns:.9fr 1.1fr}.hero2.rev .frame{order:-1;justify-self:start}
+.hero2 .lead{color:#D9D1C1;margin:22px 0 32px}
+.frame{position:relative;width:100%;max-width:470px;justify-self:end;margin:0 22px 22px 0}
+.frame::before{content:"";position:absolute;inset:22px -22px -22px 22px;border-radius:12px;padding:1px;background:var(--gold-foil);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+.frame img{position:relative;width:100%;height:auto;aspect-ratio:4/5;object-fit:cover;object-position:center top;border-radius:12px;box-shadow:0 40px 80px rgba(0,0,0,.6)}
+.frame .tag{position:absolute;left:-34px;bottom:40px;max-width:250px;padding:18px 20px;border-radius:10px;background:linear-gradient(#0E0D0C,#0E0D0C) padding-box,var(--gold-foil) border-box;border:1px solid transparent;box-shadow:0 20px 40px rgba(0,0,0,.55)}
+.frame .tag b{display:block;font:500 21px/1.2 var(--serif);color:#F4EBD6}
+.frame .tag span{font-size:12.5px;color:#A49C8C}
+.lines{display:grid;gap:0;border-top:1px solid #2a2722}
+.lines>div{display:grid;grid-template-columns:70px 1fr;gap:20px;padding:26px 0;border-bottom:1px solid #2a2722}
+.lines b{font:500 34px/1 var(--serif)}
+.lines h3{font-size:24px;margin-bottom:6px}.lines p{margin:0;color:var(--text-2)}
+.on-light .lines,.on-light .lines>div{border-color:#DDD3C0}.on-light .lines p{color:var(--ink-2)}
+.duo{display:grid;grid-template-columns:1fr auto 1fr;gap:20px;align-items:stretch}
+.split.wide-r{grid-template-columns:.85fr 1.15fr}
+.split>*,.duo>*,.grid>*{min-width:0}
+.duo .plus{align-self:center;font:500 54px/1 var(--serif)}
+.duo a.card{display:flex;flex-direction:column;gap:12px}
+.duo a.card .more{margin-top:auto;font:600 13px/1 var(--sans);color:#E8C46B;display:inline-flex;gap:8px;align-items:center}
+.duo a.card .more svg{width:15px;height:15px}
+.incl{display:grid;grid-template-columns:repeat(2,1fr);gap:8px 34px;margin:0}
+.tagline{display:inline-block;padding:5px 10px;border-radius:30px;font:700 10.5px/1.2 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:#8A5F1D;background:rgba(201,162,83,.14);margin-left:8px;vertical-align:middle}
+.paths{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+.paths .card{display:flex;flex-direction:column;gap:10px}
+.paths .card .actions{margin-top:auto;padding-top:18px}
+.paths .card .actions a{width:100%}
+.paths dl{margin:6px 0 0;display:grid;gap:0}
+.paths dl div{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px dashed #DDD3C0;font-size:14.5px}
+.paths dt{color:var(--ink-2)}.paths dd{margin:0;font-weight:600;color:var(--ink);white-space:nowrap}
+.paths .opt{font:700 11px/1 var(--sans);letter-spacing:.24em;color:#8A5F1D}
+.tabs{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-bottom:28px}
+.tabs button{cursor:pointer;min-height:48px;padding:12px 20px;border-radius:30px;font:600 14px/1 var(--sans);color:var(--ink);background:#FFFDF8;border:1px solid #D9CFBB}
+.tabs button[aria-selected="true"]{color:#1B1306;border-color:#8A5F1D;background:var(--foil-sheen),var(--gold-foil);box-shadow:inset 0 1px 0 rgba(255,248,215,.8)}
+.pane[hidden]{display:none}
+.t6{grid-template-columns:repeat(3,1fr)}
+.tiles{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;margin-top:38px;max-width:640px}
+.tiles a{display:block;padding:22px 22px 20px;border-radius:10px;background:linear-gradient(#100F0D,#100F0D) padding-box,var(--gold-foil) border-box;border:1px solid transparent}
+.tiles a b{display:block;font:500 24px/1.15 var(--serif);color:#F4EBD6;margin-bottom:6px}
+.tiles a span{font-size:13.5px;color:#A49C8C}
+.tiles a:hover b{color:#F6DFA0}
+.statebox{display:grid;grid-template-columns:auto 1fr;gap:26px;align-items:center}
+.statebox .seal{width:120px;height:120px;border-radius:50%;display:grid;place-items:center;text-align:center;font:700 12px/1.3 var(--sans);letter-spacing:.18em;color:#1B1306;background:var(--foil-sheen),var(--foil-grain),var(--gold-foil);box-shadow:inset 0 1px 0 rgba(255,248,215,.85),0 14px 30px rgba(0,0,0,.35)}
+.strip{background:#0E0D0B;border-bottom:1px solid #2a2418;padding:16px 0;font-size:14px;color:#CFC6B4}
+.strip .wrap{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;justify-content:center}
+.strip a{color:#E8C46B;font-weight:600}
+@media (max-width:980px){
+  .hero2>.wrap,.hero2.rev>.wrap{grid-template-columns:1fr;gap:56px}
+  .hero2 .frame,.hero2.rev .frame{order:0;justify-self:center;max-width:420px}
+  .frame .tag{left:-10px}
+  .duo{grid-template-columns:1fr}.duo .plus{justify-self:center}
+  .paths,.t6{grid-template-columns:1fr 1fr}
+}
+@media (max-width:640px){
+  .hero2{padding:64px 0 72px}
+  .frame{margin-right:16px}.frame::before{inset:16px -16px -16px 16px}
+  .incl,.paths,.t6,.tiles{grid-template-columns:1fr}
+  .lines>div{grid-template-columns:48px 1fr;gap:14px}
+  .statebox{grid-template-columns:1fr;justify-items:start}
+}
+
 /* funnel pages: no menu */
 .slim .bar{justify-content:center}
 
 /* ---------- responsive ---------- */
-@media (max-width:1180px){.nav,.header-cta{display:none}.mnav{display:block}.site-header .bar{height:84px}.brand img{height:62px}}
+@media (max-width:1360px){.brand img{height:62px}.nav>li>a,.nav>li>span{padding:12px 6px;font-size:12.5px}.portal{padding:10px 12px}.site-header .metallic-gold-button{padding:10px 14px}}
+@media (max-width:1240px){.nav,.header-cta{display:none}.mnav{display:block}.site-header .bar{height:84px}.brand img{height:62px}}
 @media (max-width:980px){
   .g3,.g4,.g5{grid-template-columns:repeat(2,1fr)}
   .split{grid-template-columns:1fr;gap:42px}
@@ -298,13 +364,16 @@ def obtn(label, href): return f'<a class="btn-outline" href="{href}">{e(label)}<
 def head(eyebrow, title, lead="", center=False, rule=True):
   return f'<div class="head{" center" if center else ""}">{f"<span class=\"eyebrow gold\">{e(eyebrow)}</span>" if eyebrow else ""}<h2>{title}</h2>{f"<p class=\"lead\">{lead}</p>" if lead else ""}{"<hr class=\"rule\">" if rule else ""}</div>'
 
+BFM = "/business-financial-management"
 NAV = [
   ("Home", "/", None),
   ("About MKB", "/about", None),
-  ("Business Services", None, [("Bookkeeping", "/bookkeeping", "Monthly books & financial statements"), ("Business Services", "/business-services", "Formation, compliance & documents"), ("Payroll", "/payroll", "Processing, payroll tax & records")]),
-  ("Tax Services", None, [("Tax Preparation", "/tax-preparation", "Individual & business returns"), ("Tax Calculator", "/tax-calculator", "Free refund / balance-due estimate")]),
+  ("Business Financial Management", BFM, [("Overview", BFM, "Bookkeeping + payroll, one coordinated approach"), ("Bookkeeping", BFM + "#bookkeeping", "Monthly books & financial statements"), ("Payroll", BFM + "#payroll", "Processing, payroll tax & records"), ("Combined Services", BFM + "#combined", "Bookkeeping and payroll together"), ("Pricing", BFM + "#pricing", "Packages and quote requests")]),
+  ("Business Solutions", "/business-services", None),
+  ("Tax Services", "/tax-preparation", [("Tax Services", "/tax-preparation", "Preparation and planning"), ("Individual Tax Preparation", "/tax-preparation#individual", "Personal returns"), ("Business Tax Preparation", "/tax-preparation#business", "Business returns"), ("Free Tax Calculator", "/tax-calculator", "Refund / balance-due estimate")]),
   ("Record Relief", "/record-expungement", None),
   ("Resources", "/resources", None),
+  ("Contact", "/contact", None),
 ]
 
 def header(slim=False):
@@ -314,7 +383,8 @@ def header(slim=False):
   for label, href, sub in NAV:
     if sub:
       subs = "".join(f'<li><a href="{h}">{e(l)}<small>{e(d)}</small></a></li>' for l, h, d in sub)
-      items.append(f'<li><span tabindex="0">{e(label)}{CARET}</span><ul class="sub">{subs}</ul></li>')
+      top = f'<a href="{href}">{e(label)}{CARET}</a>' if href else f'<span tabindex="0">{e(label)}{CARET}</span>'
+      items.append(f'<li>{top}<ul class="sub">{subs}</ul></li>')
     else:
       items.append(f'<li><a href="{href}">{e(label)}</a></li>')
   mob = []
@@ -336,8 +406,8 @@ def footer(slim=False):
   return f'''<footer class="site-footer"><div class="wrap">
 <div class="foot">
  <div><a class="logo" href="/"><img src="{M}mkb-logo-gold.webp" alt="MKB Financial Group — Strategy, Growth, Legacy" width="900" height="485"></a><p class="blurb">Professional financial services for entrepreneurs building something real.</p></div>
- <div><h4 class="metallic-gold-text">Services</h4><a href="/bookkeeping">Bookkeeping</a><a href="/business-services">Business Services</a><a href="/tax-preparation">Tax Preparation</a><a href="/payroll">Payroll</a><a href="/record-expungement">Record Relief</a></div>
- <div><h4 class="metallic-gold-text">Explore</h4><a href="/about">About MKB</a><a href="/resources">Resources</a><a href="/tax-calculator">Tax Calculator</a><a href="/contact">Book a Consultation</a><a href="{PORTAL}">Client Portal Sign In</a></div>
+ <div><h4 class="metallic-gold-text">Services</h4><a href="/business-financial-management">Business Financial Management</a><a href="/bookkeeping">Bookkeeping</a><a href="/payroll">Payroll</a><a href="/business-services">Business Solutions</a><a href="/tax-preparation">Tax Services</a><a href="/record-expungement">Record Relief</a></div>
+ <div><h4 class="metallic-gold-text">Explore</h4><a href="/about">About MKB</a><a href="/resources">Resources</a><a href="/tax-calculator">Tax Calculator</a><a href="/contact">Contact</a><a href="{PORTAL}">Client Portal Sign In</a></div>
  <div><h4 class="metallic-gold-text">Contact</h4><a href="tel:8333793320">{PHONE}</a><a href="mailto:{EMAIL}">{EMAIL}</a><p>Louisiana • Texas • Virtual</p>
   <div class="social"><a href="{FB}" target="_blank" rel="noopener noreferrer" aria-label="Facebook"><svg viewBox="0 0 24 24"><path d="M14 8h3V4h-3a4 4 0 0 0-4 4v3H7v4h3v6h4v-6h3l1-4h-4V8z"/></svg></a><a href="{IG}" target="_blank" rel="noopener noreferrer" aria-label="Instagram"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><path d="M17.5 6.5h.01"/></svg></a></div>
  </div>
@@ -384,6 +454,19 @@ def hero(eyebrow, title_html, lead, actions, photo=None, place=True, short=False
 {'<div class="place">LOUISIANA<i>•</i>TEXAS<i>•</i>VIRTUAL</div>' if place else ""}
 </div></div></section>'''
 
+def hero2(eyebrow, title_html, lead, actions, photo, tag=None, rev=False, alt="The founder of MKB Financial Group"):
+  t = f'<div class="tag"><b>{tag[0]}</b><span>{tag[1]}</span></div>' if tag else ""
+  return f'''<section class="hero2{" rev" if rev else ""}"><div class="wrap"><div class="copy">
+<span class="eyebrow gold">{e(eyebrow)}</span>
+<h1>{title_html}</h1>
+<p class="lead">{lead}</p>
+<div class="actions">{actions}</div>
+<div class="place">LOUISIANA<i>•</i>TEXAS<i>•</i>VIRTUAL</div>
+</div><div class="frame"><img src="{M}{photo}" alt="{e(alt)}" width="1024" height="1536">{t}</div></div></section>'''
+
+def lines(items):
+  return '<div class="lines">' + "".join(f'<div><b class="metallic-gold-text">{n}</b><div><h3>{e(t)}</h3><p>{b}</p></div></div>' for n, t, b in items) + '</div>'
+
 def cards(items, cols, num_fmt=None):
   out = []
   for i, (lbl, title, body) in enumerate(items):
@@ -410,19 +493,18 @@ def pricing(items, featured_idx=None, light=True):
 pages = {}
 
 SERVICES = [
-  ("books", "Bookkeeping", "Know your numbers and build a clearer picture of performance.", "/bookkeeping"),
-  ("biz", "Business Services", "Build the structure behind the business.", "/business-services"),
-  ("tax", "Tax Preparation", "Prepare today and think ahead.", "/tax-preparation"),
-  ("payroll", "Payroll", "Keep your people and payroll organized.", "/payroll"),
-  ("relief", "Record Relief", "Administrative help with the paperwork behind a fresh start.", "/record-expungement"),
+  ("books", "Business Financial Management", "Bookkeeping + Payroll", "Organized books and reliable payroll — on their own or managed together.", "/business-financial-management"),
+  ("biz", "Business Solutions", "Business Formation + Administrative Support", "Build the structure behind the business.", "/business-services"),
+  ("tax", "Tax Services", "Individual + Business Tax Preparation", "Prepare today and think ahead.", "/tax-preparation"),
+  ("relief", "MKB Record Relief", "Expungement Administrative Assistance", "Administrative help with the paperwork behind a fresh start.", "/record-expungement"),
 ]
-svc_cards = '<div class="grid g5">' + "".join(f'<div class="card svc"><div class="ic">{icon(i, 34)}</div><h3>{e(t)}</h3><p>{e(b)}</p><a class="more" href="{h}">Learn more {ARROW}</a></div>' for i, t, b, h in SERVICES) + '</div>'
+svc_cards = '<div class="grid g4">' + "".join(f'<div class="card svc"><div class="ic">{icon(i, 34)}</div><span class="num" style="margin:0">{e(sub)}</span><h3>{e(t)}</h3><p>{e(b)}</p><a class="more" href="{h}">Learn more {ARROW}</a></div>' for i, t, sub, b, h in SERVICES) + '</div>'
 
-pages[""] = page("MKB Financial Group | Strategy • Growth • Legacy", "Bookkeeping, business services, tax preparation, payroll and record relief for entrepreneurs in Louisiana, Texas and virtually.",
+pages[""] = page("MKB Financial Group | Strategy • Growth • Legacy", "Business financial management (bookkeeping + payroll), business solutions, tax services and record relief for entrepreneurs in Louisiana, Texas and virtually.",
   hero("MKB Financial Group", f"The business you’ve built deserves a {gold('stronger financial foundation.')}",
        "Bookkeeping, business services, tax preparation and payroll for owners who are serious about what they’re building. MKB helps entrepreneurs start right, stay organized, plan strategically, and grow intentionally.",
-       btn("Explore Business Services", "/business-services") + obtn("Book a Consultation", "/contact"), photo="founder-desk-seated.webp")
-  + f'''<section class="sec dark2"><div class="wrap">{head("What we do", "Everything the financial side of your business needs.", "Five service divisions, one team — so your books, taxes, payroll and paperwork work together.", center=True)}{svc_cards}</div></section>
+       btn("Explore Our Services", "#services") + obtn("Book a Consultation", "/contact"), photo="founder-desk-seated.webp")
+  + f'''<section class="sec dark2" id="services"><div class="wrap">{head("What we do", "Everything the financial side of your business needs.", "Four service divisions, one team — so your books, payroll, taxes and paperwork work together.", center=True)}{svc_cards}</div></section>
 <section class="sec light on-light"><div class="wrap split"><div>{head("The MKB perspective", "Starting a business is easy. Building one is different.", "", rule=False)}<p class="lead">Your business has financial records to maintain, taxes to plan for, payroll responsibilities to manage, numbers to track, and decisions to make. MKB helps connect those pieces.</p><hr class="rule"></div>
 <div class="grid g2">''' + "".join(f'<div class="card"><span class="num">{n}</span><h3>{t}</h3><p>{b}</p></div>' for n, t, b in [("01 / Thinking", "Thinking", "You have an idea and are preparing to launch."), ("02 / Starting", "Starting", "You’ve formed the business and need to understand what comes next."), ("03 / Building", "Building", "You’re operating and need organized financial systems."), ("04 / Understanding", "Understanding", "You need to know what your numbers are telling you."), ("05 / Planning", "Planning", "You want to think about taxes before they become urgent."), ("06 / Growing", "Growing", "You’re ready to make informed decisions and pursue growth.")]) + f'''</div></div></section>
 <section class="sec charcoal"><div class="wrap split"><div class="portrait framed tall"><img src="{M}founder-standing.webp" alt="The founder of MKB Financial Group in her office" loading="lazy" width="1024" height="1536"></div>
@@ -431,60 +513,10 @@ pages[""] = page("MKB Financial Group | Strategy • Growth • Legacy", "Bookke
 <div class="actions" style="margin-top:32px">{btn("Meet MKB", "/about")}</div></div></div></section>
 <section class="band"><div class="wrap"><div><strong>Bookkeeping</strong><span>Know your numbers</span></div><div><strong>Tax</strong><span>Prepare today, think ahead</span></div><div><strong>Payroll</strong><span>Keep your people organized</span></div></div></section>
 <section class="sec cream on-light"><div class="wrap grid g2" style="gap:30px">
-<div class="card"><span class="num">BOOKKEEPING</span><h3 style="font-size:34px">Know your numbers.</h3><p>Monthly bookkeeping gives you organized records, financial statements, and visibility throughout the year.</p><div class="actions" style="margin-top:22px">{obtn("Bookkeeping packages", "/bookkeeping")}</div></div>
-<div class="card"><span class="num">TAX</span><h3 style="font-size:34px">Tax preparation looks back. Tax planning looks ahead.</h3><p>Your return tells you what happened. Planning gives you an opportunity to think about what comes next.</p><div class="actions" style="margin-top:22px">{obtn("Tax preparation", "/tax-preparation")}{obtn("Free tax calculator", "/tax-calculator")}</div></div>
+<div class="card"><span class="num">BOOKKEEPING</span><h3 style="font-size:34px">Know your numbers.</h3><p>Monthly bookkeeping gives you organized records, financial statements, and visibility throughout the year.</p><div class="actions" style="margin-top:22px">{obtn("Bookkeeping & payroll", "/business-financial-management")}</div></div>
+<div class="card"><span class="num">TAX</span><h3 style="font-size:34px">Tax preparation looks back. Tax planning looks ahead.</h3><p>Your return tells you what happened. Planning gives you an opportunity to think about what comes next.</p><div class="actions" style="margin-top:22px">{obtn("Tax services", "/tax-preparation")}{obtn("Free tax calculator", "/tax-calculator")}</div></div>
 </div></section>
 {cta(f"You’re building a business. Let’s build the {gold('financial foundation')} with it.")}''')
-
-pages["bookkeeping"] = page("Bookkeeping | MKB Financial Group", "Monthly bookkeeping packages from $399/month: reconciliations, P&L, Balance Sheet and Cash Flow.",
-  hero("Bookkeeping", f"Your books should help you {gold('run your business.')}", "Professional monthly bookkeeping designed to give business owners organized records, clearer financial statements, and better visibility throughout the year.", btn("Book a Consultation", "/contact") + obtn("See packages", "#packages"))
-  + f'''<section class="sec dark2"><div class="wrap">{head("What MKB bookkeeping does", "Organized records. Clear statements.")}{cards([("01", "Monthly Bookkeeping", "Recurring organization and recording of financial activity within the agreed scope."), ("02", "Reconciliation", "Financial account reconciliation as part of the monthly close process."), ("03", "Financial Statements", "P&L, Balance Sheet, and Cash Flow as standard statements.")], 3)}</div></section>
-<section class="sec cream on-light" id="packages"><div class="wrap">{head("Bookkeeping packages", "Choose the package that fits your volume.", "Includes: monthly bookkeeping, account reconciliations, P&L, Balance Sheet, Cash Flow, month-end close, financial record organization, and standard bookkeeping support.", center=True)}
-<div class="grid g4">{pricing([("Foundation", "Foundation", "$399", "/mo", "Up to 150 transactions • 3 financial accounts"), ("Essential", "Essential", "$549", "/mo", "Up to 400 transactions • 5 financial accounts"), ("Growth", "Growth", "$749", "/mo", "Up to 750 transactions • 8 financial accounts"), ("Advanced", "Advanced", "$999+", "/mo", "Up to 1,500 transactions • 12 financial accounts")], featured_idx=1)}</div>
-<p class="note center">Internal bank transfers are excluded from transaction counts. Monthly completion is within 10 days; statements are delivered by the 5th day after the 10-day completion period.</p></div></section>
-<section class="sec light on-light"><div class="wrap">{head("Add-ons", "Extend your package as you grow.")}{cards([("+$50/mo", "Additional Financial Account", "Per additional account."), ("+$150/mo", "Biweekly Upgrade", "Upgrade the bookkeeping cadence."), ("+$300/mo", "Weekly Upgrade", "Upgrade the bookkeeping cadence."), ("From $150/mo", "Additional Entity/Location", "Pricing varies by complexity."), ("Separate scope", "Catch-Up & Cleanup", "Assessment-based services."), ("Separate scope", "A/P & A/R", "Recording services available by volume.")], 3)}</div></section>
-<section class="sec dark"><div class="wrap" style="max-width:900px">{notice("A minimalist service with clear boundaries.", ["Standard bookkeeping does not automatically include priority/expedited service, unlimited communication, financial analysis, advisory, consulting, additional reporting, or cleanup/catch-up work."])}</div></section>
-{cta(f"Your books should {gold('work for your business.')}")}''')
-
-pages["business-services"] = page("Business Services | MKB Financial Group", "Business formation, EIN, annual reports, compliance tracking and business documentation support.",
-  hero("Business Services", f"Build the {gold('structure')} behind the business.", "From forming your business to keeping it in good standing, MKB helps you handle the paperwork, filings and deadlines that come with owning a business — so you can focus on running it.", btn("Book a Consultation", "/contact"))
-  + f'''<section class="sec dark2"><div class="wrap">{head("Business formation", "Start on the right foundation.")}{cards([("01", "LLC & Corporation Formation", "Name availability check, preparation and submission of your formation documents, and EIN assistance."), ("02", "EIN Application", "Help completing and submitting your IRS Employer Identification Number application."), ("03", "Registrations & Changes", "Trade names, registering in another state, amendments, name changes and dissolutions.")], 3)}</div></section>
-<section class="sec cream on-light"><div class="wrap">{head("Stay in good standing", "Deadlines tracked. Filings handled.")}{cards([("Compliance", "Annual Reports", "Preparation and submission of your state annual report or registration."), ("Compliance", "Licenses & Deadlines", "Tracking of business licenses, permits and state deadlines, with reminders before they are due."), ("Compliance", "Registered Agent Coordination", "Coordinating a registered agent appointment or change with the provider and the state.")], 3)}</div></section>
-<section class="sec light on-light"><div class="wrap">{head("Business documentation", "Records that keep up with the business.")}{cards([("Documents", "Operating Agreements", "Administrative preparation from a standard template and your instructions."), ("Documents", "Resolutions & Records", "Resolutions for actions your members or board approved, and an organized business record book.")], 2)}</div></section>
-<section class="sec dark"><div class="wrap" style="max-width:900px">{notice("Administrative support — not legal advice.", ["MKB prepares and submits paperwork on your behalf using the information you provide, and prepares documents from standard templates and your instructions. MKB is not a law firm and does not provide legal advice. State and government filing fees are separate and are confirmed for your state before anything is filed."])}</div></section>
-{cta(f"Your business deserves a {gold('solid structure.')} Let’s build it.")}''')
-
-pages["tax-preparation"] = page("Tax Preparation | MKB Financial Group", "Individual and business tax preparation, tax document organization and year-round tax planning.",
-  hero("Tax Services", f"Tax preparation looks back. {gold('Tax planning looks ahead.')}", "MKB helps clients organize tax preparation while keeping the bigger financial picture in view.", btn("Book a Consultation", "/contact") + obtn("Free tax calculator", "/tax-calculator"))
-  + f'''<section class="sec dark2"><div class="wrap">{head("Tax preparation", "Individual and business returns.")}{cards([("01", "Individual Tax Preparation", "Professional preparation and guidance based on the client’s circumstances and MKB’s return scope."), ("02", "Business Tax Preparation", "Business tax preparation supported by organized financial information and documentation."), ("03", "Tax Document Organization", "Help understanding the information and documentation needed for preparation.")], 3)}</div></section>
-<section class="sec charcoal"><div class="wrap split"><div>{head("Tax planning & strategy", f"Don’t wait until tax season to {gold('think about taxes.')}", "Understand what is affecting your tax position, think through relevant financial decisions, and keep information organized for filing.", rule=True)}</div>
-<div class="notice"><span class="eyebrow gold">Tax + bookkeeping</span><h3>Better books can make tax time a different experience.</h3><p>When books are organized throughout the year, tax preparation doesn’t have to begin with reconstructing what happened months ago.</p></div></div></section>
-<section class="sec cream on-light"><div class="wrap">{head("The tax process", "Three clear steps.", center=True)}{cards([("01", "Get Started", "Tell us about yourself and/or your business."), ("02", "Organize & Review", "Gather documentation and address missing information."), ("03", "Prepare & File", "Complete preparation, final review, approval, and filing.")], 3)}</div></section>
-{cta(f"Your taxes are part of your business. {gold('Let’s treat them that way.')}")}''')
-
-pages["payroll"] = page("Payroll | MKB Financial Group", "Payroll processing from $175/month, payroll tax compliance and payroll bookkeeping.",
-  hero("Payroll", f"Keep payroll moving. {gold('Keep your business organized.')}", "MKB helps business owners keep payroll processing, payroll records, and payroll-related responsibilities organized as the business grows.", btn("Book a Consultation", "/contact") + obtn("See pricing", "#pricing"))
-  + f'''<section class="sec cream on-light" id="pricing"><div class="wrap">{head("Full payroll processing", "Priced by the size of your team.", center=True)}
-<div class="grid g4">{pricing([("1–5 workers", "Starter", "$175", "/month", "Recurring payroll processing for 1–5 workers. Includes employees, contractors paid through payroll, and owners processed through payroll."), ("6–10 workers", "Growing", "$275", "/month", "Recurring payroll processing for 6–10 workers with the same core processing scope."), ("11–25 workers", "Expanding", "$425", "/month", "Recurring payroll processing for 11–25 workers as payroll volume increases."), ("26–50 workers", "Established", "$650", "/month", "Recurring payroll processing for 26–50 workers. Higher-volume payroll requires an organized recurring process.")])}</div>
-<p class="note center">Worker count includes employees, contractors paid through payroll, and owners processed through payroll. Owner draws/distributions remain bookkeeping transactions unless the owner is processed through payroll.</p></div></section>
-<section class="sec light on-light"><div class="wrap">{head("Payroll tax compliance", "Stay on top of payroll taxes.", "Federal + 1 state base scope, priced by the size of your team.", center=True)}
-<div class="grid g4">{pricing([("1–5 workers", "Starter Compliance", "$125", "/month", "Payroll tax compliance for teams of 1–5 workers. Federal and one state included."), ("6–10 workers", "Growing Compliance", "$175", "/month", "Payroll tax compliance for teams of 6–10 workers. Federal and one state included."), ("11–25 workers", "Expanding Compliance", "$250", "/month", "Payroll tax compliance for teams of 11–25 workers. Federal and one state included."), ("26–50 workers", "Established Compliance", "$350", "/month", "Payroll tax compliance for teams of 26–50 workers. Federal and one state included.")])}
-<p class="note center">Payroll tax compliance is a separate service from payroll processing. Pair it with a processing package to keep payroll and payroll taxes handled together.</p></div></div></section>
-<section class="sec dark2"><div class="wrap">{head("Three different services", "Run it. File it. Record it.")}{cards([("Processing", "Run Payroll", "Recurring payroll processing within the selected worker tier."), ("Compliance", "Handle Payroll Taxes", "Payroll tax compliance is a separate service."), ("Bookkeeping", "Record Payroll", "Payroll bookkeeping records and reconciles payroll activity when included.")], 3)}</div></section>
-<section class="sec charcoal"><div class="wrap" style="max-width:900px">{notice("Your payroll doesn’t stop at payday.", ["Payroll activity affects financial statements. Connecting payroll to bookkeeping keeps the financial side organized."])}</div></section>
-{cta(f"Your team deserves a {gold('payroll system that works.')}")}''')
-
-pages["record-expungement"] = page("Record Relief | MKB Financial Group", "Administrative help and document preparation for people seeking a record expungement. MKB is not a law firm and does not give legal advice.",
-  hero("Record Relief", f"Help with the paperwork behind a {gold('fresh start.')}", "MKB Financial Group provides administrative assistance and document preparation for people pursuing a record expungement. We help you gather your information, request your records and prepare your paperwork — and we keep you updated along the way.", btn("Book a Consultation", "/contact") + obtn("How it works", "#how"), photo="founder-reading.webp")
-  + f'''<section class="sec dark2" id="how"><div class="wrap">{head("How we help", "Administrative assistance, step by step.", "A clear process, with you informed at every stage.", center=True)}
-<div class="timeline">''' + "".join(f'<div class="card"><div class="step"><b>{n}</b>{icon(ic, 32)}</div><h3>{t}</h3><p>{b}</p></div>' for n, ic, t, b in [("1", "clarity", "Intake", "We collect your information and organize it in one place, so nothing gets lost along the way."), ("2", "tax", "Records requests", "We help you request the records and court documents needed for your paperwork."), ("3", "structure", "Document preparation", "We prepare your documents from the information you provide, for you to review before anything is used."), ("4", "ahead", "Updates", "You can see where your paperwork stands in your client portal, step by step.")]) + f'''</div></div></section>
-<section class="sec light on-light"><div class="wrap split"><div>{head("Who this is for", "Organized help for a paperwork-heavy process.", "Record relief involves forms, records requests, deadlines and follow-up. We handle the administrative side so you can stay focused on moving forward.")}
-<ul class="ticks"><li>People with an arrest or conviction record who want help organizing the paperwork.</li><li>People who need help requesting their records and court documents.</li><li>Anyone who wants the administrative steps handled carefully and kept on track.</li></ul></div>
-<div class="card"><span class="num">BEFORE YOU START</span><h3>What to have ready</h3><ul class="ticks"><li>A government-issued photo ID.</li><li>Your current contact information.</li><li>Any court papers, case numbers or arrest records you already have.</li><li>The parish or county and approximate dates of the record you&rsquo;re asking about.</li><li>Your questions — write them down so we can go over them together.</li></ul><p style="margin-top:14px">Don&rsquo;t have everything? That&rsquo;s okay — helping you request what&rsquo;s missing is part of the process.</p></div></div></section>
-<section class="sec dark"><div class="wrap split"><div class="portrait framed" style="max-width:520px"><img src="{M}founder-headshot.webp" alt="The founder of MKB Financial Group" loading="lazy" width="583" height="572"></div>
-<div><span class="eyebrow gold">Important</span>{notice("What we do — and what we don’t", ["MKB Financial Group provides administrative assistance and document preparation. MKB is not a law firm and does not provide legal advice or representation.", "We do not decide whether you are eligible for an expungement, and completing our intake does not mean you are eligible. Courts and agencies make their own determinations, and we cannot promise an outcome or a timeline.", "For legal advice about your situation, please consult a licensed attorney."])}</div></div></section>
-<section class="sec cream on-light"><div class="wrap">{head("Questions", "Common questions.", center=True)}<div style="display:grid;justify-items:center">{faq([("Can you tell me if I’m eligible?", "No. We can’t determine eligibility or give legal advice. Eligibility is decided under the law that applies to your record, by the court or agency involved. For advice about your situation, consult a licensed attorney."), ("Do you guarantee my record will be expunged?", "No. Courts and agencies make their own decisions, and we cannot promise any outcome."), ("How long does it take?", "It depends on the agencies and courts involved, including how long records requests take. We can’t promise a timeframe, but you can follow your progress in your client portal."), ("Are you a law firm?", "No. MKB Financial Group is not a law firm and does not provide legal advice or representation."), ("What does it cost?", "We’ll go over our fees before any work begins. Court and agency fees, if any, are separate.")])}</div></div></section>
-{cta(f"Ready to get your paperwork {gold('organized?')}")}''')
 
 pages["about"] = page("About MKB | MKB Financial Group", "MKB Financial Group helps business owners understand, organize and strengthen the financial side of their businesses.",
   hero("About MKB Financial Group", f"We didn’t build MKB just to {gold('file tax returns.')}", "MKB was built to help business owners understand, organize, and strengthen the financial side of their businesses.", btn("Book a Consultation", "/contact"), photo="founder-office-folder.webp")
@@ -542,6 +574,189 @@ pages["resources"] = page("Resources | MKB Financial Group", "Key tax dates, a t
 <section class="sec light on-light"><div class="wrap">{head("Frequently asked questions", "Quick answers.")}{faq([("What is bookkeeping?", "Bookkeeping is the ongoing organization and recording of financial activity so a business has reliable financial records."), ("How often should a business reconcile its accounts?", "Frequency depends on transaction volume and business needs. MKB’s core bookkeeping service is monthly, with biweekly and weekly upgrades available."), ("Is bookkeeping the same as tax preparation?", "No. Bookkeeping organizes financial records throughout the year. Tax preparation uses relevant financial and tax information to prepare and file a return."), ("Is payroll included with bookkeeping?", "Payroll processing and payroll tax compliance are separate services. Payroll bookkeeping addresses the recording and reconciliation of payroll activity."), ("Can MKB help if my books are behind?", "Yes. Catch-up and historical cleanup are available as separate, assessment-based services."), ("Can MKB tell me what I should do for my specific tax situation?", "MKB can explain the services it provides and help organize information. Specific tax advice depends on your circumstances and the scope of services engaged.")])}
 <p class="note">These resources are general information, not tax or legal advice. Rules change — confirm details with the official sources above or with your tax professional.</p></div></section>
 {cta(f"You don’t have to know everything about business. You just need to know {gold('where to start.')}")}''')
+
+# ============================================================ Business Financial Management (flagship)
+BK_TIERS = [("Foundation", "Foundation", "$399", "/mo", "Up to 150 transactions • 3 financial accounts"), ("Essential", "Essential", "$549", "/mo", "Up to 400 transactions • 5 financial accounts"), ("Growth", "Growth", "$749", "/mo", "Up to 750 transactions • 8 financial accounts"), ("Advanced", "Advanced", "$999+", "/mo", "Up to 1,500 transactions • 12 financial accounts")]
+BK_NOTE = "Internal bank transfers are excluded from transaction counts. Monthly completion is within 10 days; statements are delivered by the 5th day after the 10-day completion period."
+BK_ADDONS = [("+$50/mo", "Additional Financial Account", "Per additional account."), ("+$150/mo", "Biweekly Upgrade", "Upgrade the bookkeeping cadence."), ("+$300/mo", "Weekly Upgrade", "Upgrade the bookkeeping cadence."), ("From $150/mo", "Additional Entity/Location", "Pricing varies by complexity."), ("Separate scope", "Catch-Up & Cleanup", "Assessment-based services."), ("Separate scope", "A/P & A/R", "Recording services available by volume.")]
+BK_BOUNDARY = "Standard bookkeeping does not automatically include priority/expedited service, unlimited communication, financial analysis, advisory, consulting, additional reporting, or cleanup/catch-up work."
+PR_TIERS = [("1–5 workers", "Starter", "$175", "/month", "Recurring payroll processing for 1–5 workers. Includes employees, contractors paid through payroll, and owners processed through payroll."), ("6–10 workers", "Growing", "$275", "/month", "Recurring payroll processing for 6–10 workers with the same core processing scope."), ("11–25 workers", "Expanding", "$425", "/month", "Recurring payroll processing for 11–25 workers as payroll volume increases."), ("26–50 workers", "Established", "$650", "/month", "Recurring payroll processing for 26–50 workers. Higher-volume payroll requires an organized recurring process.")]
+PR_COMP = [("1–5 workers", "Starter Compliance", "$125", "/month", "Payroll tax compliance for teams of 1–5 workers. Federal and one state included."), ("6–10 workers", "Growing Compliance", "$175", "/month", "Payroll tax compliance for teams of 6–10 workers. Federal and one state included."), ("11–25 workers", "Expanding Compliance", "$250", "/month", "Payroll tax compliance for teams of 11–25 workers. Federal and one state included."), ("26–50 workers", "Established Compliance", "$350", "/month", "Payroll tax compliance for teams of 26–50 workers. Federal and one state included.")]
+PR_NOTE = "Worker count includes employees, contractors paid through payroll, and owners processed through payroll. Owner draws/distributions remain bookkeeping transactions unless the owner is processed through payroll."
+
+def addon_table():
+  return table([(a, b, c) for a, b, c in [(t, p, d) for p, t, d in BK_ADDONS]], ["Add-on", "Price", "Details"])
+
+def scope_table():
+  return table([
+    ("Payroll processing", "Recurring payroll runs on your schedule for employees, contractors paid through payroll, and owners processed through payroll — with payroll reports and organized payroll records.", "Included in every payroll package · $175–$650/month by worker tier"),
+    ("Payroll tax compliance", "Payroll tax administration for federal and one state.", "Separate service — add it to processing · $125–$350/month by worker tier"),
+    ("Additional states", "Payroll tax compliance beyond the one included state.", "Scoped separately"),
+    ("Payroll bookkeeping", "Recording and reconciling payroll activity in your books.", "Coordinated with your bookkeeping engagement · scoped with it"),
+    ("More than 50 workers", "Payroll for larger teams.", "Quoted separately"),
+  ], ["Service", "What it covers", "How it’s included"])
+
+BFM_FAQ = [
+  ("Can I purchase payroll without bookkeeping?", "Yes. Payroll is available on its own. Payroll processing is priced by the number of workers, starting at $175/month, and payroll tax compliance can be added as a separate service."),
+  ("Can I add payroll to my bookkeeping package later?", "Yes. You can start with bookkeeping and add payroll whenever you’re ready. We’ll scope it with you and add it to your service agreement at our standard payroll pricing."),
+  ("Can I purchase bookkeeping without payroll?", "Yes. Bookkeeping packages start at $399/month and don’t require payroll."),
+  ("How does monthly bookkeeping work?", "Each month we record and categorize your transactions, reconcile your accounts, and close the month. Monthly completion is within 10 days, and your Profit & Loss, Balance Sheet and Cash Flow statements are delivered by the 5th day after that 10-day completion period."),
+  ("What happens if my books are behind?", "Catch-up and cleanup are available as separate, assessment-based services. We review where your books stand and scope the work before monthly bookkeeping begins."),
+  ("What payroll information is required to get started?", "After you sign on, we collect what we need — such as your business details, pay schedule, worker information and pay rates, prior payroll reports if you’re switching providers, and your payroll tax account details if compliance is included. All of it is collected securely through your client portal, never through a public website form."),
+  ("Do you handle payroll tax filings?", "Payroll tax compliance is a separate service from payroll processing. Its base scope covers federal and one state, priced by the size of your team; additional states are scoped separately. Your service agreement lists exactly what is included."),
+  ("Can MKB support multiple business entities?", "Yes. Additional entity or location support starts at $150/month, depending on complexity, and each entity’s records are kept separate."),
+  ("How do I get started?", "Choose a pathway below — Bookkeeping, Payroll, or Bookkeeping + Payroll — or book a consultation. We follow up within one business day."),
+]
+
+PATHWAYS_JS = """<script>(function(){var ids=["bookkeeping","payroll","combined"];function show(k,scroll){ids.forEach(function(i){var b=document.getElementById("tab-"+i),p=document.getElementById("start-"+i);if(!b||!p)return;var on=i===k;b.setAttribute("aria-selected",on?"true":"false");p.hidden=!on;});if(scroll){var g=document.getElementById("get-started");if(g)g.scrollIntoView({behavior:"smooth",block:"start"});}}
+document.querySelectorAll("[data-path]").forEach(function(b){b.addEventListener("click",function(){show(b.getAttribute("data-path"),false);});});
+function fromHash(){var m=location.hash.match(/^#start-(bookkeeping|payroll|combined)$/);if(m)show(m[1],true);}window.addEventListener("hashchange",fromHash);fromHash();})();</script>"""
+
+pages["business-financial-management"] = page("Business Financial Management | MKB Financial Group", "Bookkeeping and payroll for small businesses — on their own or together. Monthly bookkeeping from $399/month and payroll from $175/month. Louisiana, Texas and virtual.",
+  hero2("Business Financial Management", f"Your business deserves more than someone {gold('keeping the books.')}", "From organized financial records to reliable payroll operations, MKB helps business owners manage the financial side of their business with greater clarity and confidence.",
+        btn("Book a Consultation", "/contact") + obtn("Explore Services", "#overview"), "founder-office-folder.webp", tag=("Bookkeeping + Payroll", "Purchase either one on its own — or both, together."))
+  + f'''<section class="sec dark2" id="overview"><div class="wrap split wide-r" style="align-items:start"><div>{head("Introduction", "Better financial management starts with better organization.", "", rule=False)}<p class="lead">Bookkeeping and payroll are connected parts of running a healthy business. Every payroll you run shows up in your books — and your books are only as clear as the payroll records behind them.</p><p class="lead">MKB offers both as two service lines. Choose the one you need, or let us manage them together.</p><hr class="rule"></div>
+<div class="duo"><a class="card svc" href="#bookkeeping"><div class="ic">{icon("books", 34)}</div><span class="num" style="margin:0">Service line 01</span><h3>Bookkeeping</h3><p>Monthly books, reconciliations and financial statements — so you know your numbers.</p><span class="more">See bookkeeping {ARROW}</span></a><span class="plus metallic-gold-text" aria-hidden="true">+</span><a class="card svc" href="#payroll"><div class="ic">{icon("payroll", 34)}</div><span class="num" style="margin:0">Service line 02</span><h3>Payroll</h3><p>Payroll processing, records and optional payroll tax compliance — available on its own.</p><span class="more">See payroll {ARROW}</span></a></div></div></section>
+
+<section class="sec cream on-light" id="bookkeeping"><div class="wrap"><div class="split" style="align-items:start;margin-bottom:54px"><div>{head("Bookkeeping", "Know your numbers. Understand your business.", "Professional monthly bookkeeping that gives you organized records, clear financial statements, and visibility throughout the year.")}</div>
+<div class="card"><span class="num">WHAT BOOKKEEPING COVERS</span><ul class="ticks incl"><li>Monthly bookkeeping</li><li>Bank and credit card reconciliation</li><li>Financial statement preparation — P&amp;L, Balance Sheet, Cash Flow</li><li>Income and expense categorization</li><li>Monthly financial reporting and month-end close</li><li>Catch-up bookkeeping <span class="tagline">Separate scope</span></li><li>Bookkeeping cleanup <span class="tagline">Separate scope</span></li><li>Additional entity support <span class="tagline">From $150/mo</span></li></ul></div></div>
+<div class="grid g4">{pricing(BK_TIERS, featured_idx=1)}</div>
+<p class="note center">{BK_NOTE}</p>
+<div class="split" style="margin-top:46px;align-items:start;gap:40px"><div>{addon_table()}</div><div>{notice("A minimalist service with clear boundaries.", [BK_BOUNDARY])}<div class="actions" style="margin-top:24px">{btn("Explore Bookkeeping Packages", "/bookkeeping")}{obtn("Start a bookkeeping inquiry", "#start-bookkeeping")}</div></div></div></div></section>
+
+<section class="sec charcoal" id="payroll"><div class="wrap"><div class="split" style="align-items:start;margin-bottom:50px"><div>{head("Payroll", f"Your people deserve a payroll process {gold('that works.')}", "Payroll is available on its own — you don’t need bookkeeping to use it — or as an addition to your bookkeeping.")}</div>
+<div class="card"><span class="num">WHAT PAYROLL COVERS</span><ul class="ticks incl"><li>Payroll processing</li><li>Employee payroll administration</li><li>Payroll schedule management</li><li>Payroll reporting</li><li>Payroll tax administration, where included in your contracted service</li><li>Payroll record organization</li><li>Payroll bookkeeping coordination</li></ul></div></div>
+<span class="eyebrow gold">Included vs. separately scoped</span><h3 style="font-size:30px;margin-bottom:20px">Exactly what each payroll service covers.</h3><div class="on-light">{scope_table()}</div><p class="note" style="color:#A49C8C">{PR_NOTE}</p></div></section>
+<section class="sec light on-light"><div class="wrap">{head("Payroll pricing", "Priced by the size of your team.", "Payroll processing and payroll tax compliance are two separate services. Choose processing on its own, or pair it with compliance.", center=True)}
+<span class="eyebrow gold">Full payroll processing</span><div class="grid g4">{pricing(PR_TIERS)}</div>
+<span class="eyebrow gold" style="margin-top:46px">Payroll tax compliance · federal + 1 state</span><div class="grid g4">{pricing(PR_COMP)}</div>
+<div class="actions" style="margin-top:34px;justify-content:center">{btn("Get Started With Payroll", "#start-payroll")}{obtn("Payroll details", "/payroll")}</div></div></section>
+
+<section class="sec dark" id="combined"><div class="wrap split" style="align-items:start"><div>{head("Combined services", f"One business. Two essential financial functions. {gold('One coordinated approach.')}", "When MKB handles both your bookkeeping and your payroll, the two work from the same information — and you work with one team.")}
+<div class="actions">{btn("Combine My Services", "#start-combined")}</div>
+<div class="portrait framed" style="max-width:400px;margin-top:44px"><img src="{M}founder-desk-seated.webp" alt="The founder of MKB Financial Group at her desk" loading="lazy" width="1024" height="1536" style="aspect-ratio:5/4;object-position:center 20%"></div></div>
+<div>{lines([("01", "Better coordination", "Payroll and bookkeeping are handled by the same team, so payroll activity is recorded the way it was actually run."), ("02", "More organized records", "Payroll records and financial records are kept together and stay consistent."), ("03", "Easier month-end reconciliation", "Payroll reports are already in hand when it’s time to reconcile and close the month."), ("04", "Visibility into labor costs", "See what your team costs in the same financial statements you use to run the business."), ("05", "A streamlined process", "One onboarding, one secure client portal and one set of document requests."), ("06", "One service relationship", "One point of contact for both — no going back and forth between providers.")])}
+<p class="note" style="color:#8F8778">Results depend on each business. Combined service is about coordination — we don’t promise specific savings.</p></div></div></section>
+
+<section class="sec dark2"><div class="wrap">{head("How it works", "From first conversation to ongoing support.", "", center=True)}
+<div class="timeline t6">''' + "".join(f'<div class="card"><div class="step"><b>{n}</b></div><h3>{t}</h3><p>{b}</p></div>' for n, t, b in [("1", "Initial consultation", "We talk through your business, how it runs today and what you need help with."), ("2", "Business & service assessment", "We review your volume, accounts, entities, team size and the condition of your books."), ("3", "Package selection", "You choose bookkeeping, payroll or both, with pricing based on our approved packages."), ("4", "Secure onboarding", "We collect documents and payroll details through your secure client portal."), ("5", "Service activation", "Your books and/or payroll are set up and your first cycle is scheduled."), ("6", "Ongoing financial support", "Monthly bookkeeping, payroll on your schedule, and reports you can use.")]) + f'''</div></div></section>
+
+<section class="sec cream on-light" id="pricing"><div class="wrap">{head("Pricing", "Choose the arrangement that fits your business.", "Bookkeeping and payroll can each be purchased on its own. Or request one combined quote for both.", center=True)}
+<div class="paths">
+<div class="card"><span class="opt">OPTION 1</span><h3>Bookkeeping only</h3><p>Monthly bookkeeping packages by transaction volume and number of accounts.</p><dl>''' + "".join(f'<div><dt>{n}</dt><dd>{a}/mo</dd></div>' for _, n, a, _, _ in BK_TIERS) + f'''</dl><div class="actions">{btn("Start bookkeeping inquiry", "#start-bookkeeping", arrow=False)}</div></div>
+<div class="card"><span class="opt">OPTION 2</span><h3>Payroll only</h3><p>Payroll processing by worker count. Payroll tax compliance (federal + 1 state) is optional.</p><dl>''' + "".join(f'<div><dt>{t}</dt><dd>{a}/mo</dd></div>' for t, _, a, _, _ in PR_TIERS) + f'''<div><dt>+ Tax compliance</dt><dd>from $125/mo</dd></div></dl><div class="actions">{btn("Start payroll inquiry", "#start-payroll", arrow=False)}</div></div>
+<div class="card price featured"><span class="flag">BOTH SERVICES</span><span class="opt">OPTION 3</span><h3>Bookkeeping + Payroll</h3><p>Request one combined quote. It’s built from our approved bookkeeping and payroll pricing for your volume, accounts and team size — so you see exactly what each part costs.</p><ul class="ticks"><li>One onboarding and one client portal</li><li>Payroll recorded in your books by the same team</li><li>Payroll tax compliance optional</li></ul><div class="actions">{btn("Request a combined quote", "#start-combined", arrow=False)}</div></div>
+</div></div></section>
+
+<section class="sec light on-light" id="get-started"><div class="wrap">{head("Get started", "Tell us what you need.", "Pick a pathway and answer a few quick questions. We’ll follow up within one business day. Please don’t send employee or payroll details here — we collect those securely in your client portal after onboarding.", center=True)}
+<div class="tabs" role="tablist"><button type="button" role="tab" id="tab-bookkeeping" data-path="bookkeeping" aria-selected="true">Bookkeeping only</button><button type="button" role="tab" id="tab-payroll" data-path="payroll" aria-selected="false">Payroll only</button><button type="button" role="tab" id="tab-combined" data-path="combined" aria-selected="false">Bookkeeping + Payroll</button></div>
+<div class="formbox"><div class="pane" id="start-bookkeeping" role="tabpanel"><div data-mkb-widget="form" data-form="bookkeeping-inquiry"></div></div><div class="pane" id="start-payroll" role="tabpanel" hidden><div data-mkb-widget="form" data-form="payroll-inquiry"></div></div><div class="pane" id="start-combined" role="tabpanel" hidden><div data-mkb-widget="form" data-form="combined-inquiry"></div></div></div></div></section>
+
+<section class="sec cream on-light"><div class="wrap">{head("Questions", "Frequently asked questions.", center=True)}<div style="display:grid;justify-items:center">{faq(BFM_FAQ)}</div></div></section>
+<section class="cta"><div class="wrap"><div><h2>Let’s put the financial side of your business {gold('in order.')}</h2><p>Strategy • Growth • Legacy</p></div><div class="actions">{btn("Book a Consultation", "/contact")}{obtn("Explore Services", "#overview")}</div></div></section>
+{PATHWAYS_JS}''')
+
+STRIP = lambda what, anchor: f'<div class="strip"><div class="wrap"><span>{what} is part of <b>Business Financial Management</b> — available on its own or together with {"payroll" if what == "Bookkeeping" else "bookkeeping"}.</span><a href="/business-financial-management#{anchor}">See it in Business Financial Management →</a></div></div>'
+
+# ============================================================ Bookkeeping (lightweight landing page — keeps old links working)
+pages["bookkeeping"] = page("Bookkeeping | MKB Financial Group", "Monthly bookkeeping packages from $399/month: reconciliations, P&L, Balance Sheet and Cash Flow. Part of MKB Business Financial Management.",
+  STRIP("Bookkeeping", "bookkeeping")
+  + hero("Bookkeeping", f"Your books should help you {gold('run your business.')}", "Professional monthly bookkeeping designed to give business owners organized records, clearer financial statements, and better visibility throughout the year.", btn("Start a bookkeeping inquiry", "/business-financial-management#start-bookkeeping") + obtn("See packages", "#packages"), short=True)
+  + f'''<section class="sec dark2"><div class="wrap">{head("What MKB bookkeeping does", "Organized records. Clear statements.")}{cards([("01", "Monthly Bookkeeping", "Recurring organization and recording of financial activity within the agreed scope."), ("02", "Reconciliation", "Financial account reconciliation as part of the monthly close process."), ("03", "Financial Statements", "P&L, Balance Sheet, and Cash Flow as standard statements.")], 3)}</div></section>
+<section class="sec cream on-light" id="packages"><div class="wrap">{head("Bookkeeping packages", "Choose the package that fits your volume.", "Includes: monthly bookkeeping, account reconciliations, P&L, Balance Sheet, Cash Flow, month-end close, financial record organization, and standard bookkeeping support.", center=True)}
+<div class="grid g4">{pricing(BK_TIERS, featured_idx=1)}</div>
+<p class="note center">{BK_NOTE}</p></div></section>
+<section class="sec light on-light"><div class="wrap">{head("Add-ons", "Extend your package as you grow.")}{cards([(p, t, d) for p, t, d in BK_ADDONS], 3)}</div></section>
+<section class="sec dark"><div class="wrap" style="max-width:900px">{notice("A minimalist service with clear boundaries.", [BK_BOUNDARY])}<div class="actions" style="margin-top:26px">{btn("Start a bookkeeping inquiry", "/business-financial-management#start-bookkeeping")}{obtn("Add payroll too", "/business-financial-management#combined")}</div></div></section>
+{cta(f"Your books should {gold('work for your business.')}")}''')
+
+# ============================================================ Payroll (lightweight landing page — keeps old links working)
+pages["payroll"] = page("Payroll | MKB Financial Group", "Payroll processing from $175/month, payroll tax compliance and payroll bookkeeping. Part of MKB Business Financial Management.",
+  STRIP("Payroll", "payroll")
+  + hero("Payroll", f"Keep payroll moving. {gold('Keep your business organized.')}", "MKB helps business owners keep payroll processing, payroll records, and payroll-related responsibilities organized as the business grows. Available on its own — no bookkeeping required.", btn("Get Started With Payroll", "/business-financial-management#start-payroll") + obtn("See pricing", "#pricing"), short=True)
+  + f'''<section class="sec cream on-light" id="pricing"><div class="wrap">{head("Full payroll processing", "Priced by the size of your team.", center=True)}
+<div class="grid g4">{pricing(PR_TIERS)}</div>
+<p class="note center">{PR_NOTE}</p></div></section>
+<section class="sec light on-light"><div class="wrap">{head("Payroll tax compliance", "Stay on top of payroll taxes.", "Federal + 1 state base scope, priced by the size of your team.", center=True)}
+<div class="grid g4">{pricing(PR_COMP)}</div>
+<p class="note center">Payroll tax compliance is a separate service from payroll processing. Pair it with a processing package to keep payroll and payroll taxes handled together.</p></div></section>
+<section class="sec dark2"><div class="wrap">{head("Three different services", "Run it. File it. Record it.")}{cards([("Processing", "Run Payroll", "Recurring payroll processing within the selected worker tier."), ("Compliance", "Handle Payroll Taxes", "Payroll tax compliance is a separate service."), ("Bookkeeping", "Record Payroll", "Payroll bookkeeping records and reconciles payroll activity when included.")], 3)}
+<div class="on-light" style="margin-top:34px">{scope_table()}</div></div></section>
+<section class="sec charcoal"><div class="wrap" style="max-width:900px">{notice("Your payroll doesn’t stop at payday.", ["Payroll activity affects financial statements. Connecting payroll to bookkeeping keeps the financial side organized."])}<div class="actions" style="margin-top:26px">{btn("Get Started With Payroll", "/business-financial-management#start-payroll")}{obtn("Combine with bookkeeping", "/business-financial-management#combined")}</div></div></section>
+{cta(f"Your team deserves a {gold('payroll system that works.')}")}''')
+
+# ============================================================ Business Solutions
+pages["business-services"] = page("Business Solutions | MKB Financial Group", "Business formation, EIN assistance, registrations, annual reports, compliance tracking and business documentation support.",
+  hero2("Business Solutions", f"Build your business with the {gold('right foundation.')}", "From forming your business to keeping it in good standing, MKB helps you handle the paperwork, filings and deadlines that come with owning a business — so you can focus on running it.",
+        btn("Book a Consultation", "/contact") + obtn("See how we help", "#formation"), "founder-standing.webp", tag=("Formation → Good standing", "Paperwork, filings and deadlines, handled."), rev=True)
+  + f'''<section class="sec dark2" id="formation"><div class="wrap split" style="align-items:start"><div>{head("01 — Formation", f"Start on the {gold('right foundation.')}", "The first filings set the shape of your business. We prepare and submit them with you, step by step.")}</div>
+<div>{lines([("01", "LLC & Corporation Formation", "Name availability check, preparation and submission of your formation documents, and EIN assistance."), ("02", "EIN Application", "Help completing and submitting your IRS Employer Identification Number application."), ("03", "Registrations & Changes", "Trade names, registering in another state, amendments, name changes and dissolutions.")])}</div></div></section>
+<section class="sec cream on-light"><div class="wrap split" style="align-items:start"><div>{head("02 — Good standing", "Deadlines tracked. Filings handled.", "Once you’re formed, the state still expects to hear from you. We keep the calendar for you.")}</div>
+<div>{lines([("A", "Annual Reports", "Preparation and submission of your state annual report or registration."), ("B", "Licenses & Deadlines", "Tracking of business licenses, permits and state deadlines, with reminders before they are due."), ("C", "Registered Agent Coordination", "Coordinating a registered agent appointment or change with the provider and the state.")])}</div></div></section>
+<section class="sec charcoal"><div class="wrap split"><div class="portrait framed" style="max-width:460px"><img src="{M}founder-headshot.webp" alt="The founder of MKB Financial Group" loading="lazy" width="583" height="572"></div>
+<div>{head("03 — Documentation & administration", "Records that keep up with the business.", "", rule=False)}<ul class="ticks"><li><b style="color:#F4EBD6">Operating agreements</b> — administrative preparation from a standard template and your instructions.</li><li><b style="color:#F4EBD6">Resolutions &amp; records</b> — resolutions for actions your members or board approved.</li><li><b style="color:#F4EBD6">Business record book</b> — your formation papers, filings and records organized in one place.</li><li><b style="color:#F4EBD6">Administrative support</b> — filings prepared and submitted for you, with updates in your client portal.</li></ul></div></div></section>
+<section class="sec dark"><div class="wrap" style="max-width:900px">{notice("Administrative support — not legal advice.", ["MKB prepares and submits paperwork on your behalf using the information you provide, and prepares documents from standard templates and your instructions. MKB is not a law firm and does not provide legal advice. State and government filing fees are separate and are confirmed for your state before anything is filed."])}<div class="actions" style="margin-top:26px">{btn("Book a Consultation", "/contact")}{obtn("Add bookkeeping & payroll", "/business-financial-management")}</div></div></section>
+{cta(f"Your business deserves a {gold('solid structure.')} Let’s build it.")}''')
+
+# ============================================================ Tax Services
+pages["tax-preparation"] = page("Tax Services | MKB Financial Group", "Individual and business tax preparation, tax document organization and year-round tax planning.",
+  f'''<section class="hero plain"><div class="glow"></div><div class="wrap"><div class="copy" style="max-width:760px">
+<span class="eyebrow gold">Tax Services</span>
+<h1>Tax preparation looks back. {gold('Tax planning looks ahead.')}</h1>
+<p class="lead">MKB helps clients organize tax preparation while keeping the bigger financial picture in view. Choose your pathway.</p>
+<div class="tiles"><a href="#individual"><b>Individual</b><span>Personal tax preparation and document organization →</span></a><a href="#business"><b>Business</b><span>Business returns supported by organized books →</span></a></div>
+<div class="actions" style="margin-top:28px">{btn("Book a Consultation", "/contact")}{obtn("Free tax calculator", "/tax-calculator")}</div>
+<div class="place">LOUISIANA<i>•</i>TEXAS<i>•</i>VIRTUAL</div>
+</div></div></section>
+<section class="sec cream on-light" id="individual"><div class="wrap split" style="align-items:start"><div>{head("Pathway 01 — Individuals", "Individual tax preparation.", "Professional preparation and guidance based on your circumstances and MKB’s return scope.")}
+<div class="actions">{btn("Book a Consultation", "/contact")}{obtn("Estimate my refund", "/tax-calculator")}</div></div>
+<div class="card"><span class="num">HOW WE HELP</span><ul class="ticks"><li>Preparation of your personal return within MKB’s return scope.</li><li>Help understanding which documents you need — and gathering what’s missing.</li><li>A review of your return with you before it’s filed.</li><li>Your documents and return kept organized in your secure client portal.</li></ul><p style="margin-top:16px">Getting ready? Use our <a href="/resources#documents" style="color:#8A5F1D;font-weight:600">tax document checklist →</a></p></div></div></section>
+<section class="sec dark2" id="business"><div class="wrap split" style="align-items:start"><div>{head("Pathway 02 — Business owners", f"Business tax preparation, {gold('built on organized books.')}", "Business tax preparation supported by organized financial information and documentation.")}
+<div class="actions">{btn("Book a Consultation", "/contact")}{obtn("Bookkeeping & payroll", "/business-financial-management")}</div></div>
+<div>{lines([("01", "Business returns", "Preparation of your business return using organized financial information."), ("02", "Tax document organization", "Help understanding the information and documentation needed for preparation."), ("03", "Better books, easier tax time", "When books are organized throughout the year, tax preparation doesn’t have to begin with reconstructing what happened months ago.")])}</div></div></section>
+<section class="sec charcoal"><div class="wrap split"><div class="portrait framed" style="max-width:460px"><img src="{M}founder-reading.webp" alt="The founder of MKB Financial Group reviewing documents" loading="lazy" width="1024" height="1536" style="aspect-ratio:4/4.2;object-position:center 18%"></div>
+<div>{head("Tax planning & strategy", f"Don’t wait until tax season to {gold('think about taxes.')}", "Understand what is affecting your tax position, think through relevant financial decisions, and keep information organized for filing.", rule=True)}</div></div></section>
+<section class="sec cream on-light"><div class="wrap">{head("The tax process", "Three clear steps.", center=True)}{cards([("01", "Get Started", "Tell us about yourself and/or your business."), ("02", "Organize & Review", "Gather documentation and address missing information."), ("03", "Prepare & File", "Complete preparation, final review, approval, and filing.")], 3)}</div></section>
+{cta(f"Your taxes are part of your business. {gold('Let’s treat them that way.')}")}''')
+
+# ============================================================ MKB Record Relief (Louisiana only)
+RR_FAQ = [
+  ("Which states do you serve for record relief?", "Right now, MKB Record Relief is available for Louisiana records only. If your record is in another state, we aren’t able to help with it at this time."),
+  ("Can you tell me if I’m eligible?", "No. We can’t determine eligibility or give legal advice. Eligibility is decided under the law that applies to your record, by the court or agency involved. For advice about your situation, consult a licensed attorney."),
+  ("Do you guarantee my record will be expunged?", "No. Courts and agencies make their own decisions, and we cannot promise any outcome."),
+  ("How long does it take?", "It depends on the agencies and courts involved, including how long records requests take. We can’t promise a timeframe, but you can follow your progress in your client portal."),
+  ("Are you a law firm?", "No. MKB Financial Group is not a law firm and does not provide legal advice or representation. We provide administrative assistance and document preparation."),
+  ("Will you go to court with me?", "No. We don’t represent anyone in court or before an agency. If you need representation, we’ll recommend that you contact a licensed attorney."),
+  ("How do I send you my documents?", "Through your secure client portal. Please don’t email or text copies of your records — we’ll send you a portal invitation once you’re a client."),
+  ("What does it cost?", "We’ll go over our fees before any work begins. Court and agency fees, if any, are separate."),
+]
+pages["record-expungement"] = page("MKB Record Relief | MKB Financial Group", "Administrative assistance and document preparation for people seeking a record expungement in Louisiana. MKB is not a law firm and does not give legal advice.",
+  hero("MKB Record Relief", f"Your next chapter deserves a {gold('clear path forward.')}", "MKB Record Relief provides administrative assistance and document preparation for people pursuing a record expungement in Louisiana. We help you gather your information, request your records and prepare your paperwork — and we keep you updated along the way.", btn("Book a Consultation", "/contact") + obtn("How it works", "#how"), photo="founder-reading.webp", place=False)
+  + f'''<section class="band"><div class="wrap"><div><strong>Louisiana records</strong><span>Currently the only state we serve</span></div><div><strong>Administrative help</strong><span>Not legal advice or representation</span></div><div><strong>Secure portal</strong><span>Documents and updates in one place</span></div></div></section>
+
+<section class="sec dark2"><div class="wrap split" style="align-items:start"><div>{head("Overview", "Organized help for a paperwork-heavy process.", "Record relief involves forms, records requests, deadlines and follow-up. We handle the administrative side so you can stay focused on moving forward.")}</div>
+<div>{lines([("01", "Who it’s for", "People with an arrest or conviction record in Louisiana who want help organizing the paperwork."), ("02", "What we provide", "Administrative assistance, records requests and document preparation from the information you give us."), ("03", "What we don’t", "Legal advice, eligibility decisions or representation in court — those require a licensed attorney.")])}</div></div></section>
+
+<section class="sec cream on-light" id="states"><div class="wrap"><div class="card statebox"><div class="seal">LOUISIANA<br>ONLY</div><div><span class="eyebrow gold">State-specific availability</span><h3 style="font-size:32px">We currently assist with Louisiana records only.</h3><p>MKB Record Relief is available for records in Louisiana. If your record is in another state — including Texas — we aren’t able to assist with it at this time. If that changes, we’ll update this page.</p></div></div></div></section>
+
+<section class="sec light on-light"><div class="wrap split" style="align-items:start"><div>{head("Administrative assistance", "What we take off your plate.", "")}
+<ul class="ticks"><li>Organizing your information and case details in one place.</li><li>Helping you request the records and court documents your paperwork needs.</li><li>Preparing your documents from the information you provide, for you to review before anything is used.</li><li>Keeping track of what’s been requested, received and prepared.</li><li>Status updates in your client portal, step by step.</li></ul></div>
+<div class="card"><span class="num">DOCUMENT ORGANIZATION</span><h3>What to have ready</h3><ul class="ticks"><li>A government-issued photo ID.</li><li>Your current contact information.</li><li>Any court papers, case numbers or arrest records you already have.</li><li>The parish and approximate dates of the record you&rsquo;re asking about.</li><li>Your questions — write them down so we can go over them together.</li></ul><p style="margin-top:14px">Don&rsquo;t have everything? That&rsquo;s okay — helping you request what&rsquo;s missing is part of the process.</p></div></div></section>
+
+<section class="sec dark2" id="how"><div class="wrap">{head("Intake process", "Step by step, with you informed at every stage.", "", center=True)}
+<div class="timeline">''' + "".join(f'<div class="card"><div class="step"><b>{n}</b>{icon(ic, 32)}</div><h3>{t}</h3><p>{b}</p></div>' for n, ic, t, b in [("1", "clarity", "Consultation", "We confirm your record is in Louisiana, explain what we can and can’t do, and go over fees."), ("2", "tax", "Secure intake", "You complete your intake and upload what you have through your secure client portal."), ("3", "structure", "Records & preparation", "We help request missing records and prepare your documents for your review."), ("4", "ahead", "Updates", "You follow each step in your portal, and we let you know when your paperwork is ready.")]) + f'''</div></div></section>
+
+<section class="sec charcoal"><div class="wrap split"><div class="portrait framed" style="max-width:460px"><img src="{M}founder-headshot.webp" alt="The founder of MKB Financial Group" loading="lazy" width="583" height="572"></div>
+<div><span class="eyebrow gold">Secure document collection</span><h2>Your records stay {gold("private.")}</h2><p class="lead">Your court papers and personal records are sensitive. We collect them only through your secure client portal — never through a public website form, email or text.</p><ul class="ticks"><li>You get a private portal invitation once you’re a client.</li><li>Upload documents straight from your phone or computer.</li><li>See what we’ve requested and what’s still needed.</li></ul><div class="actions" style="margin-top:28px"><a class="portal" href="{PORTAL}">{LOCK}Client Portal Sign In</a></div></div></div></section>
+
+<section class="sec light on-light"><div class="wrap split" style="align-items:start"><div>{head("Attorney referral process", "When you need a lawyer, we’ll tell you.", "Some questions can only be answered by a licensed attorney — like whether you’re eligible, what to do about a denial, or anything that needs representation.")}</div>
+<div>{lines([("01", "We flag it", "If your situation needs legal advice or representation, we’ll tell you plainly instead of guessing."), ("02", "We point you to a licensed attorney", "We’ll recommend that you contact a licensed Louisiana attorney. The Louisiana State Bar Association can help you find one."), ("03", "Your paperwork stays organized", "With your permission, we can provide the documents we’ve organized to the attorney you choose.")])}
+<p class="note">MKB does not receive referral fees and does not partner with attorneys. Louisiana State Bar Association: <a href="https://www.lsba.org" target="_blank" rel="noopener noreferrer" style="color:#8A5F1D;font-weight:600">lsba.org</a></p></div></div></section>
+
+<section class="sec dark"><div class="wrap" style="max-width:920px"><span class="eyebrow gold">Service limitations</span>{notice("What we do — and what we don’t", ["MKB Financial Group provides administrative assistance and document preparation. MKB is not a law firm and does not provide legal advice or representation.", "We do not decide whether you are eligible for an expungement, and completing our intake does not mean you are eligible. Courts and agencies make their own determinations, and we cannot promise an outcome or a timeline.", "We currently assist with Louisiana records only.", "For legal advice about your situation, please consult a licensed attorney."])}</div></section>
+
+<section class="sec cream on-light"><div class="wrap">{head("Questions", "Frequently asked questions.", center=True)}<div style="display:grid;justify-items:center">{faq(RR_FAQ)}</div></div></section>
+{cta(f"Ready to get your paperwork {gold('organized?')}")}''')
 
 pages["contact"] = page("Book a Consultation | MKB Financial Group", "Tell MKB Financial Group about your business — we'll follow up within one business day.",
   hero("Book a Consultation", f"Let’s talk about {gold('your business.')}", "Tell us a little about yourself and what you need. We’ll follow up within one business day.", f'<a class="btn-outline" href="tel:8333793320">Call {PHONE}</a><a class="btn-outline" href="mailto:{EMAIL}">{EMAIL}</a>', photo="founder-standing.webp", short=True)
