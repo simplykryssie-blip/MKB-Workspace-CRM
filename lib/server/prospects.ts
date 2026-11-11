@@ -19,6 +19,8 @@ import { createReturn, toReturn, type TaxRow } from "./tax";
 import { latestLink } from "./secure-links";
 import { sendTaxInterviewLink } from "./tax-link";
 import { ensure8821 } from "./f8821";
+import { SERVICE_INTAKES, isServiceIntakeKind } from "@/lib/intakes/service";
+import { intakesForClientAll, sendServiceIntake } from "./service-intake";
 import { buildIntakePdf } from "./intake-pdf";
 import type { Answers } from "@/lib/tax/interview/engine";
 
@@ -47,7 +49,7 @@ export async function leadIntakes(env: AppEnv, a: Actor, leadId: string) {
   requireStaff(a);
   const l = await lead(env, leadId);
   const p = await prospectOf(env, leadId);
-  if (!p) return { prospect: null, intakes: [], taxReturns: [] };
+  if (!p) return { prospect: null, intakes: [], taxReturns: [], serviceIntakes: [] };
   const rows = await all<TaxRow>(env.DB, "SELECT * FROM tax_returns WHERE client_id = ? ORDER BY tax_year DESC", p.id);
   const files = await all<{ id: string; name: string }>(env.DB, "SELECT id, name FROM client_files WHERE client_id = ? AND name LIKE 'MKB-Tax-Interview-%' ORDER BY created_at DESC", p.id);
   const taxReturns = [];
@@ -55,17 +57,19 @@ export async function leadIntakes(env: AppEnv, a: Actor, leadId: string) {
     const r = toReturn(row);
     taxReturns.push({ id: r.id, taxYear: r.taxYear, form: r.form, status: r.organizer.status, submittedAt: r.organizer.submittedAt, updatedAt: r.organizer.interview?.updatedAt, link: await latestLink(env, "tax_interview", r.id), pdfFileId: files.find((f) => f.name.includes(`-${r.taxYear}-`))?.id });
   }
-  return { prospect: { clientId: p.id, status: p.status, leadStatus: l.status }, intakes: await intakesForClient(env, a, p.id).catch(() => []), taxReturns };
+  return { prospect: { clientId: p.id, status: p.status, leadStatus: l.status }, intakes: await intakesForClient(env, a, p.id).catch(() => []), taxReturns, serviceIntakes: await intakesForClientAll(env, p.id) };
 }
 
 /** { kind: "books", email } — sends the lead an intake by private link (creating their prospect record if needed). */
 export async function sendLeadIntake(env: AppEnv, a: Actor, leadId: string, b: { kind?: unknown; email?: unknown; taxYear?: unknown; form?: unknown }) {
   requirePermission(a, "leads", "edit");
   requireStaff(a);
-  if (b.kind !== "books" && b.kind !== "tax") throw badRequest("Choose which intake to send.");
-  const service = b.kind;
-  requirePermission(a, service, "edit");
-  if (service === "tax") requirePermission(a, "tax", "create");
+  if (b.kind !== "books" && b.kind !== "tax" && !isServiceIntakeKind(b.kind)) throw badRequest("Choose which intake to send.");
+  const kind = b.kind;
+  const svcMeta = isServiceIntakeKind(kind) ? SERVICE_INTAKES[kind] : null;
+  const service = svcMeta ? svcMeta.service : (kind as "books" | "tax");
+  requirePermission(a, svcMeta ? svcMeta.module : (kind as "books" | "tax"), "edit");
+  if (kind === "tax") requirePermission(a, "tax", "create");
   const l = await lead(env, leadId);
   if (l.status !== "open") throw badRequest(l.status === "converted" ? "This lead is already a client — send the intake from their client profile." : "Reopen this lead first.");
   const email = typeof b.email === "string" && b.email.trim() ? b.email.trim().toLowerCase().slice(0, 200) : l.email.toLowerCase();
@@ -92,7 +96,12 @@ export async function sendLeadIntake(env: AppEnv, a: Actor, leadId: string, b: {
     await run(env.DB, "UPDATE clients SET status = 'prospect', updated_at = ? WHERE id = ?", t, p.id);
   }
   await run(env.DB, "INSERT OR IGNORE INTO client_services (client_id, service) VALUES (?, ?)", p.id, service);
-  if (service === "tax") {
+  if (svcMeta && isServiceIntakeKind(kind)) {
+    const sent = await sendServiceIntake(env, a, p.id, { kind, email });
+    await leadLog(env, leadId, `${svcMeta.label} intake emailed to ${email} (private link)${sent.emailed ? "" : " — email queued"}`, a.member.id);
+    return sent;
+  }
+  if (kind === "tax") {
     const ret = await prospectReturn(env, a, p.id, l, b);
     const sent = await sendTaxInterviewLink(env, a, ret.id, { email });
     await leadLog(env, leadId, `${ret.taxYear} tax interview emailed to ${email} (private link)${sent.emailed ? "" : " — email queued"}`, a.member.id);
@@ -221,6 +230,7 @@ export async function declineLead(env: AppEnv, a: Actor, leadId: string, b: { re
       await cancelLinks(env, "books_proposal", i.id, a.member.id);
     }
     for (const r of await all<{ id: string }>(env.DB, "SELECT id FROM tax_returns WHERE client_id = ?", p.id)) await cancelLinks(env, "tax_interview", r.id, a.member.id);
+    for (const r of await all<{ id: string }>(env.DB, "SELECT id FROM service_intakes WHERE client_id = ?", p.id)) await cancelLinks(env, "service_intake", r.id, a.member.id);
     await run(env.DB, "UPDATE clients SET status = 'declined', updated_at = ? WHERE id = ?", t, p.id);
   }
   await env.DB.batch([

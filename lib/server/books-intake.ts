@@ -16,6 +16,7 @@ import { sha256Bytes, signatureFrom } from "./signature";
 import { hasSensitivePerm } from "./identity";
 import { rateLimit } from "./core";
 import { CLIENT_SQL, canOpen, type ClientRow } from "./clients";
+import { applyBooksIntakeToProfile } from "./books-profile";
 import { sendTemplate, nextStop } from "./email";
 import { letterVersion } from "./engagement";
 import { audit, requirePermission, requireStaff, type Actor, type LinkActor } from "./identity";
@@ -150,6 +151,8 @@ async function completeSubmit(env: AppEnv, who: Submitter, r: Row, c: ClientRow,
 
   const res = await run(env.DB, "UPDATE books_intakes SET status = 'submitted', answers = ?, consent_name = ?, entered_by = ?, submitted_at = ?, proposal = ?, history = ?, updated_at = ?, rev = rev + 1 WHERE id = ? AND rev = ? AND status = 'in_progress'", JSON.stringify(answers), consent, by, t, JSON.stringify(draft), hist(r.history, histBy, `Submitted and signed by ${consent} (${who.kind === "link" ? "online through their secure link" : by === "client" ? "by the client" : "with staff"}) — ready for review`), t, id, r.rev);
   if (!res.meta.changes) throw new HttpError(409, "This intake was updated somewhere else. Reloading the latest version.", "conflict");
+  // Copy the business and contact details they confirmed onto the profile (changes are recorded and flagged).
+  await applyBooksIntakeToProfile(env, c.id, answers, { actor: auditActor, memberId: staffId, byClient: by === "client" }).catch((e) => console.error("books profile sync", e instanceof Error ? e.message : e));
   await env.FILES.put(sigKey, sigPng, { httpMetadata: { contentType: "image/png" }, customMetadata: { intake: id, signedBy: consent, signedAt: t, sha256: await sha256Bytes(sigPng) } });
   // A submitted intake can't be opened by a link any more.
   if (who.kind === "staff") await run(env.DB, "UPDATE secure_links SET revoked_at = ?, revoked_by = ? WHERE purpose = 'books_intake' AND target_id = ? AND revoked_at IS NULL AND used_at IS NULL", t, `submitted:${who.a.member.id}`, id);

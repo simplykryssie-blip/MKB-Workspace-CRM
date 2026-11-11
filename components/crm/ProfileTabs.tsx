@@ -62,6 +62,7 @@ import { useTeam } from "@/lib/store/team-store";
 import { BACKEND } from "@/lib/sync/remote";
 import { ReturnStatusBadge } from "@/components/tax/TaxBits";
 import { BooksEnrollmentActions, BooksOnboardingStage, ClientBooksCard } from "@/components/books/ClientBooks";
+import { ClientServiceIntakesCard } from "@/components/intakes/ClientServiceIntakes";
 
 export type Act = {
   go: (k: TabKey) => void;
@@ -204,6 +205,7 @@ export function OverviewTab({ c, act }: { c: Client; act: Act }) {
 
         <TaxReturnsCard c={c} />
         <ClientBooksCard c={c} />
+        <ClientServiceIntakesCard c={c} />
 
         <Card>
           <CardHeader title="Recent activity" action={<Button size="sm" variant="ghost" onClick={() => act.go("activity")}>View all</Button>} />

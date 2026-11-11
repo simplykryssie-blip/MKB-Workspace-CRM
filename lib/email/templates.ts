@@ -6,7 +6,7 @@
  * document contents in an email.
  */
 
-export type TemplateKey = "tax_intake_received" | "tax_document_reminder" | "tax_document_request" | "tax_extension_filed" | "invoice_sent" | "books_intake_received" | "books_intake_link" | "books_proposal" | "books_proposal_signed" | "tax_interview_link" | "portal_invite" | "portal_message" | "books_items" | "books_reminder" | "books_reports_ready";
+export type TemplateKey = "tax_intake_received" | "tax_document_reminder" | "tax_document_request" | "tax_extension_filed" | "invoice_sent" | "books_intake_received" | "books_intake_link" | "books_proposal" | "books_proposal_signed" | "tax_interview_link" | "portal_invite" | "portal_message" | "books_items" | "books_reminder" | "books_reports_ready" | "service_intake_link" | "service_intake_received";
 
 export type EmailWording = {
   subject: string;
@@ -190,6 +190,34 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
     docsTitle: "",
     docsNote: "",
     steps: "We connect your accounts and review your books, including any catch-up months.\nWe confirm your first monthly close date.\nEach month you get your reports and a list of anything we need from you.",
+    button: "Open your client portal",
+    closing: "Questions? Reply through your portal or call us at 833-379-3320.",
+  },
+  service_intake_link: {
+    key: "service_intake_link",
+    name: "Service intake link (payroll, Business Solutions, Record Relief)",
+    when: "Sent when staff send a payroll, Business Solutions or Record Relief intake, or automatically after a website Get Started form. The button opens the client's private intake — no portal login.",
+    placeholders: ["firstName", "service", "expires", "days", "staffName"],
+    subject: "Your MKB {{service}} intake — private link inside",
+    heading: "Hi {{firstName}}, let's get started.",
+    intro: "MKB Financial Group sent you a private link to complete your {{service}} intake on your phone or computer — no account or password needed. Your answers save as you go, so you can stop and come back. At the end you'll sign and submit.",
+    docsTitle: "",
+    docsNote: "",
+    steps: "Answer the questions.\nSign with your finger or mouse and submit.\nWe review your answers and reach out with next steps.",
+    button: "Start my intake",
+    closing: "This link is just for you — please don't forward it. It expires on {{expires}} ({{days}} days) and stops working once you submit. Didn't expect this email or need a new link? Call us at 833-379-3320.",
+  },
+  service_intake_received: {
+    key: "service_intake_received",
+    name: "Service intake received (payroll, Business Solutions, Record Relief)",
+    when: "Sent right after a payroll, Business Solutions or Record Relief intake is submitted. The signed PDF copy is attached.",
+    placeholders: ["firstName", "service", "date", "next"],
+    subject: "We received your {{service}} intake — here's what happens next",
+    heading: "Thank you, {{firstName}} — we received your intake.",
+    intro: "We received your signed {{service}} intake on {{date}}. A copy is attached. {{next}}",
+    docsTitle: "What we need from you",
+    docsNote: "Upload these in your client portal. Please don't email documents with Social Security or account numbers.",
+    steps: "",
     button: "Open your client portal",
     closing: "Questions? Reply through your portal or call us at 833-379-3320.",
   },

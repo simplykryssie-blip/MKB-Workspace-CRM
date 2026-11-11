@@ -1,5 +1,7 @@
 "use client";
 
+import { SERVICE_INTAKES, SERVICE_INTAKE_KINDS, type ServiceIntakeKind } from "@/lib/intakes/service";
+
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ClipboardList, Copy, Mail, ShieldCheck, UserCheck, XCircle } from "lucide-react";
@@ -16,12 +18,13 @@ import type { BooksIntake } from "@/lib/server/books-intake";
 import type { Lead } from "@/lib/types";
 
 type TaxItem = { id: string; taxYear: number; form: string; status: string; submittedAt?: string; updatedAt?: string; link: { email: string; state: string; openedAt?: string } | null; pdfFileId?: string };
-type Data = { prospect: { clientId: string; status: string; leadStatus: string } | null; intakes: BooksIntake[]; taxReturns: TaxItem[] };
+type SvcItem = { id: string; kind: ServiceIntakeKind; label: string; status: string; submittedAt?: string; createdAt: string; pdfFileId?: string; link: { email: string; state: string; openedAt?: string } | null };
+type Data = { prospect: { clientId: string; status: string; leadStatus: string } | null; intakes: BooksIntake[]; taxReturns: TaxItem[]; serviceIntakes?: SvcItem[] };
 
 /** The lead's intake forms (sent before they're a client). */
 export function useLeadIntakes(leadId: string) {
-  const [data, setData] = useState<Data | null>(BACKEND ? null : { prospect: null, intakes: [], taxReturns: [] });
-  const load = useCallback(() => { if (BACKEND) call<Data>("GET", `/api/leads/${leadId}/intakes`).then(setData).catch(() => setData({ prospect: null, intakes: [], taxReturns: [] })); }, [leadId]);
+  const [data, setData] = useState<Data | null>(BACKEND ? null : { prospect: null, intakes: [], taxReturns: [], serviceIntakes: [] });
+  const load = useCallback(() => { if (BACKEND) call<Data>("GET", `/api/leads/${leadId}/intakes`).then(setData).catch(() => setData({ prospect: null, intakes: [], taxReturns: [], serviceIntakes: [] })); }, [leadId]);
   useEffect(() => { load(); }, [load]);
   return { data, reload: load, hasProspect: data?.prospect?.status === "prospect" };
 }
@@ -40,7 +43,7 @@ const badge = (i: BooksIntake) => {
 export function LeadIntakesCard({ lead, intakes: h }: { lead: Lead; intakes: ReturnType<typeof useLeadIntakes> }) {
   const toast = useToast();
   const team = useTeam();
-  const [sending, setSending] = useState<null | "books" | "tax">(null);
+  const [sending, setSending] = useState<null | "books" | "tax" | ServiceIntakeKind>(null);
   const forms = lead.type === "business" ? ["1040 + Sch C", "1120-S", "1065", "1120"] : ["1040", "1040 + Sch C", "1040-X"];
   const FORM_HELP: Record<string, string> = {
     "1040 + Sch C": lead.type === "business" ? "Owner's personal return with Schedule C — sole proprietor or single-member LLC (most small LLCs)" : "Personal return with Schedule C (self-employed)",
@@ -64,14 +67,17 @@ export function LeadIntakesCard({ lead, intakes: h }: { lead: Lead; intakes: Ret
   const taxList = d?.taxReturns ?? [];
   const canBooks = team.can("leads", "edit") && team.can("books", "edit") && !list.length;
   const canTax = team.can("leads", "edit") && team.can("tax", "create");
-  const submitted = list.some((i) => i.status === "submitted") || taxList.some((t) => t.status === "submitted" || t.status === "reviewed");
+  const svcList = d?.serviceIntakes ?? [];
+  const canSvc = (k: ServiceIntakeKind) => team.can("leads", "edit") && team.can(SERVICE_INTAKES[k].module, "edit");
+  const sendingLabel = sending === "tax" ? "tax interview" : sending === "books" ? "bookkeeping intake" : sending ? `${SERVICE_INTAKES[sending].label} intake` : "";
+  const submitted = list.some((i) => i.status === "submitted") || taxList.some((t) => t.status === "submitted" || t.status === "reviewed") || svcList.some((x) => x.status === "submitted");
 
   const send = async () => {
     setBusy(true);
     try {
-      const r = await call<{ url: string; emailed: boolean }>("POST", `/api/leads/${lead.id}/intakes`, sending === "tax" ? { kind: "tax", email, taxYear, form } : { kind: "books", email });
+      const r = await call<{ url: string; emailed: boolean }>("POST", `/api/leads/${lead.id}/intakes`, sending === "tax" ? { kind: "tax", email, taxYear, form } : { kind: sending, email });
       setSentUrl(r.url);
-      toast(r.emailed ? `${sending === "tax" ? `${taxYear} tax interview` : "Bookkeeping intake"} emailed to ${email}` : "Link created — the email is queued");
+      toast(r.emailed ? `${sending === "tax" ? `${taxYear} tax interview` : sendingLabel[0].toUpperCase() + sendingLabel.slice(1)} emailed to ${email}` : "Link created — the email is queued");
       h.reload();
     } catch (e) { toast(e instanceof Error ? e.message : "Couldn't send", "info"); }
     setBusy(false);
@@ -96,10 +102,11 @@ export function LeadIntakesCard({ lead, intakes: h }: { lead: Lead; intakes: Ret
 
   return (
     <Card>
-      <CardHeader icon={ClipboardList} title="Intake forms" subtitle="Send the bookkeeping intake or tax interview before accepting them as a client. They aren't added to Clients until you accept." action={open && (canBooks || canTax) ? (
+      <CardHeader icon={ClipboardList} title="Intake forms" subtitle="Send an intake before accepting them as a client. They aren't added to Clients until you accept." action={open && (canBooks || canTax || SERVICE_INTAKE_KINDS.some(canSvc)) ? (
         <div className="flex flex-wrap justify-end gap-2">
           {canBooks && <Button size="sm" variant="primary" icon={Mail} onClick={() => { setSentUrl(null); setEmail(lead.email ?? ""); setSending("books"); }}>Bookkeeping intake</Button>}
           {canTax && <Button size="sm" variant="primary" icon={Mail} onClick={() => { setSentUrl(null); setEmail(lead.email ?? ""); setSending("tax"); }}>Tax interview</Button>}
+          {SERVICE_INTAKE_KINDS.filter(canSvc).map((k) => <Button key={k} size="sm" icon={Mail} onClick={() => { setSentUrl(null); setEmail(lead.email ?? ""); setSending(k); }}>{SERVICE_INTAKES[k].label}</Button>)}
         </div>
       ) : undefined} />
       {taxList.length > 0 && (
@@ -117,7 +124,8 @@ export function LeadIntakesCard({ lead, intakes: h }: { lead: Lead; intakes: Ret
           })}
         </ul>
       )}
-      {d === null ? <p className="border-t border-line px-6 py-4 text-[13px] text-muted">Loading…</p> : list.length === 0 ? (taxList.length ? null : (
+      {svcList.length > 0 && <ServiceIntakeRows items={svcList} clientId={d?.prospect?.clientId} />}
+      {d === null ? <p className="border-t border-line px-6 py-4 text-[13px] text-muted">Loading…</p> : list.length === 0 ? (taxList.length || svcList.length ? null : (
         <p className="border-t border-line px-6 py-4 text-[13.5px] text-muted">{open ? "No intake sent yet. They fill it in on their phone or computer, sign and submit — no login." : "No intake forms."}</p>
       )) : (
         <ul className="divide-y divide-line border-t border-line">
@@ -139,7 +147,7 @@ export function LeadIntakesCard({ lead, intakes: h }: { lead: Lead; intakes: Ret
         </div>
       )}
 
-      <Modal open={!!sending} onClose={() => setSending(null)} title={sending === "tax" ? "Send tax interview" : "Send bookkeeping intake"} description={`The lead fills it in on their phone or computer, signs${sending === "tax" ? " the engagement letter" : ""} and submits — no login, and they aren't a client yet.`}
+      <Modal open={!!sending} onClose={() => setSending(null)} title={`Send ${sendingLabel}`} description={`The lead fills it in on their phone or computer, signs${sending === "tax" ? " the engagement letter" : ""} and submits — no login, and they aren't a client yet.`}
         footer={sentUrl ? <Button variant="primary" onClick={() => setSending(null)}>Done</Button> : <><Button onClick={() => setSending(null)}>Cancel</Button><Button variant="primary" icon={Mail} disabled={busy || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())} onClick={send}>{busy ? "Sending…" : "Email the intake"}</Button></>}>
         {sentUrl ? (
           <div className="space-y-3 text-[13.5px] text-ink-2">
@@ -171,3 +179,22 @@ export function LeadIntakesCard({ lead, intakes: h }: { lead: Lead; intakes: Ret
     </Card>
   );
 }
+
+/** Payroll, Business Solutions and Record Relief intakes: status, and the signed PDF once submitted. Shared with the client page. */
+export function ServiceIntakeRows({ items, clientId }: { items: SvcItem[]; clientId?: string }) {
+  return (
+    <ul className="divide-y divide-line border-t border-line">
+      {items.map((x) => {
+        const done = x.status === "submitted";
+        return (
+          <li key={x.id} className="flex flex-wrap items-center gap-3 px-5 py-3 sm:px-6">
+            <span className="min-w-0 flex-1"><span className="block truncate text-[14px] font-medium text-ink">{x.label} intake</span><span className="block text-[12px] text-muted">{done ? `Submitted ${x.submittedAt ? relTime(x.submittedAt) : ""} — review the signed PDF` : x.link ? `Sent to ${x.link.email}${x.link.openedAt ? " · opened" : " · not opened yet"}` : "Not sent"}</span></span>
+            {done && x.pdfFileId && clientId && <Button size="sm" href={`/api/clients/${clientId}/files/${x.pdfFileId}`} newTab>View answers (PDF)</Button>}
+            {done ? <Badge tone="info">Submitted — review</Badge> : x.link?.state === "active" ? <Badge tone="warning">{x.link.openedAt ? "Filling in" : "Link sent"}</Badge> : x.link?.state === "expired" ? <Badge tone="warning">Link expired</Badge> : x.link?.state === "cancelled" ? <Badge tone="neutral">Link cancelled</Badge> : <Badge tone="warning">Not sent</Badge>}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+export type { SvcItem };

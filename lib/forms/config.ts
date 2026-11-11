@@ -134,7 +134,11 @@ export const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-"
  * Tax: `returnFieldId` is the question whose answer (one of TAX_RETURN_CHOICES)
  * picks the return; `yearFieldId` is sent only when the answer is "Most recent tax year".
  */
-export type AutoIntake = { kind: "tax" | "books"; returnFieldId?: string; yearFieldId?: string };
+export type AutoIntake = {
+  kind: "tax" | "books" | "payroll" | "biz" | "relief"; returnFieldId?: string; yearFieldId?: string;
+  /** Send only when this question's answer equals `onlyIfEquals` (e.g. "Is the record in Louisiana?" → "Yes"). */
+  onlyIfFieldId?: string; onlyIfEquals?: string;
+};
 export const TAX_RETURN_CHOICES: Record<string, string> = {
   "Personal return": "1040",
   "Self-employed or single-member LLC (Schedule C)": "1040 + Sch C",

@@ -16,9 +16,10 @@ import { sendLeadIntake } from "./prospects";
 function autoIntakeOf(v: unknown): { autoIntake?: AutoIntake } {
   if (!v || typeof v !== "object") return {};
   const o = v as Record<string, unknown>;
-  if (o.kind !== "tax" && o.kind !== "books") return {};
+  if (!["tax", "books", "payroll", "biz", "relief"].includes(o.kind as string)) return {};
   const id = (x: unknown) => (typeof x === "string" && /^[A-Za-z0-9_-]{1,60}$/.test(x) ? x : undefined);
-  return { autoIntake: { kind: o.kind, ...(o.kind === "tax" ? { returnFieldId: id(o.returnFieldId), yearFieldId: id(o.yearFieldId) } : {}) } };
+  const only = id(o.onlyIfFieldId) && typeof o.onlyIfEquals === "string" ? { onlyIfFieldId: id(o.onlyIfFieldId), onlyIfEquals: o.onlyIfEquals.slice(0, 200) } : {};
+  return { autoIntake: { kind: o.kind as AutoIntake["kind"], ...(o.kind === "tax" ? { returnFieldId: id(o.returnFieldId), yearFieldId: id(o.yearFieldId) } : {}), ...only } };
 }
 
 /**
@@ -32,7 +33,12 @@ async function sendAutoIntake(env: AppEnv, f: LeadForm, leadId: string, data: Re
   if (!ai) return;
   const db = env.DB;
   const note = (body: string) => db.prepare("INSERT INTO lead_notes (id, lead_id, author_id, body, at) VALUES (?, ?, (SELECT owner_id FROM leads WHERE id = ?), ?, ?)").bind(randomId("n"), leadId, leadId, body, now()).run();
-  const label = ai.kind === "tax" ? "tax interview" : "bookkeeping intake";
+  const label = ({ tax: "tax interview", books: "bookkeeping intake", payroll: "payroll intake", biz: "Business Solutions intake", relief: "Record Relief intake" } as const)[ai.kind];
+  if (ai.onlyIfFieldId && data[ai.onlyIfFieldId] !== ai.onlyIfEquals) {
+    const q = f.fields.find((x) => x.id === ai.onlyIfFieldId);
+    await note(`The ${label} wasn't sent automatically (${q ? `“${q.label}” was answered “${data[ai.onlyIfFieldId] || "—"}”` : "a condition wasn't met"}). Follow up, then send it from this lead if it applies.`);
+    return;
+  }
   let extra: { taxYear?: number; form?: string } = {};
   if (ai.kind === "tax") {
     const form = TAX_RETURN_CHOICES[(ai.returnFieldId && data[ai.returnFieldId]) || ""];
@@ -158,20 +164,38 @@ async function process(env: AppEnv, f: LeadForm, raw: Record<string, unknown>, c
   const norm = "replace(replace(replace(replace(replace(phone, '(', ''), ')', ''), '-', ''), ' ', ''), '+1', '')";
   const client = await one<{ id: string }>(db, `SELECT id FROM clients WHERE status NOT IN ('prospect', 'declined') AND ((? != '' AND email = ?) OR (length(?) = 10 AND ${norm} = ?)) LIMIT 1`, L.email, L.email, phoneDigits, phoneDigits);
   if (client) {
-    await db.batch([save("existing_client", undefined, client.id), db.prepare("INSERT INTO client_activity (id, client_id, kind, text, actor, at) VALUES (?, ?, 'message', ?, 'client', ?)").bind(randomId("x"), client.id, `Submitted the “${f.name}” form`, t)]);
+    // Their answers go on the client's profile as a note, so staff see them there.
+    const author = (await one<{ id: string }>(db, "SELECT id FROM members WHERE id = ? AND status = 'active'", f.routing.ownerId))?.id ?? (await one<{ member_id: string }>(db, "SELECT member_id FROM record_assignments WHERE client_id = ? LIMIT 1", client.id))?.member_id ?? "system";
+    const svc = f.services.length === 1 ? f.services[0] : null;
+    await db.batch([
+      save("existing_client", undefined, client.id),
+      db.prepare("INSERT INTO client_activity (id, client_id, kind, text, actor, at) VALUES (?, ?, 'message', ?, 'client', ?)").bind(randomId("x"), client.id, `Submitted the “${f.name}” form — answers saved to Notes`, t),
+      db.prepare("INSERT INTO client_notes (id, client_id, author_id, body, service, pinned, at) VALUES (?, ?, ?, ?, ?, 0, ?)").bind(randomId("n"), client.id, author, `Submitted the “${f.name}” form (${channel}):\n${L.summary}`, svc, t),
+    ]);
     if (channel !== "Staff test") await notify(env, { module: "crm" }, { kind: "form", title: `A client submitted the “${f.name}” form`, href: `/clients/${client.id}#activity` });
     return { id: subId, outcome: "existing_client" as const, clientId: client.id };
   }
-  const lead = await one<{ id: string; interests: string; owner_id: string; tags: string }>(db, `SELECT id, interests, owner_id, tags FROM leads WHERE status = 'open' AND ((? != '' AND email = ?) OR (length(?) = 10 AND ${norm} = ?)) LIMIT 1`, L.email, L.email, phoneDigits, phoneDigits);
+  const lead = await one<{ id: string; interests: string; owner_id: string; tags: string; type: string; name: string; contact_name: string | null; email: string; phone: string; business: string | null; address: string | null }>(db, `SELECT id, interests, owner_id, tags, type, name, contact_name, email, phone, business, address FROM leads WHERE status = 'open' AND ((? != '' AND email = ?) OR (length(?) = 10 AND ${norm} = ?)) LIMIT 1`, L.email, L.email, phoneDigits, phoneDigits);
   if (lead) {
     const interests = [...new Set([...json<string[]>(lead.interests, []), ...L.services])];
     // The form's tags (e.g. "Payroll Only") are added so the lead shows what was asked for this time.
     const tags = [...new Set([...json<string[]>(lead.tags, []), ...f.routing.tags])];
+    // Fill in details the lead doesn't have yet — never overwrite what's already there.
+    const filled: string[] = [];
+    const phone = !digits(lead.phone ?? "") && L.phone ? (filled.push("phone"), L.phone) : lead.phone;
+    const email = !lead.email && L.email ? (filled.push("email"), L.email) : lead.email;
+    const toBiz = lead.type === "individual" && !lead.business && !!L.bizName;
+    if (toBiz) filled.push("business name");
+    const address = !lead.address && L.state ? (filled.push("state"), JSON.stringify({ line1: "", city: L.city, state: L.state, zip: L.zip })) : lead.address;
     await db.batch([
       save("existing_lead", lead.id),
       db.prepare("INSERT INTO lead_notes (id, lead_id, author_id, body, at) VALUES (?, ?, ?, ?, ?)").bind(randomId("n"), lead.id, lead.owner_id, `New “${f.name}” submission:\n${L.summary}`, t),
       db.prepare("INSERT INTO lead_activity (id, lead_id, kind, text, actor, at) VALUES (?, ?, 'lead', ?, 'client', ?)").bind(randomId("x"), lead.id, `Submitted the “${f.name}” form again`, t),
-      db.prepare("UPDATE leads SET interests = ?, tags = ?, rev = rev + 1, last_activity_at = ? WHERE id = ?").bind(JSON.stringify(interests), JSON.stringify(tags), t, lead.id),
+      db.prepare("UPDATE leads SET interests = ?, tags = ?, phone = ?, email = ?, address = ?, type = ?, name = ?, contact_name = ?, business = ?, rev = rev + 1, last_activity_at = ? WHERE id = ?").bind(
+        JSON.stringify(interests), JSON.stringify(tags), phone, email, address,
+        toBiz ? "business" : lead.type, toBiz ? L.bizName! : lead.name, toBiz ? lead.contact_name || lead.name : lead.contact_name,
+        toBiz ? JSON.stringify({ entityType: L.entityType || "LLC", industry: "" }) : lead.business, t, lead.id),
+      ...(filled.length ? [db.prepare("INSERT INTO lead_activity (id, lead_id, kind, text, actor, at) VALUES (?, ?, 'lead', ?, 'system', ?)").bind(randomId("x"), lead.id, `Added from the “${f.name}” form: ${filled.join(", ")}`, t)] : []),
     ]);
     if (channel !== "Staff test") await notify(env, { module: "leads" }, { kind: "form", title: `An open lead submitted the “${f.name}” form again`, href: `/leads/${lead.id}` });
     if (channel !== "Staff test") await sendAutoIntake(env, f, lead.id, data, ip);
