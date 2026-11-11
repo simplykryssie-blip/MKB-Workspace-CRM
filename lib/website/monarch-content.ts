@@ -4,7 +4,7 @@
  * Loaded as drafts the first time someone opens Monarch → Website; nothing is
  * public until it's published from the editor.
  */
-import { MKB_PAGES } from "./mkb-content";
+import { WISP_PAGES } from "./mkb-content";
 import type { Section, SiteButton, SitePage, SiteSettings } from "./types";
 
 const OLD = "https://daxpavvsotvsyqqntddc.supabase.co/storage/v1/object/public/branding/2896bf43-95db-420f-9bb5-8854f537bbd1/media";
@@ -60,7 +60,7 @@ const mentorship: Section[] = [
 ];
 
 /** The WISP funnel pages (same pages as on the old Monarch site). */
-const wisp = MKB_PAGES.filter((p) => p.slug.startsWith("wisp-")).map((p, i): SitePage => ({
+const wisp = WISP_PAGES.map((p, i): SitePage => ({
   ...structuredClone(p),
   id: `pg-m-${p.slug}`,
   title: p.slug === "wisp-next-steps" ? "WISP Next Steps" : p.title,

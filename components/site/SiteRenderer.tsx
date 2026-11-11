@@ -62,11 +62,11 @@ export function SiteRenderer({ settings: st, sections, nav, base, preview, banne
             </div>
             <div>
               <h4>SERVICES</h4>
-              {nav.filter((p) => !["about", "resources"].includes(p.slug)).map((p) => <a key={p.slug} href={L(`/${p.slug}`)}>{p.title}</a>)}
+              {nav.filter((p) => !["about", "resources", "calculator"].includes(p.slug)).map((p) => <a key={p.slug} href={L(`/${p.slug}`)}>{p.title}</a>)}
             </div>
             <div>
               <h4>EXPLORE</h4>
-              {nav.filter((p) => ["about", "resources"].includes(p.slug)).map((p) => <a key={p.slug} href={L(`/${p.slug}`)}>{p.title}</a>)}
+              {nav.filter((p) => ["about", "resources", "calculator"].includes(p.slug)).map((p) => <a key={p.slug} href={L(`/${p.slug}`)}>{p.title}</a>)}
               {headerCta && <a href={L(headerCta.href)} {...ext(headerCta.href)}>{headerCta.label}</a>}
               {booking && booking.href !== headerCta?.href && <a href={L(booking.href)} {...ext(booking.href)}>{booking.label}</a>}
               {st.portalHref && <a href={L(st.portalHref)} {...ext(st.portalHref)}>Client Portal Sign In</a>}
