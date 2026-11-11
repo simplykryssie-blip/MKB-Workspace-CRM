@@ -3,7 +3,8 @@
 import { TaxFeeSchedule } from "@/components/tax/TaxFeeSchedule";
 import { useTax } from "@/lib/store/tax-store";
 import { useEffect, useMemo, useState } from "react";
-import { DollarSign, FileSignature, History, Mail, Plus, RotateCcw, Save, ShieldCheck, Trash2, ChevronDown } from "lucide-react";
+import { DollarSign, FileSignature, History, Mail, Plus, RotateCcw, Save, ShieldCheck, Trash2, ChevronDown, Upload } from "lucide-react";
+import { ImportIdentifiers } from "./ImportIdentifiers";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -23,9 +24,11 @@ const SAMPLE = { clientName: "Jordan Sample", date: "November 8, 2026", taxYear:
 const input = "w-full rounded-xl border border-line bg-surface px-3 text-[14px] text-ink disabled:opacity-60";
 
 export function SettingsPage() {
-  const [tab, setTab] = useState<"letters" | "emails" | "fees" | "designee">("letters");
+  const team = useTeam();
+  const owner = !!team.me && !!team.roles?.find((r) => r.id === team.me?.roleId)?.isOwner;
+  const [tab, setTab] = useState<"letters" | "emails" | "fees" | "designee" | "import">("letters");
   useEffect(() => {
-    const read = () => { const h = window.location.hash.slice(1); setTab(h === "emails" || h === "fees" || h === "designee" ? h : "letters"); };
+    const read = () => { const h = window.location.hash.slice(1); setTab(h === "emails" || h === "fees" || h === "designee" || h === "import" ? h : "letters"); };
     read();
     window.addEventListener("hashchange", read);
     return () => window.removeEventListener("hashchange", read);
@@ -37,11 +40,11 @@ export function SettingsPage() {
         <p className="mt-1 text-[14px] text-muted">Engagement letters, automatic client emails and your service fees.</p>
       </div>
       <div role="tablist" className="flex flex-wrap gap-2">
-        {([["letters", "Engagement letters", FileSignature], ["emails", "Client emails", Mail], ["fees", "Fees", DollarSign], ["designee", "Tax & IRS", ShieldCheck]] as const).map(([k, l, Icon]) => (
+        {([["letters", "Engagement letters", FileSignature], ["emails", "Client emails", Mail], ["fees", "Fees", DollarSign], ["designee", "Tax & IRS", ShieldCheck], ...(owner && BACKEND ? [["import", "Import", Upload]] as const : [])] as const).map(([k, l, Icon]) => (
           <button key={k} role="tab" aria-selected={tab === k} onClick={() => { setTab(k); history.replaceState(null, "", `#${k}`); }} className={`inline-flex h-10 items-center gap-2 rounded-xl border px-4 text-[14px] font-semibold ${tab === k ? "border-accent bg-accent-soft text-accent-ink" : "border-line bg-surface text-ink-2 hover:bg-surface-hover"}`}><Icon size={16} />{l}</button>
         ))}
       </div>
-      {tab === "letters" ? <LettersEditor /> : tab === "emails" ? <EmailsEditor /> : tab === "fees" ? <FeesEditor /> : <div className="space-y-5"><TaxRulesCard /><DesigneeEditor /></div>}
+      {tab === "import" && owner ? <ImportIdentifiers /> : tab === "letters" ? <LettersEditor /> : tab === "emails" ? <EmailsEditor /> : tab === "fees" ? <FeesEditor /> : <div className="space-y-5"><TaxRulesCard /><DesigneeEditor /></div>}
     </div>
   );
 }

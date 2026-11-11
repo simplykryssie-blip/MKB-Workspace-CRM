@@ -129,7 +129,7 @@ const sameJSON = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringif
 /* ---------------------------------------------------------------- create */
 export type NewIdentifiers = { taxId?: string; taxIdType?: "SSN" | "ITIN"; ein?: string; dob?: string; rpTaxId?: string };
 
-async function vaultStatements(env: AppEnv, a: Extract<Actor, { kind: "staff" }>, clientId: string, ids: NewIdentifiers) {
+export async function vaultStatements(env: AppEnv, a: Extract<Actor, { kind: "staff" }>, clientId: string, ids: NewIdentifiers) {
   if (!env.ENCRYPTION_KEY) throw new HttpError(500, "Server encryption key is not configured.");
   const out: D1PreparedStatement[] = [];
   const put = async (field: string, value: string, last4: string | null, kind: string | null) => {
