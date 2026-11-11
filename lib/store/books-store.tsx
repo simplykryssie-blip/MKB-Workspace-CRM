@@ -119,6 +119,31 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
   const M = (wsId: string, monthId: string) => W(wsId).months.find((m) => m.id === monthId)!;
   const up = (id: string, fn: (w: BooksWorkspace) => BooksWorkspace) => dispatch({ type: "update", id, fn });
 
+  /**
+   * Live CRM: emails the client about their month (items needed, a reminder, reports ready).
+   * Calls made close together are combined into one email per workspace, kind and month.
+   */
+  const outbox = new Map<string, { items: Set<string>; timer?: ReturnType<typeof setTimeout> }>();
+  const emailClient = (wsId: string, kind: "items" | "reminder" | "reports", period: string, items: string[]) => {
+    if (!BACKEND || !items.length) return;
+    const key = `${wsId}|${kind}|${period}`;
+    const cur = outbox.get(key) ?? { items: new Set<string>() };
+    items.forEach((i) => cur.items.add(i));
+    if (cur.timer) clearTimeout(cur.timer);
+    cur.timer = setTimeout(async () => {
+      outbox.delete(key);
+      try {
+        await waitForWorkspaceSave(wsId); // a brand-new workspace must exist on the server first
+        const r = await call<{ emailed: boolean; reason?: string }>("POST", `/api/books/workspaces/${wsId}/notify`, { kind, period, items: [...cur.items] });
+        if (!r.emailed && r.reason === "no_portal") notify(`${get().workspaces.find((w) => w.id === wsId)?.businessName ?? "Client"}: no email sent — they aren't on the client portal yet. Invite them from their client profile.`);
+        if (!r.emailed && r.reason === "no_email") notify("No email sent — the client has no email address on file.");
+      } catch (e) {
+        notify(e instanceof RemoteError ? e.message : "Couldn't email the client — check your connection.");
+      }
+    }, 1500);
+    outbox.set(key, cur);
+  };
+
   /** Mirror the current month on the client's bookkeeping engagement. */
   const syncEnrollment = (w: BooksWorkspace) => {
     if (!w.enrollmentId) return;
@@ -151,6 +176,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     };
     dispatch({ type: "update", id: wsId, fn: apply });
     clients().logActivity(w.clientId, "status", `${w.businessName}: ${label} → ${stage}`, by === "client" ? "client" : "staff");
+    if (newMonth && newTasks.length) emailClient(wsId, "items", np, newTasks.map((t) => t.title));
     syncEnrollment(apply(w));
   };
 
@@ -194,7 +220,8 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       const w = W(wsId);
       const m = M(wsId, monthId);
       const n = openTasks(w, m.period).length;
-      clients().sendMessage(w.clientId, `Reminder: ${n} item${n === 1 ? "" : "s"} for ${periodLabel(m.period)} need your attention in the client portal.`, "books", { workspaceId: wsId, author: staffById(w.bookkeeperId).name });
+      clients().sendMessage(w.clientId, `Reminder: ${n} item${n === 1 ? "" : "s"} for ${periodLabel(m.period)} need your attention in the client portal.`, "books", { workspaceId: wsId, author: staffById(w.bookkeeperId).name, quiet: true });
+      emailClient(wsId, "reminder", m.period, openTasks(w, m.period).map((t) => t.title));
       up(wsId, (x) => log(x, "message", `Reminder sent for ${periodLabel(m.period)} (${n} open task${n === 1 ? "" : "s"})`, "system"));
       return n;
     },
@@ -225,6 +252,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     },
     addTask(wsId: string, period: string, type: ClientTaskType, title: string, detail?: string) {
       up(wsId, (w) => log({ ...w, tasks: [...w.tasks, { id: uid("t"), period, type, title, detail, status: "open", createdAt: nowIso(), docIds: [] }] }, "message", `Task for client: ${title}`));
+      emailClient(wsId, "items", period, [title]);
     },
 
     /* ---------------- Review ---------------- */
@@ -262,7 +290,8 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
         const next = mapMonth(x, monthId, (mm) => ({ ...mm, reviewItems: mm.reviewItems.map((r) => { const t = tasks.find((tt) => tt.reviewItemId === r.id); return t ? { ...r, status: "sent_to_client", taskId: t.id } : r; }) }));
         return log({ ...next, tasks: [...next.tasks, ...tasks] }, "message", `Sent ${tasks.length} follow-up request${tasks.length > 1 ? "s" : ""} to client`);
       });
-      clients().sendMessage(w.clientId, `We have ${tasks.length} question${tasks.length > 1 ? "s" : ""} about ${periodLabel(m.period)}. Please check your task list in the portal.`, "books", { workspaceId: wsId, author: staffById(m.assignedTo).name });
+      clients().sendMessage(w.clientId, `We have ${tasks.length} question${tasks.length > 1 ? "s" : ""} about ${periodLabel(m.period)}. Please check your task list in the portal.`, "books", { workspaceId: wsId, author: staffById(m.assignedTo).name, quiet: true });
+      emailClient(wsId, "items", m.period, tasks.map((t) => t.title));
       if (m.stage !== "Client Follow-up Needed") moveTo(wsId, monthId, "Client Follow-up Needed", `${tasks.length} request(s) sent`, m.assignedTo, { followupFrom: m.stage });
       return tasks.length;
     },
@@ -303,10 +332,11 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     toFinalReview: (wsId: string, monthId: string) => moveTo(wsId, monthId, "MKB Final Review", "all accounts reconciled", M(wsId, monthId).assignedTo),
 
     /* ---------------- Reports + close ---------------- */
-    prepareReport(wsId: string, monthId: string, reportId: string) {
+    /** Attach the report file (from QuickBooks). It stays hidden from the client until it's made available or delivered. */
+    prepareReport(wsId: string, monthId: string, reportId: string, file?: File) {
       const w = W(wsId);
       const r = M(wsId, monthId).reports.find((x) => x.id === reportId)!;
-      const docId = clients().uploadDocument(w.clientId, { name: `${r.type} — ${periodLabel(r.period)} (from QuickBooks)`, service: "books", category: "Financial report", sensitive: false, sizeKb: 96, workspaceId: wsId, period: r.period });
+      const docId = clients().uploadDocument(w.clientId, { name: `${r.type} — ${periodLabel(r.period)}`, service: "books", category: "Financial report", sensitive: false, sizeKb: file ? Math.max(1, Math.round(file.size / 1024)) : 96, workspaceId: wsId, period: r.period, replaces: r.docId, file, internal: r.delivery === "not_delivered" });
       up(wsId, (x) => log(mapMonth(x, monthId, (m) => ({ ...m, reports: m.reports.map((y) => (y.id === reportId ? { ...y, review: "in_review", preparedAt: nowIso(), docId } : y)) })), "status", `${r.type} prepared for ${periodLabel(r.period)}`));
     },
     approveReport(wsId: string, monthId: string, reportId: string) {
@@ -324,7 +354,11 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       const w = W(wsId);
       const r = M(wsId, monthId).reports.find((x) => x.id === reportId)!;
       up(wsId, (x) => log(mapMonth(x, monthId, (m) => ({ ...m, reports: m.reports.map((y) => (y.id === reportId ? { ...y, delivery, deliveredAt: delivery === "delivered" ? nowIso() : y.deliveredAt } : y)) })), "upload", `${r.type} ${delivery === "delivered" ? "delivered to client" : "made available in client portal"}`));
-      if (delivery === "delivered") clients().logActivity(w.clientId, "upload", `${w.businessName}: ${r.type} for ${periodLabel(r.period)} delivered`);
+      if (r.docId) clients().setDocInternal(w.clientId, r.docId, false); // the client can see it now
+      if (delivery === "delivered") {
+        clients().logActivity(w.clientId, "upload", `${w.businessName}: ${r.type} for ${periodLabel(r.period)} delivered`);
+        if (r.docId) emailClient(wsId, "reports", r.period, [r.type]); // only reports that have a file
+      }
     },
     closeMonth(wsId: string, monthId: string) {
       const m = M(wsId, monthId);

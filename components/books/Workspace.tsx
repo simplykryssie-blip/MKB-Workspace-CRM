@@ -36,6 +36,7 @@ import {
   Scale,
   Send,
   ShieldCheck,
+  Upload,
   UploadCloud,
   UserRound,
 } from "lucide-react";
@@ -47,7 +48,7 @@ import { Menu } from "@/components/ui/Menu";
 import { Breadcrumbs } from "@/components/ui/PageHeader";
 import { useToast } from "@/components/ui/Toast";
 import { Timeline } from "@/components/crm/ProfileTabs";
-import { PaymentDialog, downloadDoc, downloadPlaceholder } from "@/components/crm/dialogs";
+import { PaymentDialog, downloadDoc } from "@/components/crm/dialogs";
 import { staffList, staffById } from "@/lib/sample/clients";
 import { useClients } from "@/lib/store/clients-store";
 import { balanceDue, currentMonth, nextAction, openTasks, unresolved, useBooks, workspaceDocs, workspaceInvoices, workspaceMessages } from "@/lib/store/books-store";
@@ -623,7 +624,7 @@ function ReportsTab({ w, m, c }: { w: BooksWorkspace; m: BooksMonth; c: Client }
   return (
     <Card>
       <CardHeader icon={FileBarChart2} title={`Financial reports · ${periodLabel(m.period)}`} subtitle={`Agreed reports: ${w.service.reports.join(", ")}`} />
-      <p className="mx-5 mb-3 rounded-xl bg-surface-2 px-3 py-2 text-[12.5px] text-muted ring-1 ring-line sm:mx-6">Reports are run from the client&rsquo;s QuickBooks company. The preview tracks preparation, review and delivery only — it contains no financial figures.</p>
+      <p className="mx-5 mb-3 rounded-xl bg-surface-2 px-3 py-2 text-[12.5px] text-muted ring-1 ring-line sm:mx-6">Run each report in the client&rsquo;s QuickBooks company, save it as a PDF and upload it here. The client can&rsquo;t see it until it&rsquo;s approved and you click <b>Make available</b> or <b>Deliver</b> — Deliver also emails them that their reports are ready.</p>
       {!canPrepare && !canDeliver && <p className="mx-5 mb-3 text-[12.5px] text-muted sm:mx-6">Reports are prepared during MKB Final Review.</p>}
       <ul className="divide-y divide-line border-t border-line">
         {m.reports.map((r) => (
@@ -636,11 +637,16 @@ function ReportsTab({ w, m, c }: { w: BooksWorkspace; m: BooksMonth; c: Client }
             <Badge tone={REVIEW_META[r.review].tone}>{REVIEW_META[r.review].label}</Badge>
             <Badge tone={DELIVERY_META[r.delivery].tone}>{DELIVERY_META[r.delivery].label}</Badge>
             <div className="flex flex-wrap gap-1.5">
-              {(r.review === "not_started" || r.review === "preparing") && <Button size="sm" disabled={!canPrepare} onClick={() => { books.prepareReport(w.id, m.id, r.id); toast(`${r.type} prepared — in review`); }}>Mark prepared</Button>}
-              {r.review === "in_review" && <Button size="sm" variant="primary" icon={ShieldCheck} onClick={() => { books.approveReport(w.id, m.id, r.id); toast(`${r.type} approved`); }}>Approve</Button>}
+              {(r.review === "not_started" || r.review === "preparing" || (r.delivery === "not_delivered" && r.docId)) && (
+                <label className={`inline-flex h-8 items-center gap-1.5 rounded-xl px-3 text-[13px] font-semibold ${canPrepare ? "cursor-pointer border border-line bg-surface text-ink-2 hover:bg-surface-hover" : "pointer-events-none border border-line text-faint opacity-50"}`} title={canPrepare ? "Upload the report PDF" : "Reports are uploaded during MKB Final Review"}>
+                  <Upload size={14} />{r.docId ? "Replace file" : "Upload report"}
+                  <input type="file" accept=".pdf,.xlsx,.xls,.csv" className="sr-only" disabled={!canPrepare} aria-label={`Upload ${r.type}`} onChange={(e) => { const f = e.target.files?.[0]; if (!f) return; books.prepareReport(w.id, m.id, r.id, f); toast(r.docId ? `${r.type} replaced` : `${r.type} uploaded — ready for review`); e.target.value = ""; }} />
+                </label>
+              )}
+              {r.review === "in_review" && <Button size="sm" variant="primary" icon={ShieldCheck} disabled={BACKEND && !r.docId} title={BACKEND && !r.docId ? "Upload the report file first" : undefined} onClick={() => { books.approveReport(w.id, m.id, r.id); toast(`${r.type} approved`); }}>Approve</Button>}
               {r.review === "approved" && r.delivery === "not_delivered" && <Button size="sm" disabled={!canDeliver} onClick={() => { books.publishReport(w.id, m.id, r.id, "available"); toast("Available in client portal"); }}>Make available</Button>}
               {r.review === "approved" && r.delivery !== "delivered" && <Button size="sm" variant="primary" icon={Send} disabled={!canDeliver} onClick={() => { books.publishReport(w.id, m.id, r.id, "delivered"); toast(`${r.type} delivered`); }}>Deliver</Button>}
-              {(r.preparedAt || r.docId) && <Button size="sm" variant="ghost" icon={Download} aria-label={`Download ${r.type}`} onClick={() => downloadPlaceholder(`${w.businessName} ${r.type} ${r.period}`, `${w.businessName} — ${r.type}, ${periodLabel(r.period)}\n\nPlaceholder file. In Phase 3 this is the report exported from the client's QuickBooks company.\nThe design preview contains no financial figures.\n`)} />}
+              {r.docId && <Button size="sm" variant="ghost" icon={Download} aria-label={`Download ${r.type}`} onClick={() => { const d = c.documents.find((x) => x.id === r.docId); if (d) downloadDoc(c.id, d, `${w.businessName} ${r.type} ${r.period}`); }} />}
             </div>
           </li>
         ))}

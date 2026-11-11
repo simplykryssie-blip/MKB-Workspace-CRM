@@ -54,6 +54,8 @@ export type ClientDocument = {
   uploadedBy?: "client" | "staff";
   /** Tax documents are tagged by tax year so years never mix. */
   taxYear?: number;
+  /** Not shown to the client yet (e.g. a monthly report waiting for MKB's approval). */
+  internal?: boolean;
   /** Bookkeeping documents are tagged by business workspace and month ("2026-10"). */
   workspaceId?: string;
   period?: string;
@@ -80,6 +82,8 @@ export type Message = {
   at: string;
   service?: ServiceKey;
   read: boolean;
+  /** Sent alongside its own email (e.g. bookkeeping reminders) — no separate "new message" email. */
+  quiet?: boolean;
   /** Bookkeeping: which business workspace a client-visible message belongs to. */
   workspaceId?: string;
   /** Business services: which service request a message belongs to. */

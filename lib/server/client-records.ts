@@ -256,7 +256,7 @@ export async function saveClient(env: AppEnv, a: Actor, id: string, next: Client
   if (changed.length) await audit(db, a, { action: changed.includes("team") ? "Assignment change" : "Record update", resource: `Client ${id}`, meta: `Changed: ${[...new Set(changed)].join(", ")}` });
   // A new staff message for a client who uses the portal: email them a notice (never the message itself).
   const before = new Set((cur.messages ?? []).map((m) => m.id));
-  if (cur.portal === "active" && cur.email && (next.messages ?? []).some((m) => m.from === "staff" && !before.has(m.id))) {
+  if (cur.portal === "active" && cur.email && (next.messages ?? []).some((m) => m.from === "staff" && !m.quiet && !before.has(m.id))) {
     if (await rateLimit(db, `portalmsgmail:${id}`, 1, 15)) {
       await sendTemplate(env, "portal_message", { to: cur.email, vars: { firstName: (cur.contactName || cur.name).trim().split(/\s+/)[0] }, buttonUrl: portalUrl(env) + "#messages" }).catch((e) => console.error("portal message notice failed", e));
     }

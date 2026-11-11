@@ -161,7 +161,7 @@ export async function portalDocuments(env: AppEnv, a: Actor) {
   requireClient(a);
   const c = await me(env, a);
   const stored = new Set((await all<{ id: string }>(env.DB, "SELECT id FROM client_files WHERE client_id = ?", c.id)).map((f) => f.id));
-  const docs = (json<MD>(c.module_data, {}).documents ?? []).map((d) => (stored.has(d.id) ? { ...d, hasFile: true } : d));
+  const docs = (json<MD>(c.module_data, {}).documents ?? []).filter((d) => !d.internal).map((d) => (stored.has(d.id) ? { ...d, hasFile: true } : d));
   const shape = (d: ClientDocument & { hasFile?: boolean; fileName?: string }) => ({ id: d.id, name: d.name, fileName: d.fileName, secureForm: secureForm(d), service: d.service, serviceName: SERVICE_NAME[d.service] ?? "", category: d.category, taxYear: d.taxYear, requestedAt: d.requestedAt, uploadedAt: d.uploadedAt, uploadedBy: d.uploadedBy, status: d.status, hasFile: !!d.hasFile });
   return {
     requested: docs.filter((d) => d.status === "requested").map(shape),
@@ -217,7 +217,7 @@ export async function portalFile(env: AppEnv, a: Actor, fileId: string, inline: 
   const c = await me(env, a);
   // Only documents listed on their record (not, for example, staff-only working files).
   const d = (json<MD>(c.module_data, {}).documents ?? []).find((x) => x.id === fileId);
-  if (!d) throw notFound("File not found.");
+  if (!d || d.internal) throw notFound("File not found.");
   return openClientFile(env, a, c.id, fileId, inline);
 }
 

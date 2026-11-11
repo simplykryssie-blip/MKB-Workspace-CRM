@@ -6,7 +6,7 @@
  * document contents in an email.
  */
 
-export type TemplateKey = "tax_intake_received" | "tax_document_reminder" | "tax_document_request" | "tax_extension_filed" | "invoice_sent" | "books_intake_received" | "books_intake_link" | "books_proposal" | "books_proposal_signed" | "tax_interview_link" | "portal_invite" | "portal_message";
+export type TemplateKey = "tax_intake_received" | "tax_document_reminder" | "tax_document_request" | "tax_extension_filed" | "invoice_sent" | "books_intake_received" | "books_intake_link" | "books_proposal" | "books_proposal_signed" | "tax_interview_link" | "portal_invite" | "portal_message" | "books_items" | "books_reminder" | "books_reports_ready";
 
 export type EmailWording = {
   subject: string;
@@ -80,6 +80,48 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
     steps: "Choose your password using the button below.\nEach time you sign in, we'll email you a 6-digit code to confirm it's you.\nOpen your to-do list to see anything we need from you.",
     button: "Set up my portal",
     closing: "This invitation link expires on {{expires}}. Didn't expect this email? Call us at 833-379-3320.",
+  },
+  books_items: {
+    key: "books_items",
+    name: "Bookkeeping — items needed",
+    when: "Sent when a month opens with tasks for the client, or when MKB sends questions or adds a task. Lists what's needed; the client completes it in the portal.",
+    placeholders: ["firstName", "business", "period"],
+    subject: "{{business}}: we need a few items for {{period}}",
+    heading: "Hi {{firstName}}, here's what we need for {{period}}.",
+    intro: "To keep the books for {{business}} on schedule, please take care of these in your client portal.",
+    docsTitle: "Your to-do list",
+    docsNote: "Upload files and answer questions right in the portal — please don't email bank statements or receipts.",
+    steps: "",
+    button: "Open my portal",
+    closing: "Questions? Reply in the portal or call us at 833-379-3320.",
+  },
+  books_reminder: {
+    key: "books_reminder",
+    name: "Bookkeeping — reminder",
+    when: "Sent when staff click Remind on a bookkeeping month with open client items.",
+    placeholders: ["firstName", "business", "period"],
+    subject: "Reminder: {{period}} items for {{business}}",
+    heading: "Hi {{firstName}}, a friendly reminder.",
+    intro: "We're still waiting on a few items for {{business}} for {{period}}. Once they're in, we can finish your books for the month.",
+    docsTitle: "Still open",
+    docsNote: "",
+    steps: "",
+    button: "Open my portal",
+    closing: "Questions? Reply in the portal or call us at 833-379-3320.",
+  },
+  books_reports_ready: {
+    key: "books_reports_ready",
+    name: "Bookkeeping — reports ready",
+    when: "Sent when MKB delivers a month's financial reports (and when a month is closed). The reports are in the client's portal — never attached to the email.",
+    placeholders: ["firstName", "business", "period"],
+    subject: "Your {{period}} financial reports are ready",
+    heading: "Hi {{firstName}}, your {{period}} reports are ready.",
+    intro: "We've finished the books for {{business}} for {{period}}. Your reports are waiting in your client portal under Documents.",
+    docsTitle: "Reports",
+    docsNote: "",
+    steps: "",
+    button: "View my reports",
+    closing: "Questions about your numbers? Message us in the portal or call 833-379-3320.",
   },
   portal_message: {
     key: "portal_message",

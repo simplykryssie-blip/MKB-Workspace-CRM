@@ -379,14 +379,14 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
       );
       return docId;
     },
-    uploadDocument(id: string, d: { name: string; service: ServiceKey; category: string; sensitive: boolean; sizeKb: number; replaces?: string; taxYear?: number; workspaceId?: string; period?: string; by?: "client" | "staff"; entityId?: string; bizRequestId?: string; expiresAt?: string; expMatterId?: string; expCaseId?: string; /** The actual file (live CRM): stored privately under this document. */ file?: Blob & { name?: string } }): string {
+    uploadDocument(id: string, d: { name: string; service: ServiceKey; category: string; sensitive: boolean; sizeKb: number; replaces?: string; taxYear?: number; workspaceId?: string; period?: string; by?: "client" | "staff"; entityId?: string; bizRequestId?: string; expiresAt?: string; expMatterId?: string; expCaseId?: string; /** The actual file (live CRM): stored privately under this document. */ file?: Blob & { name?: string }; /** Hidden from the client until released (e.g. reports awaiting approval). */ internal?: boolean }): string {
       const docId = d.replaces ?? uid("d");
       const by = d.by ?? "staff";
       if (BACKEND && d.file) void storeFile(id, docId, d.file, d.name, d.sensitive);
       up(id, (c) => {
-        const doc: ClientDocument = { id: docId, name: d.name, service: d.service, category: d.category, sensitive: d.sensitive, status: "received", requestedAt: nowIso(), uploadedAt: nowIso(), sizeKb: d.sizeKb, uploadedBy: by, taxYear: d.taxYear, workspaceId: d.workspaceId, period: d.period, entityId: d.entityId, bizRequestId: d.bizRequestId, expiresAt: d.expiresAt, expMatterId: d.expMatterId, expCaseId: d.expCaseId };
+        const doc: ClientDocument = { id: docId, name: d.name, service: d.service, category: d.category, sensitive: d.sensitive, status: "received", requestedAt: nowIso(), uploadedAt: nowIso(), sizeKb: d.sizeKb, uploadedBy: by, taxYear: d.taxYear, workspaceId: d.workspaceId, period: d.period, entityId: d.entityId, bizRequestId: d.bizRequestId, expiresAt: d.expiresAt, expMatterId: d.expMatterId, expCaseId: d.expCaseId, internal: d.internal || undefined };
         const documents = d.replaces
-          ? c.documents.map((x) => (x.id === d.replaces ? { ...x, status: "received" as const, uploadedAt: nowIso(), sizeKb: d.sizeKb, uploadedBy: by } : x))
+          ? c.documents.map((x) => (x.id === d.replaces ? { ...x, status: "received" as const, uploadedAt: nowIso(), sizeKb: d.sizeKb, uploadedBy: by, internal: d.internal ?? x.internal } : x))
           : [doc, ...c.documents];
         return log({ ...c, documents }, "upload", `Uploaded "${d.name}"`, by);
       });
@@ -395,6 +395,10 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
     /** Upload (or replace) the file behind an existing document record. */
     attachFile(id: string, docId: string, file: Blob & { name?: string }, name: string, sensitive = false) {
       return storeFile(id, docId, file, name, sensitive);
+    },
+    /** Show or hide a document from the client (portal). */
+    setDocInternal(id: string, docId: string, internal: boolean) {
+      up(id, (c) => ({ ...c, documents: c.documents.map((x) => (x.id === docId ? { ...x, internal: internal || undefined } : x)) }));
     },
     setDocStatus(id: string, docId: string, status: ClientDocument["status"]) {
       up(id, (c) => {
@@ -418,11 +422,11 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
     },
 
     // Messages ---------------------------------------------------------------
-    sendMessage(id: string, body: string, service?: ServiceKey, opts?: { from?: "client" | "staff"; author?: string; workspaceId?: string; bizRequestId?: string; expMatterId?: string }) {
+    sendMessage(id: string, body: string, service?: ServiceKey, opts?: { from?: "client" | "staff"; author?: string; workspaceId?: string; bizRequestId?: string; expMatterId?: string; /** Its own email is sent separately. */ quiet?: boolean }) {
       const from = opts?.from ?? "staff";
       up(id, (c) =>
         log(
-          { ...c, messages: [...c.messages, { id: uid("m"), from, author: opts?.author ?? (from === "client" ? c.contactName ?? c.name : "MKB Owner"), body, at: nowIso(), read: from === "staff", service, workspaceId: opts?.workspaceId, bizRequestId: opts?.bizRequestId, expMatterId: opts?.expMatterId }] },
+          { ...c, messages: [...c.messages, { id: uid("m"), from, author: opts?.author ?? (from === "client" ? c.contactName ?? c.name : "MKB Owner"), body, at: nowIso(), read: from === "staff", service, workspaceId: opts?.workspaceId, bizRequestId: opts?.bizRequestId, expMatterId: opts?.expMatterId, quiet: opts?.quiet || undefined }] },
           "message",
           from === "client" ? "Client sent a message" : "Sent a message",
           from === "client" ? "client" : "staff",

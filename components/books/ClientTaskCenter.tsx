@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { useToast } from "@/components/ui/Toast";
-import { downloadPlaceholder } from "@/components/crm/dialogs";
+import { downloadDoc, downloadPlaceholder } from "@/components/crm/dialogs";
 import { staffById } from "@/lib/sample/clients";
 import { useClients } from "@/lib/store/clients-store";
 import { currentMonth, openTasks, useBooks, workspaceMessages } from "@/lib/store/books-store";
@@ -128,7 +128,7 @@ export function ClientTaskCenter({ id }: { id: string }) {
               {reports.map((r) => (
                 <li key={r.id} className="flex items-center gap-3 px-5 py-3 sm:px-6">
                   <span className="min-w-0 flex-1"><span className="block text-[14px] font-medium text-ink">{r.type}</span><span className="block text-[12px] text-muted">{periodLabel(r.period)}{r.deliveredAt ? ` · ${fmtDate(r.deliveredAt)}` : ""}</span></span>
-                  <Button size="sm" variant="ghost" icon={Download} aria-label={`Download ${r.type} ${periodLabel(r.period)}`} onClick={() => downloadPlaceholder(`${w.businessName} ${r.type} ${r.period}`, "Placeholder — in Phase 3 this is the report from your QuickBooks company. No financial figures in the preview.\n")} />
+                  <Button size="sm" variant="ghost" icon={Download} aria-label={`Download ${r.type} ${periodLabel(r.period)}`} onClick={() => { const d = r.docId ? c?.documents.find((x) => x.id === r.docId) : undefined; if (d && c) downloadDoc(c.id, d, `${w.businessName} ${r.type} ${r.period}`); else downloadPlaceholder(`${w.businessName} ${r.type} ${r.period}`); }} />
                 </li>
               ))}
             </ul>
