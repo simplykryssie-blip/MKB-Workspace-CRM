@@ -46,6 +46,14 @@ export async function downloadInvoice(env: AppEnv, a: Actor, id: string, inline:
 export async function sendInvoice(env: AppEnv, a: Actor, id: string) {
   const r = await getInvoiceRow(env, a, id);
   if (a.kind !== "staff") throw badRequest("Staff only.");
+  const out = await deliverInvoice(env, r, a.member.id);
+  await audit(env.DB, a, { action: "Record update", resource: `Invoice ${r.number}`, meta: `${r.sent_at ? "Resent" : "Sent"} by email${out.sent ? "" : " (queued)"}` });
+  return out;
+}
+
+/** Emails the invoice (PDF + a fresh pay link). `by` is a team member id, or "system" for automatic billing. */
+export async function deliverInvoice(env: AppEnv, r: InvoiceRow, by: string) {
+  const id = r.id;
   if (r.status === "void") throw badRequest("This invoice is void.");
   const c = await one<{ name: string; contact_name: string | null; email: string | null }>(env.DB, "SELECT name, contact_name, email FROM clients WHERE id = ?", r.client_id);
   if (!c?.email) throw badRequest("This client has no email address on file.");
@@ -56,14 +64,13 @@ export async function sendInvoice(env: AppEnv, a: Actor, id: string) {
   const payUrl = token ? `${payOrigin(env)}/api/public/pay/${token}` : undefined;
   const t = now();
   await run(env.DB, "UPDATE invoices SET status = CASE WHEN status = 'draft' THEN 'open' ELSE status END, sent_at = ?, pay_token_hash = ?, history = ?, updated_at = ?, rev = rev + 1 WHERE id = ?", t, token ? await sha256(token) : null,
-    JSON.stringify([{ at: t, by: a.member.id, text: r.sent_at ? "Resent to the client" : "Sent to the client" }, ...json<unknown[]>(r.history, [])].slice(0, 200)), t, id);
+    JSON.stringify([{ at: t, by, text: r.sent_at ? "Resent to the client" : "Sent to the client" }, ...json<unknown[]>(r.history, [])].slice(0, 200)), t, id);
   const fresh = (await one<InvoiceRow>(env.DB, "SELECT * FROM invoices WHERE id = ?", id))!;
   const pdf = await pdfFor(env, fresh, payUrl);
   const first = (c.contact_name || c.name).trim().split(/\s+/)[0];
   const payNote = r.payment_mode === "bank_product" ? "These fees will be taken out of your refund — no payment is due now unless your refund can't cover them." : owed > 0 ? `It's due ${longDate(r.due_at)}. You can pay securely online with the button below.` : "It's paid in full — thank you.";
   const out = await sendTemplate(env, "invoice_sent", { to: c.email, vars: { firstName: first, number: r.number, amount: usd(r.amount_cents), dueDate: longDate(r.due_at), payNote }, attachments: [{ filename: fileName(r), content: pdf }], buttonUrl: payUrl });
-  await run(env.DB, "INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'invoice', ?, 'staff', ?, ?)", randomId("x"), r.client_id, `${r.sent_at ? "Resent" : "Sent"} invoice ${r.number} to ${c.email}${out.sent ? "" : " (queued)"}`, a.member.id, t);
-  await audit(env.DB, a, { action: "Record update", resource: `Invoice ${r.number}`, meta: `${r.sent_at ? "Resent" : "Sent"} by email${out.sent ? "" : " (queued)"}` });
+  await run(env.DB, "INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'invoice', ?, ?, ?, ?)", randomId("x"), r.client_id, `${r.sent_at ? "Resent" : "Sent"} invoice ${r.number} to ${c.email}${out.sent ? "" : " (queued)"}`, by === "system" ? "system" : "staff", by === "system" ? null : by, t);
   return { invoice: toInvoice(fresh), sent: out.sent, payLink: !!payUrl, stripe: stripeReady(env) };
 }
 

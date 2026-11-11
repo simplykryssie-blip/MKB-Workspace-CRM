@@ -20,6 +20,8 @@ export type AppEnv = Omit<CloudflareEnv, "APP_ENV" | "BACKEND_ENABLED"> & {
   APP_ORIGINS?: string;
   /** Public address of the client portal, e.g. https://portal.mkbfinancialgroup.com (without it, the portal is at APP_ORIGIN/portal). */
   PORTAL_ORIGIN?: string;
+  /** Shared with the scheduled job (worker cron) — proves the daily call came from it. */
+  CRON_SECRET?: string;
   /** Domains that show the public website, e.g. "mkbfinancialgroup.com,www.mkbfinancialgroup.com". */
   WEBSITE_HOSTS?: string;
   /** One-time link secret for creating the Owner account in an empty database. */

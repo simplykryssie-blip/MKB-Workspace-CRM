@@ -128,7 +128,7 @@ function cleanLines(v: unknown): InvoiceLine[] {
 const total = (lines: InvoiceLine[]) => lines.reduce((s, l) => s + cents(l.amount), 0);
 const hist = (h: string, by: string, text: string) => JSON.stringify([{ at: now(), by, text }, ...json<unknown[]>(h, [])].slice(0, 200));
 
-async function nextNumber(env: AppEnv) {
+export async function nextNumber(env: AppEnv) {
   const y = new Date().getFullYear();
   await run(env.DB, "INSERT INTO invoice_counters (year, next) VALUES (?, 1) ON CONFLICT(year) DO NOTHING", y);
   const r = await one<{ next: number }>(env.DB, "UPDATE invoice_counters SET next = next + 1 WHERE year = ? RETURNING next - 1 AS next", y);

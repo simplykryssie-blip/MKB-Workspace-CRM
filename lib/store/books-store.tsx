@@ -32,8 +32,10 @@ import {
   type ReportType,
   type ReviewItem,
   type ReviewKind,
+  type WorkspaceBilling,
 } from "@/lib/books/config";
 import type { ActivityItem, ActivityKind, Client, Enrollment, Invoice } from "@/lib/types";
+import { QBO_INVITE_EMAIL } from "@/lib/books/intake";
 
 const uid = (p: string) => `${p}-${Math.random().toString(36).slice(2, 9)}`;
 type ClientsApi = ReturnType<typeof useClients>;
@@ -394,6 +396,19 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     addExtra(wsId: string, label: string, amount: number, period: string) {
       up(wsId, (w) => log({ ...w, extras: [...w.extras, { id: uid("x"), label, amount, period, invoiced: false }] }, "invoice", `Additional charge: ${label}`));
     },
+    /** Live CRM: the server creates the month's invoice (fee + uninvoiced charges) and emails it. */
+    async billMonth(wsId: string, period: string, send = true): Promise<{ number?: string; sent?: boolean }> {
+      const w = W(wsId);
+      await waitForWorkspaceSave(wsId); // charges added just now must be on the server first
+      const r = await call<{ number?: string; sent?: boolean }>("POST", `/api/books/workspaces/${wsId}/bill`, { period, send });
+      window.dispatchEvent(new CustomEvent("mkb:client-changed", { detail: w.clientId }));
+      window.dispatchEvent(new CustomEvent("mkb:books-reload"));
+      return r;
+    },
+    /** Set the workspace's automatic monthly invoice. */
+    setBilling(wsId: string, billing: WorkspaceBilling) {
+      up(wsId, (w) => log({ ...w, billing }, "invoice", billing.auto ? `Automatic monthly invoice on: day ${billing.day}, due in ${billing.dueDays} days${billing.email ? ", emailed" : ""}` : "Automatic monthly invoice turned off"));
+    },
     /** Invoice a month's fee (plus uninvoiced charges), or — with period null — just the uninvoiced charges. */
     invoiceMonth(wsId: string, period: string | null, includeExtras: boolean): string {
       const w = W(wsId);
@@ -412,12 +427,23 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       return number;
     },
 
-    /* ---------------- QuickBooks (sample — no real connection) ---------------- */
+    /* ---------------- QuickBooks access (tracked by MKB — no direct connection to Intuit) ---------------- */
     setQboStatus(wsId: string, status: QboStatus, text: string) {
-      up(wsId, (w) => log({ ...w, qbo: { ...w.qbo, status, lastSyncAt: status === "connected" ? nowIso() : w.qbo.lastSyncAt, connectedAt: status === "connected" && w.qbo.status !== "connected" ? nowIso() : w.qbo.connectedAt } }, "status", text, "system"));
+      up(wsId, (w) => log({ ...w, qbo: { ...w.qbo, status, lastSyncAt: status === "connected" ? nowIso() : w.qbo.lastSyncAt, connectedAt: status === "connected" && w.qbo.status !== "connected" ? nowIso() : w.qbo.connectedAt } }, "status", text));
+    },
+    /** Company name, access method, and who invited MKB. */
+    updateQbo(wsId: string, patch: Partial<Pick<BooksWorkspace["qbo"], "companyName" | "access" | "authorizedBy">>) {
+      up(wsId, (w) => log({ ...w, qbo: { ...w.qbo, ...patch } }, "status", "QuickBooks details updated"));
+    },
+    /** Asks the client (task + email) to invite MKB as their accountant in QuickBooks. */
+    requestQboInvite(wsId: string, again: boolean) {
+      const w = W(wsId);
+      const period = currentMonth(w)?.period ?? nowIso().slice(0, 7);
+      a.addTask(wsId, period, "confirm", again ? "Invite MKB as your accountant in QuickBooks again" : "Invite MKB as your accountant in QuickBooks", `In QuickBooks Online: gear icon (Settings) → Manage users → Accountants tab → Invite → enter ${QBO_INVITE_EMAIL} → Send. You stay the owner and can remove our access anytime. Reply "done" here when it's sent.`);
+      a.setQboStatus(wsId, "invite_pending", again ? "Asked the client to invite MKB again" : "Asked the client to invite MKB as their accountant");
     },
     syncNow(wsId: string) {
-      up(wsId, (w) => log({ ...w, qbo: { ...w.qbo, lastSyncAt: nowIso() } }, "status", "QuickBooks status refreshed (sample)", "system"));
+      up(wsId, (w) => log({ ...w, qbo: { ...w.qbo, lastSyncAt: nowIso() } }, "status", "Checked: MKB's QuickBooks access works"));
     },
   };
   return a;
@@ -473,6 +499,13 @@ function useBooksSync(state: State, dispatch: React.Dispatch<Action>) {
       if (!(e instanceof RemoteError && (e.status === 401 || e.status === 403))) notify("Couldn't load bookkeeping workspaces.");
     }
   }, []);
+  // The server changed workspaces (e.g. a monthly invoice marked charges invoiced): reload them.
+  useEffect(() => {
+    if (!BACKEND) return;
+    const on = () => void reload();
+    window.addEventListener("mkb:books-reload", on);
+    return () => window.removeEventListener("mkb:books-reload", on);
+  }, [reload]);
   useEffect(() => {
     if (!BACKEND) return;
     (async () => {

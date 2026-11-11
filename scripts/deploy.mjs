@@ -119,6 +119,12 @@ async function serve(env, url, method, internal = false) {
   h.set("content-encoding", "gzip");
   return new Response(obj.body, { headers: h, encodeBody: "manual" });
 }
+const assetsFor = (env) => ({
+  async fetch(input, init) {
+    const req = new Request(input, init);
+    return (await serve(env, new URL(req.url), req.method, true)) ?? new Response("Not found", { status: 404 });
+  },
+});
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -126,13 +132,14 @@ export default {
       const r = await serve(env, url, request.method);
       if (r) return r;
     }
-    const ASSETS = {
-      async fetch(input, init) {
-        const req = new Request(input, init);
-        return (await serve(env, new URL(req.url), req.method, true)) ?? new Response("Not found", { status: 404 });
-      },
-    };
-    return worker.fetch(request, { ...env, ASSETS }, ctx);
+    return worker.fetch(request, { ...env, ASSETS: assetsFor(env) }, ctx);
+  },
+  // Daily job (cron trigger): automatic monthly bookkeeping invoices. Runs inside the app, proven by CRON_SECRET.
+  async scheduled(event, env, ctx) {
+    if (!env.CRON_SECRET) { console.log("daily job skipped: CRON_SECRET is not set"); return; }
+    const origin = env.APP_ORIGIN || "https://app.internal";
+    const req = new Request(origin + "/api/cron/daily", { method: "POST", headers: { "x-cron-key": env.CRON_SECRET, "content-type": "application/json" }, body: "{}" });
+    ctx.waitUntil(worker.fetch(req, { ...env, ASSETS: assetsFor(env) }, ctx).then(async (r) => console.log("daily job", r.status, (await r.text()).slice(0, 500))));
   },
 };
 `);
@@ -150,6 +157,8 @@ const deployConfig = {
   d1_databases: preview.d1_databases.map(({ migrations_dir, ...d }) => d),
   r2_buckets: [...preview.r2_buckets, { binding: "STATIC", bucket_name: STATIC_BUCKET }],
   vars: preview.vars,
+  // Once a day, 6:23 am Central (12:23 UTC): automatic monthly invoices.
+  triggers: { crons: ["23 12 * * *"] },
 };
 writeFileSync(join(ROOT, `.open-next/wrangler.${ENV}.json`), JSON.stringify(deployConfig, null, 2));
 const deployArgs = ["wrangler", "deploy", "-c", `.open-next/wrangler.${ENV}.json`];

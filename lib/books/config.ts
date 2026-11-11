@@ -62,14 +62,14 @@ export type QboStatus = "connected" | "needs_reauth" | "invite_pending" | "not_c
 export type QboAccess = "qboa" | "client_authorized";
 
 export const QBO_STATUS: Record<QboStatus, { label: string; tone: "success" | "warning" | "danger" | "neutral"; hint: string }> = {
-  connected: { label: "Connected", tone: "success", hint: "Authorization active for this company" },
-  needs_reauth: { label: "Reauthorization needed", tone: "danger", hint: "Authorization expired or was revoked — the client or MKB must reconnect" },
-  invite_pending: { label: "Invite pending", tone: "warning", hint: "Accountant invitation sent — waiting for the client to accept in QuickBooks" },
-  not_connected: { label: "Not connected", tone: "neutral", hint: "No access set up yet" },
+  connected: { label: "Access confirmed", tone: "success", hint: "MKB can sign in to this client's QuickBooks company." },
+  needs_reauth: { label: "Access lost", tone: "danger", hint: "MKB's access stopped working (removed, or the company changed). Ask the client to invite MKB again." },
+  invite_pending: { label: "Waiting for invite", tone: "warning", hint: "The client has been asked to invite MKB as their accountant in QuickBooks." },
+  not_connected: { label: "No access yet", tone: "neutral", hint: "MKB doesn't have access to this client's QuickBooks yet." },
 };
 export const QBO_ACCESS: Record<QboAccess, { label: string; detail: string }> = {
   qboa: { label: "QuickBooks Online Accountant", detail: "Client invited MKB as their accountant; MKB signs in through QuickBooks Online Accountant." },
-  client_authorized: { label: "Client-authorized connection", detail: "Client approves MKB's app for their company through Intuit's sign-in (OAuth 2.0)." },
+  client_authorized: { label: "Client's own login (shared screen)", detail: "The client signs in themselves while working with MKB — MKB has no login of its own." },
 };
 
 /* ------------------------------------------------------------------ */
@@ -188,6 +188,9 @@ export type BooksMonth = {
 
 export type ExtraCharge = { id: string; label: string; amount: number; period: string; invoiced: boolean };
 
+export type WorkspaceBilling = { auto: boolean; day: number; dueDays: number; email: boolean };
+export const DEFAULT_BILLING: WorkspaceBilling = { auto: false, day: 1, dueDays: 15, email: true };
+
 export type BooksWorkspace = {
   id: string;
   clientId: string;
@@ -198,6 +201,8 @@ export type BooksWorkspace = {
   reviewerId: string;
   service: { plan: string; monthlyFee: number; reports: ReportType[]; includes: string[] };
   extras: ExtraCharge[];
+  /** Automatic monthly invoice: on `day` of each month, bill that month's fee (plus uninvoiced charges). */
+  billing?: WorkspaceBilling;
   qbo: {
     status: QboStatus;
     companyName: string;

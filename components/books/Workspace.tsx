@@ -31,6 +31,7 @@ import {
   Pin,
   Plus,
   Receipt,
+  Repeat,
   RefreshCw,
   RotateCcw,
   Scale,
@@ -52,10 +53,11 @@ import { PaymentDialog, downloadDoc } from "@/components/crm/dialogs";
 import { staffList, staffById } from "@/lib/sample/clients";
 import { useClients } from "@/lib/store/clients-store";
 import { balanceDue, currentMonth, nextAction, openTasks, unresolved, useBooks, workspaceDocs, workspaceInvoices, workspaceMessages } from "@/lib/store/books-store";
-import { QBO_ACCESS, QBO_STATUS, REPORT_TYPES, REVIEW_KIND, STAGE_META, TASK_TYPE, closeTarget, periodLabel, type BooksMonth, type BooksWorkspace, type ClientTaskType, type ReportType } from "@/lib/books/config";
+import { DEFAULT_BILLING, QBO_ACCESS, QBO_STATUS, REPORT_TYPES, REVIEW_KIND, STAGE_META, TASK_TYPE, closeTarget, periodLabel, type BooksMonth, type BooksWorkspace, type ClientTaskType, type ReportType, type WorkspaceBilling } from "@/lib/books/config";
 import { fileSize, fmtDate, fmtDateTime, relTime, usd } from "@/lib/format";
 import { formatPhone } from "@/lib/validation";
 import type { Client } from "@/lib/types";
+import { QBO_INVITE_EMAIL } from "@/lib/books/intake";
 import { DELIVERY_META, MonthStepper, OwnerBadge, QboBadge, RECON_META, REVIEW_META, StageBadge, TurnLegend, money } from "./BooksBits";
 import { AddReviewItemDialog, CompleteTaskDialog, DiscrepancyDialog, ExtraChargeDialog, FinalApprovalDialog, ReopenDialog, RequestDocDialog, ResolveItemDialog, StageOverrideDialog, StatementDialog } from "./BooksDialogs";
 
@@ -534,6 +536,38 @@ function ReviewTab({ w, m, open }: { w: BooksWorkspace; m: BooksMonth; open: (d:
 
 /* ================================================================== */
 
+const currentMonthId = (w: BooksWorkspace) => [...w.months].sort((x, y) => y.period.localeCompare(x.period)).find((m) => m.stage !== "Month Closed")?.id ?? w.months[w.months.length - 1]?.id;
+
+/** Who/what MKB's QuickBooks access is for (editable), and when it was last confirmed. */
+function QboDetails({ w }: { w: BooksWorkspace }) {
+  const books = useBooks();
+  const toast = useToast();
+  const q = w.qbo;
+  const [editing, setEditing] = useState(false);
+  const [company, setCompany] = useState(q.companyName);
+  const [by, setBy] = useState(q.authorizedBy ?? "");
+  const [access, setAccess] = useState(q.access);
+  const inp = "h-9 w-full rounded-lg border border-line bg-surface px-2.5 text-[13.5px] text-ink";
+  if (editing)
+    return (
+      <div className="space-y-2.5 rounded-xl border border-line p-3.5">
+        <label className="block text-[12.5px] text-muted">QuickBooks company name<input className={`${inp} mt-1`} value={company} onChange={(e) => setCompany(e.target.value)} /></label>
+        <label className="block text-[12.5px] text-muted">How MKB gets in<select className={`${inp} mt-1`} value={access} onChange={(e) => setAccess(e.target.value as typeof access)}>{Object.entries(QBO_ACCESS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></label>
+        <label className="block text-[12.5px] text-muted">Invited by (client user)<input className={`${inp} mt-1`} value={by} onChange={(e) => setBy(e.target.value)} placeholder="e.g. Pat Owner" /></label>
+        <div className="flex gap-2"><Button size="sm" variant="primary" onClick={() => { books.updateQbo(w.id, { companyName: company.trim(), access, authorizedBy: by.trim() || undefined }); setEditing(false); toast("Saved"); }}>Save</Button><Button size="sm" variant="ghost" onClick={() => setEditing(false)}>Cancel</Button></div>
+      </div>
+    );
+  return (
+    <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2.5 text-[13.5px]">
+      <dt className="text-muted">Company</dt><dd className="font-medium text-ink">{q.companyName || "—"} <button className="ml-2 text-[12.5px] font-semibold text-accent hover:underline" onClick={() => { setCompany(q.companyName); setBy(q.authorizedBy ?? ""); setAccess(q.access); setEditing(true); }}>Edit</button></dd>
+      <dt className="text-muted">How MKB gets in</dt><dd className="font-medium text-ink">{QBO_ACCESS[q.access].label}<p className="text-[12px] font-normal text-muted">{QBO_ACCESS[q.access].detail}</p></dd>
+      <dt className="text-muted">Invited by</dt><dd className="font-medium text-ink">{q.authorizedBy ?? "—"}</dd>
+      <dt className="text-muted">Access since</dt><dd className="font-medium text-ink">{q.connectedAt ? fmtDate(q.connectedAt) : "—"}</dd>
+      <dt className="text-muted">Last confirmed</dt><dd className="font-medium text-ink">{q.lastSyncAt ? `${fmtDate(q.lastSyncAt)} (${relTime(q.lastSyncAt)})` : "Never"}</dd>
+    </dl>
+  );
+}
+
 function QuickBooksTab({ w }: { w: BooksWorkspace }) {
   const books = useBooks();
   const toast = useToast();
@@ -548,28 +582,30 @@ function QuickBooksTab({ w }: { w: BooksWorkspace }) {
             <QboBadge status={q.status} />
             <p className="mt-1.5 text-[13px] text-ink-2">{QBO_STATUS[q.status].hint}</p>
           </div>
-          <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2.5 text-[13.5px]">
-            <dt className="text-muted">Company</dt><dd className="font-medium text-ink">{q.companyName}</dd>
-            <dt className="text-muted">Company ID</dt><dd className="font-mono text-[13px] text-ink">{q.realmMasked ?? "—"}</dd>
-            <dt className="text-muted">Access method</dt><dd className="font-medium text-ink">{QBO_ACCESS[q.access].label}<p className="text-[12px] font-normal text-muted">{QBO_ACCESS[q.access].detail}</p></dd>
-            <dt className="text-muted">Authorized by</dt><dd className="font-medium text-ink">{q.authorizedBy ?? "—"}</dd>
-            <dt className="text-muted">Connected since</dt><dd className="font-medium text-ink">{q.connectedAt ? fmtDate(q.connectedAt) : "—"}</dd>
-            <dt className="text-muted">Last successful sync</dt><dd className="font-medium text-ink">{q.lastSyncAt ? `${fmtDateTime(q.lastSyncAt)} (${relTime(q.lastSyncAt)})` : "Never"}</dd>
-          </dl>
+          <QboDetails w={w} />
           <div className="flex flex-wrap gap-2">
             <a href={QBO_URL} target="_blank" rel="noopener noreferrer" className="inline-flex h-10 items-center gap-2 rounded-xl bg-accent px-4 text-[14px] font-semibold text-white hover:bg-accent-hover"><ExternalLink size={16} /> Open QuickBooks</a>
-            {q.status === "connected" && <Button icon={RefreshCw} onClick={() => { books.syncNow(w.id); toast("Status refreshed (sample — no data pulled)"); }}>Refresh status</Button>}
-            {q.status === "needs_reauth" && (
+            {q.status === "not_connected" && <Button icon={Send} onClick={() => { books.requestQboInvite(w.id, false); toast("Client asked to invite MKB (task + email)"); }}>Ask client to invite MKB</Button>}
+            {q.status === "invite_pending" && (
               <>
-                <Button icon={KeyRound} onClick={() => toast("Phase 3: sends the client a secure link to approve access with their own Intuit sign-in. No credentials are collected by MKB.", "info")}>Request reauthorization</Button>
-                <Button variant="ghost" onClick={() => { books.setQboStatus(w.id, "connected", "QuickBooks reauthorized (sample)"); toast("Marked reauthorized (sample)"); }}>Mark reauthorized (sample)</Button>
+                <Button variant="primary" icon={CheckCircle2} onClick={() => { books.setQboStatus(w.id, "connected", "Accountant invite accepted — MKB has access"); toast("Access confirmed"); }}>Invite accepted — access works</Button>
+                <Button icon={Send} onClick={() => { books.remindClient(w.id, currentMonthId(w)); toast("Reminder sent"); }}>Remind client</Button>
               </>
             )}
-            {q.status === "invite_pending" && <Button variant="ghost" onClick={() => { books.setQboStatus(w.id, "connected", "Accountant invite accepted (sample)"); toast("Invite accepted (sample)"); }}>Mark invite accepted (sample)</Button>}
-            {q.status === "connected" && <Button variant="ghost" onClick={() => { if (confirm("Record that MKB's access was disconnected?")) { books.setQboStatus(w.id, "not_connected", "QuickBooks access disconnected"); toast("Disconnected (sample)"); } }}>Disconnect</Button>}
-            {q.status === "not_connected" && <Button onClick={() => { books.setQboStatus(w.id, "invite_pending", "Accountant invite requested"); toast("Invite requested (sample)"); }}>Request access</Button>}
+            {q.status === "connected" && (
+              <>
+                <Button icon={RefreshCw} onClick={() => { books.syncNow(w.id); toast("Marked checked today"); }}>Access still works</Button>
+                <Button variant="ghost" onClick={() => { if (confirm("Record that MKB's QuickBooks access stopped working?")) { books.setQboStatus(w.id, "needs_reauth", "MKB's QuickBooks access stopped working"); toast("Marked access lost"); } }}>Access lost</Button>
+              </>
+            )}
+            {q.status === "needs_reauth" && (
+              <>
+                <Button icon={KeyRound} onClick={() => { books.requestQboInvite(w.id, true); toast("Client asked to invite MKB again (task + email)"); }}>Ask client to re-invite MKB</Button>
+                <Button variant="ghost" onClick={() => { books.setQboStatus(w.id, "connected", "MKB's QuickBooks access restored"); toast("Access confirmed"); }}>Access restored</Button>
+              </>
+            )}
           </div>
-          <p className="text-[12px] text-muted">&ldquo;Open QuickBooks&rdquo; goes to Intuit&rsquo;s sign-in page. Each person signs in with their own Intuit account; MKB never asks for the client&rsquo;s password.</p>
+          <p className="text-[12px] text-muted">MKB signs in with its own QuickBooks Online Accountant login ({QBO_INVITE_EMAIL}) — the client never shares their password and can remove MKB anytime. &ldquo;Ask client&rdquo; adds a task to their portal and emails them the steps.</p>
         </div>
       </Card>
 
@@ -589,25 +625,6 @@ function QuickBooksTab({ w }: { w: BooksWorkspace }) {
         </ul>
       </Card>
 
-      <Card className="xl:col-span-2">
-        <CardHeader icon={FileBarChart2} title="Authorized financial information" subtitle="Appears here once the QuickBooks integration is implemented (Phase 3)" />
-        <div className="grid gap-3 px-5 pb-5 sm:grid-cols-3 sm:px-6">
-          {["Account balances", "Uncategorized & 'For review' counts", "Report snapshots"].map((x) => (
-            <div key={x} className="grid min-h-[110px] place-items-center rounded-xl border-2 border-dashed border-line px-4 text-center">
-              <div><Lock size={18} className="mx-auto text-faint" /><p className="mt-1 text-[13px] font-medium text-ink-2">{x}</p><p className="text-[12px] text-muted">Not connected in the design preview</p></div>
-            </div>
-          ))}
-        </div>
-        <div className="mx-5 mb-5 rounded-xl bg-surface-2 p-4 text-[12.5px] text-ink-2 ring-1 ring-line sm:mx-6">
-          <p className="mb-1.5 font-semibold text-ink">Integration design (for Phase 3)</p>
-          <ul className="list-disc space-y-1 pl-5">
-            <li>Intuit OAuth 2.0 authorization-code flow; access is granted per QuickBooks company (realm ID).</li>
-            <li>Access and refresh tokens are stored encrypted on the server only — never in this page, browser storage or client-side code.</li>
-            <li>Request only the accounting scope needed for read-only review; confirm each report and endpoint is available for the client&rsquo;s QuickBooks plan before relying on it.</li>
-            <li>Refresh tokens before they expire, show &ldquo;Reauthorization needed&rdquo; when Intuit revokes access, and log every connection change.</li>
-          </ul>
-        </div>
-      </Card>
     </div>
   );
 }
@@ -769,6 +786,36 @@ function DocsTab({ w, c, m, open }: { w: BooksWorkspace; c: Client; m: BooksMont
 
 /* ================================================================== */
 
+/** Automatic monthly invoice: on the billing day the server creates the month's invoice (fee + extra charges) and emails it. */
+function AutoBilling({ w, billedThisMonth }: { w: BooksWorkspace; billedThisMonth: boolean }) {
+  const books = useBooks();
+  const toast = useToast();
+  const b = { ...DEFAULT_BILLING, ...w.billing };
+  const set = (patch: Partial<WorkspaceBilling>) => { books.setBilling(w.id, { ...b, ...patch }); toast("Billing settings saved"); };
+  const today = new Date();
+  const due = !billedThisMonth && today.getDate() >= b.day; // this month's day has come and it isn't billed yet
+  const next = due ? null : new Date(today.getFullYear(), today.getMonth() + (billedThisMonth || today.getDate() > b.day ? 1 : 0), b.day);
+  const sel = "h-9 rounded-lg border border-line bg-surface px-2 text-[13.5px] text-ink";
+  return (
+    <Card>
+      <CardHeader icon={Repeat} title="Automatic monthly invoice" subtitle={b.auto ? `Next: ${next ? next.toLocaleDateString("en-US", { month: "long", day: "numeric" }) : `tomorrow morning (${today.toLocaleDateString("en-US", { month: "long" })} isn't billed yet)`} — ${usd(w.service.monthlyFee)}${w.extras.some((x) => !x.invoiced) ? " + additional charges" : ""}` : "Off — invoices are created when you click Invoice now"} />
+      <div className="space-y-3 px-5 pb-5 text-[13.5px] sm:px-6">
+        <label className="flex items-center gap-2 font-medium text-ink"><input type="checkbox" checked={b.auto} onChange={(e) => set({ auto: e.target.checked })} /> Bill this client automatically every month</label>
+        <div className={`grid gap-3 sm:grid-cols-2 ${b.auto ? "" : "pointer-events-none opacity-50"}`}>
+          <label className="block text-[12.5px] text-muted">Billing day
+            <select className={`${sel} mt-1 w-full`} value={b.day} onChange={(e) => set({ day: Number(e.target.value) })}>{Array.from({ length: 28 }, (_, i) => i + 1).map((d) => <option key={d} value={d}>{d === 1 ? "1st of the month" : `Day ${d}`}</option>)}</select>
+          </label>
+          <label className="block text-[12.5px] text-muted">Due
+            <select className={`${sel} mt-1 w-full`} value={b.dueDays} onChange={(e) => set({ dueDays: Number(e.target.value) })}>{[0, 7, 10, 15, 30].map((d) => <option key={d} value={d}>{d === 0 ? "On receipt" : `${d} days after`}</option>)}</select>
+          </label>
+        </div>
+        <label className={`flex items-center gap-2 text-ink-2 ${b.auto ? "" : "pointer-events-none opacity-50"}`}><input type="checkbox" checked={b.email} onChange={(e) => set({ email: e.target.checked })} /> Email the invoice with a Pay online link</label>
+        <p className="text-[12px] text-muted">Each month is billed once — the plan&rsquo;s monthly fee plus any additional charges not invoiced yet. Runs every morning; if a billing day is missed, it catches up the next morning.</p>
+      </div>
+    </Card>
+  );
+}
+
 function BillingTab({ w, c, open }: { w: BooksWorkspace; c: Client; open: (d: Dlg) => void }) {
   const books = useBooks();
   const toast = useToast();
@@ -779,6 +826,8 @@ function BillingTab({ w, c, open }: { w: BooksWorkspace; c: Client; open: (d: Dl
   const latest = [...w.months].sort((a, b) => b.period.localeCompare(a.period))[0];
   const nextToBill = invoices.some((i) => i.description.includes(periodLabel(latest.period))) ? undefined : latest.period;
   const statusTone = { paid: "success", open: "info", overdue: "danger", partial: "warning", draft: "neutral", void: "neutral" } as const;
+  const [billing, setBilling] = useState(false);
+  const thisMonth = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" }).slice(0, 7);
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -802,6 +851,7 @@ function BillingTab({ w, c, open }: { w: BooksWorkspace; c: Client; open: (d: Dl
               <ul className="space-y-1 text-ink-2">{w.service.includes.map((x) => <li key={x} className="flex items-start gap-1.5"><CheckCircle2 size={14} className="mt-0.5 shrink-0 text-success" /> {x}</li>)}</ul>
             </div>
           </Card>
+          {BACKEND && <AutoBilling w={w} billedThisMonth={invoices.some((i) => i.status !== "void" && i.description.includes(periodLabel(thisMonth)))} />}
           <Card>
             <CardHeader title="Additional service charges" action={<Button size="sm" icon={Plus} onClick={() => open("extra")}>Add charge</Button>} />
             <ul className="divide-y divide-line border-t border-line">
@@ -824,7 +874,11 @@ function BillingTab({ w, c, open }: { w: BooksWorkspace; c: Client; open: (d: Dl
             action={
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" icon={CreditCard} disabled={billed - paid <= 0} onClick={() => open("payment")}>Record payment</Button>
-                <Button size="sm" variant="primary" icon={Receipt} disabled={!nextToBill && pending.length === 0} onClick={() => { const n = books.invoiceMonth(w.id, nextToBill ?? null, true); toast(`${n} sent`); }}>{nextToBill ? `Invoice ${periodLabel(nextToBill, true)}` : `Invoice charges`}</Button>
+                {BACKEND ? (
+                  <Button size="sm" variant="primary" icon={Receipt} disabled={billing} onClick={async () => { setBilling(true); try { const r = await books.billMonth(w.id, thisMonth); toast(`Invoice ${r.number} created${r.sent ? " and emailed" : ""}`); } catch (e) { toast(e instanceof Error ? e.message : "Couldn't create the invoice", "info"); } setBilling(false); }}>{billing ? "Creating…" : `Invoice ${periodLabel(thisMonth, true)} now`}</Button>
+                ) : (
+                  <Button size="sm" variant="primary" icon={Receipt} disabled={!nextToBill && pending.length === 0} onClick={() => { const n = books.invoiceMonth(w.id, nextToBill ?? null, true); toast(`${n} sent`); }}>{nextToBill ? `Invoice ${periodLabel(nextToBill, true)}` : `Invoice charges`}</Button>
+                )}
               </div>
             }
           />

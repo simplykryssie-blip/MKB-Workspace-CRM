@@ -8,7 +8,7 @@
  * system of record: no transactions, balances of record or tokens are stored.
  * Server-only.
  */
-import { MONTH_STAGES, REPORT_TYPES, type BooksMonth, type BooksWorkspace } from "@/lib/books/config";
+import { DEFAULT_BILLING, MONTH_STAGES, REPORT_TYPES, type BooksMonth, type BooksWorkspace, type WorkspaceBilling } from "@/lib/books/config";
 import { canDo, clientAccess } from "@/lib/team/policy";
 import type { ServiceKey } from "@/lib/types";
 import { all, badRequest, forbidden, HttpError, json, notFound, now, one, str, type AppEnv, type Db } from "./core";
@@ -16,7 +16,7 @@ import { audit, requirePermission, type Actor } from "./identity";
 import { assignmentSets } from "./clients";
 import { stampNew } from "./tax";
 
-type Row = { id: string; client_id: string; enrollment_id: string | null; business_name: string; entity_type: string; bookkeeper_id: string; reviewer_id: string; service: string; extras: string; qbo: string; accounts: string; months: string; tasks: string; notes: string; activity: string; started_at: string; rev: number };
+type Row = { billing?: string; id: string; client_id: string; enrollment_id: string | null; business_name: string; entity_type: string; bookkeeper_id: string; reviewer_id: string; service: string; extras: string; qbo: string; accounts: string; months: string; tasks: string; notes: string; activity: string; started_at: string; rev: number };
 export type WorkspaceSnapshot = BooksWorkspace & { rev?: number };
 type Staff = Extract<Actor, { kind: "staff" }>;
 const MAX_JSON = 600_000;
@@ -26,6 +26,13 @@ const toWorkspace = (r: Row): WorkspaceSnapshot => ({
   bookkeeperId: r.bookkeeper_id, reviewerId: r.reviewer_id, service: json(r.service, { plan: "", monthlyFee: 0, reports: [], includes: [] }), extras: json(r.extras, []),
   qbo: json(r.qbo, { status: "not_connected", companyName: "", access: "qboa" }), accounts: json(r.accounts, []), months: json(r.months, []), tasks: json(r.tasks, []),
   notes: json(r.notes, []), activity: json(r.activity, []), startedAt: r.started_at, rev: r.rev,
+  billing: { ...DEFAULT_BILLING, ...json<Partial<WorkspaceBilling>>(r.billing, {}) },
+});
+export const cleanBilling = (b?: Partial<WorkspaceBilling>): WorkspaceBilling => ({
+  auto: !!b?.auto,
+  day: Math.min(28, Math.max(1, Math.round(Number(b?.day) || 1))),
+  dueDays: Math.min(60, Math.max(0, Math.round(Number(b?.dueDays ?? 15)))),
+  email: b?.email !== false,
 });
 
 async function accessibleClients(env: AppEnv, a: Staff, ids: string[]) {
@@ -66,6 +73,7 @@ function clean(w: BooksWorkspace): BooksWorkspace {
     qbo: { status: (["connected", "needs_reauth", "invite_pending", "not_connected"] as const).includes(q.status) ? q.status : "not_connected", companyName: str(q.companyName, 200), access: q.access === "client_authorized" ? "client_authorized" : "qboa", realmMasked: q.realmMasked ? `•••• ${last4(q.realmMasked)}` : undefined, connectedAt: q.connectedAt ? str(q.connectedAt, 40) : undefined, lastSyncAt: q.lastSyncAt ? str(q.lastSyncAt, 40) : undefined, authorizedBy: q.authorizedBy ? str(q.authorizedBy, 120) : undefined },
     accounts: (w.accounts ?? []).slice(0, 40).map((x) => ({ id: str(x.id, 60), name: str(x.name, 120), kind: x.kind === "credit_card" ? "credit_card" : "bank", mask: last4(x.mask), institution: str(x.institution, 120) })),
     months: (w.months ?? []).map((m) => ({ ...m, stage: (MONTH_STAGES as readonly string[]).includes(m.stage) ? m.stage : "Waiting on Client Items" })),
+    billing: cleanBilling(w.billing),
   };
 }
 const assignmentStmts = (db: Db, w: BooksWorkspace) => [
@@ -76,7 +84,7 @@ const assignmentStmts = (db: Db, w: BooksWorkspace) => [
 async function checkStaff(db: Db, ...ids: string[]) {
   for (const id of ids) if (!(await one(db, "SELECT 1 FROM members WHERE id = ? AND status = 'active'", id))) throw badRequest("The bookkeeper and reviewer must be active team members.");
 }
-const fields = (w: BooksWorkspace) => [w.clientId, w.enrollmentId ?? null, w.businessName, w.entityType ?? "", w.bookkeeperId, w.reviewerId, big(w.service), big(w.extras ?? []), big(w.qbo), big(w.accounts ?? []), big(w.months ?? []), big(w.tasks ?? []), big(w.notes ?? []), big(w.activity ?? []), w.startedAt];
+const fields = (w: BooksWorkspace) => [w.clientId, w.enrollmentId ?? null, w.businessName, w.entityType ?? "", w.bookkeeperId, w.reviewerId, big(w.service), big(w.extras ?? []), big(w.qbo), big(w.accounts ?? []), big(w.months ?? []), big(w.tasks ?? []), big(w.notes ?? []), big(w.activity ?? []), w.startedAt, JSON.stringify(cleanBilling(w.billing))];
 
 export async function createWorkspace(env: AppEnv, a: Actor, input: WorkspaceSnapshot) {
   requirePermission(a, "books", "create");
@@ -91,7 +99,7 @@ export async function createWorkspace(env: AppEnv, a: Actor, input: WorkspaceSna
   const t = now();
   const stamped = { ...w, notes: stampNew([], w.notes, (n) => ({ ...n, authorId: a.member.id })) };
   await env.DB.batch([
-    env.DB.prepare("INSERT INTO books_workspaces (id, client_id, enrollment_id, business_name, entity_type, bookkeeper_id, reviewer_id, service, extras, qbo, accounts, months, tasks, notes, activity, started_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(w.id, ...fields(stamped), t, t),
+    env.DB.prepare("INSERT INTO books_workspaces (id, client_id, enrollment_id, business_name, entity_type, bookkeeper_id, reviewer_id, service, extras, qbo, accounts, months, tasks, notes, activity, started_at, billing, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(w.id, ...fields(stamped), t, t),
     ...assignmentStmts(env.DB, w),
   ]);
   await audit(env.DB, a, { action: "Record update", resource: `Bookkeeping workspace ${w.businessName}`, department: "books", meta: "Workspace started" });
@@ -126,6 +134,7 @@ export async function saveWorkspace(env: AppEnv, a: Actor, id: string, input: Wo
   const changed: string[] = [];
   if (next.bookkeeperId !== cur.bookkeeperId || next.reviewerId !== cur.reviewerId) { need("assign", "change the bookkeeper or reviewer"); await checkStaff(env.DB, next.bookkeeperId, next.reviewerId); changed.push("assignment"); }
   if (!same("qbo")) { need("settings", "change the QuickBooks connection"); changed.push("QuickBooks"); }
+  if (!same("billing")) { need("edit", "change automatic billing"); changed.push("automatic billing"); }
   const approvals = next.months.some((m) => approvalOf(m) !== approvalOf(cur.months.find((x) => x.id === m.id)));
   if (approvals) { need("approve", "approve or close months"); changed.push("month approval"); }
   // History can't be rewritten: months, steps, timeline entries and notes are only added.
@@ -141,7 +150,7 @@ export async function saveWorkspace(env: AppEnv, a: Actor, id: string, input: Wo
   if (!changed.length && same("activity")) return cur;
   const t = now();
   const res = await env.DB.batch([
-    env.DB.prepare("UPDATE books_workspaces SET client_id = ?, enrollment_id = ?, business_name = ?, entity_type = ?, bookkeeper_id = ?, reviewer_id = ?, service = ?, extras = ?, qbo = ?, accounts = ?, months = ?, tasks = ?, notes = ?, activity = ?, started_at = ?, updated_at = ?, rev = rev + 1 WHERE id = ? AND rev = ?").bind(...fields(next), t, id, cur.rev!),
+    env.DB.prepare("UPDATE books_workspaces SET client_id = ?, enrollment_id = ?, business_name = ?, entity_type = ?, bookkeeper_id = ?, reviewer_id = ?, service = ?, extras = ?, qbo = ?, accounts = ?, months = ?, tasks = ?, notes = ?, activity = ?, started_at = ?, billing = ?, updated_at = ?, rev = rev + 1 WHERE id = ? AND rev = ?").bind(...fields(next), t, id, cur.rev!),
     ...(changed.includes("assignment") ? assignmentStmts(env.DB, next) : []),
   ]);
   if (!res[0].meta.changes) throw new HttpError(409, "Someone else updated this workspace. Reloading the latest version.", "conflict");
