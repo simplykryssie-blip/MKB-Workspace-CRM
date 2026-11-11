@@ -1,6 +1,7 @@
 import { SiteForm } from "./SiteForm";
 import { MonarchSiteForm } from "./MonarchSiteForm";
 import { WispGenerator } from "./WispGenerator";
+import { SITE_CSS } from "@/lib/website/site-css";
 import type { Section, SiteKey, SitePage, SiteSettings } from "@/lib/website/types";
 
 /**
@@ -9,9 +10,11 @@ import type { Section, SiteKey, SitePage, SiteSettings } from "@/lib/website/typ
  * prefix ("" on the website's own domain, "/site" inside the app).
  */
 export type NavLink = { slug: string; title: string };
-type Props = { settings: SiteSettings; page: Pick<SitePage, "slug" | "title" | "hideNav">; sections: Section[]; nav: NavLink[]; base: string; preview?: boolean; banner?: React.ReactNode; site?: SiteKey };
+type Props = { settings: SiteSettings; page: Pick<SitePage, "slug" | "title" | "hideNav">; sections: Section[]; nav: NavLink[]; base: string; preview?: boolean; banner?: React.ReactNode; site?: SiteKey;
+  /** Public pages are plain HTML: forms and the WISP generator load in small frames (/w/...). */
+  widgets?: boolean };
 
-export function SiteRenderer({ settings: st, page, sections, nav, base, preview, banner, site = "mkb" }: Props) {
+export function SiteRenderer({ settings: st, page, sections, nav, base, preview, banner, site = "mkb", widgets }: Props) {
   const funnel = !!page.hideNav;
   const L = (href: string) => (href.startsWith("/") && !href.startsWith("/f/") ? `${base}${href === "/" ? "" : href}` || "/" : href);
   const ext = (href: string) => (/^https?:/i.test(href) ? { target: "_blank", rel: "noopener noreferrer" } : {});
@@ -20,6 +23,7 @@ export function SiteRenderer({ settings: st, page, sections, nav, base, preview,
   const year = new Date().getFullYear();
   return (
     <div className={`mkbsite site-${site}`}>
+      <style dangerouslySetInnerHTML={{ __html: SITE_CSS }} />
       {banner}
       {st.topBar && <div className="topbar">{st.topBar}</div>}
       <header className="header">
@@ -49,7 +53,7 @@ export function SiteRenderer({ settings: st, page, sections, nav, base, preview,
       </header>
 
       <main>
-        {sections.map((s) => <SectionView key={s.id} s={s} L={L} ext={ext} base={base} preview={preview} site={site} />)}
+        {sections.map((s) => <SectionView key={s.id} s={s} L={L} ext={ext} base={base} preview={preview} site={site} widgets={widgets} />)}
         {!sections.length && (
           <section className="sec tone-light"><div className="wrap"><p className="lead">This page has no sections yet.</p></div></section>
         )}
@@ -117,7 +121,7 @@ function Head({ s, as = "h2" }: { s: Section; as?: "h1" | "h2" }) {
   );
 }
 
-function SectionView({ s, L, ext, base, preview, site }: { s: Section; L: (h: string) => string; ext: (h: string) => object; base: string; preview?: boolean; site: SiteKey }) {
+function SectionView({ s, L, ext, base, preview, site, widgets }: { s: Section; L: (h: string) => string; ext: (h: string) => object; base: string; preview?: boolean; site: SiteKey; widgets?: boolean }) {
   const tone = `tone-${s.tone ?? "light"}`;
   switch (s.type) {
     case "hero":
@@ -193,7 +197,7 @@ function SectionView({ s, L, ext, base, preview, site }: { s: Section; L: (h: st
           <div className="wrap">
             <Head s={s} />
             {s.body && <div className="lead">{paras(s.body)}</div>}
-            <div className="formbox">{site === "monarch" ? <MonarchSiteForm preview={preview} /> : <SiteForm slug={s.formSlug ?? ""} preview={preview} afterHref={s.afterHref ? L(s.afterHref) : undefined} />}</div>
+            <div className="formbox">{widgets ? <WidgetFrame src={site === "monarch" ? "/w/monarch-contact" : `/w/form/${encodeURIComponent(s.formSlug ?? "")}${s.afterHref ? `?after=${encodeURIComponent(L(s.afterHref))}` : ""}`} title={s.title || "Contact form"} /> : site === "monarch" ? <MonarchSiteForm preview={preview} /> : <SiteForm slug={s.formSlug ?? ""} preview={preview} afterHref={s.afterHref ? L(s.afterHref) : undefined} />}</div>
           </div>
         </section>
       );
@@ -203,7 +207,7 @@ function SectionView({ s, L, ext, base, preview, site }: { s: Section; L: (h: st
           <div className="wrap">
             <Head s={s} />
             {s.body && <div className="lead">{paras(s.body)}</div>}
-            <div className="formbox"><WispGenerator preview={preview} nextHref={L("/wisp-next-steps")} /></div>
+            <div className="formbox">{widgets ? <WidgetFrame src={`/w/wisp?next=${encodeURIComponent(L("/wisp-next-steps"))}`} title="WISP Generator" /> : <WispGenerator preview={preview} nextHref={L("/wisp-next-steps")} />}</div>
           </div>
         </section>
       );
@@ -238,4 +242,9 @@ function SectionView({ s, L, ext, base, preview, site }: { s: Section; L: (h: st
 function embedDoc(html: string, base: string) {
   const fixed = base ? html.replace(/href="\/(?!\/)/g, `href="${base}/`) : html;
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base target="_top"></head><body style="margin:0">${fixed}</body></html>`;
+}
+
+/** A form or tool on a plain-HTML page: loads from /w/... and sizes itself (see lib/website/html.ts). */
+function WidgetFrame({ src, title }: { src: string; title: string }) {
+  return <iframe className="mkb-widget" data-mkb-frame="" src={src} title={title} style={{ width: "100%", border: 0, minHeight: 520, display: "block" }} loading="lazy" />;
 }

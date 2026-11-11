@@ -57,7 +57,7 @@ export function WispGenerator({ preview, nextHref }: { preview?: boolean; nextHr
         {res.gaps.length > 0 && (<><p style={{ fontWeight: 700, marginTop: 14 }}>What to work on next</p><ul>{res.gaps.slice(0, 6).map((g, i) => <li key={i}>{g}</li>)}</ul>{res.gaps.length > 6 && <p>…and {res.gaps.length - 6} more in your plan&rsquo;s action list.</p>}</>)}
         <div className="wisp-actions">
           <button type="button" className="btn outline-dark" onClick={() => download(res)}>Download again</button>
-          <a className="btn gold" href={nextHref}>See your next steps →</a>
+          <a className="btn gold" href={nextHref} target="_top">See your next steps →</a>
         </div>
       </div>
     );

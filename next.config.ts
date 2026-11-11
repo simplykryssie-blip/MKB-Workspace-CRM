@@ -13,7 +13,9 @@ const nextConfig: NextConfig = {
     ];
     return [
       // The app can't be framed by other sites (clickjacking)…
-      { source: "/((?!f/).*)", headers: [...common, { key: "X-Frame-Options", value: "DENY" }, { key: "Content-Security-Policy", value: "frame-ancestors 'none'" }] },
+      { source: "/((?!f/|w/).*)", headers: [...common, { key: "X-Frame-Options", value: "DENY" }, { key: "Content-Security-Policy", value: "frame-ancestors 'none'" }] },
+      // Website forms and tools load inside the website's own pages (same site only).
+      { source: "/w/:path*", headers: [...common, { key: "X-Frame-Options", value: "SAMEORIGIN" }, { key: "Content-Security-Policy", value: "frame-ancestors 'self'" }, { key: "X-Robots-Tag", value: "noindex, nofollow" }] },
       // …except public forms, which are meant to be embedded on MKB's website.
       { source: "/f/:path*", headers: common },
       // Private client links: the token is in the address, so never send it on as a referrer or let it be indexed.

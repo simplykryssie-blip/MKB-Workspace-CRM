@@ -195,30 +195,69 @@ export async function calculatorFormStatements(env: AppEnv, ownerId: string | nu
     JSON.stringify({ ownerId, stageId: stage?.id ?? "st-new", source: "Website", sourceDetail: "Tax calculator", tags: ["Website", "Tax calculator"], followUpHours: 24 }), t, t, t)];
 }
 
-/* ---------------------------------------------------------------- images */
+/* ---------------------------------------------------------------- media library */
 const IMAGE_TYPES: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif" };
-export async function uploadMedia(env: AppEnv, a: Actor, req: Request, site: SiteKey = "mkb") {
-  perm(a, site, "edit");
+const MEDIA_MAX = 10_000_000;
+export type MediaItem = { key: string; url: string; name: string; contentType: string; size: number; uploadedAt: string; updatedAt?: string };
+
+async function readImage(req: Request) {
   const type = (req.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
   const ext = IMAGE_TYPES[type];
   if (!ext) throw new HttpError(415, "Upload a PNG, JPG, WebP or GIF image.", "bad_type");
-  const len = Number(req.headers.get("content-length") ?? 0);
-  if (len > 5_000_000) throw new HttpError(413, "Images can be up to 5 MB.");
+  if (Number(req.headers.get("content-length") ?? 0) > MEDIA_MAX) throw new HttpError(413, "Images can be up to 10 MB.");
   const buf = await req.arrayBuffer();
-  if (buf.byteLength > 5_000_000) throw new HttpError(413, "Images can be up to 5 MB.");
+  if (buf.byteLength > MEDIA_MAX) throw new HttpError(413, "Images can be up to 10 MB.");
   if (!buf.byteLength) throw badRequest("The file is empty.");
+  return { type, ext, buf };
+}
+// Short cache so a replaced picture shows up on the site within minutes.
+const MEDIA_CACHE = "public, max-age=300";
+
+export async function listMedia(env: AppEnv, a: Actor, site: SiteKey = "mkb") {
+  perm(a, site, "view");
+  const rows = await all<{ key: string; name: string; content_type: string; size: number; uploaded_at: string; updated_at: string | null }>(env.DB, "SELECT key, name, content_type, size, uploaded_at, updated_at FROM website_media WHERE site = ? AND deleted_at IS NULL ORDER BY coalesce(updated_at, uploaded_at) DESC", site);
+  return { media: rows.map((r): MediaItem => ({ key: r.key, url: `/site/media/${r.key}`, name: r.name, contentType: r.content_type, size: r.size, uploadedAt: r.uploaded_at, updatedAt: r.updated_at ?? undefined })) };
+}
+
+export async function uploadMedia(env: AppEnv, a: Actor, req: Request, site: SiteKey = "mkb") {
+  perm(a, site, "edit");
+  const { type, ext, buf } = await readImage(req);
   const key = `${randomId("img").replace("img_", "")}.${ext}`;
-  await env.FILES.put(`website/${key}`, buf, { httpMetadata: { contentType: type, cacheControl: "public, max-age=31536000, immutable" } });
+  await env.FILES.put(`website/${key}`, buf, { httpMetadata: { contentType: type, cacheControl: MEDIA_CACHE } });
   const name = str(decodeURIComponent(req.headers.get("x-file-name") ?? ""), 200) || key;
-  await run(env.DB, "INSERT INTO website_media (key, content_type, size, name, uploaded_at, uploaded_by) VALUES (?, ?, ?, ?, ?, ?)", key, type, buf.byteLength, name, now(), memberId(a));
+  await run(env.DB, "INSERT INTO website_media (key, content_type, size, name, uploaded_at, uploaded_by, site) VALUES (?, ?, ?, ?, ?, ?, ?)", key, type, buf.byteLength, name, now(), memberId(a), site);
   await audit(env.DB, a, { action: "Website update", resource: "Website image", meta: `Uploaded ${name}` });
-  return { url: `/site/media/${key}` };
+  return { url: `/site/media/${key}`, key };
+}
+
+/** Replaces a picture's file but keeps its link, so every page using it updates. */
+export async function replaceMedia(env: AppEnv, a: Actor, req: Request, key: string, site: SiteKey = "mkb") {
+  perm(a, site, "edit");
+  const cur = await one<{ name: string }>(env.DB, "SELECT name FROM website_media WHERE key = ? AND site = ? AND deleted_at IS NULL", key, site);
+  if (!cur) throw notFound("Picture not found.");
+  const { type, buf } = await readImage(req);
+  await env.FILES.put(`website/${key}`, buf, { httpMetadata: { contentType: type, cacheControl: MEDIA_CACHE } });
+  const name = str(decodeURIComponent(req.headers.get("x-file-name") ?? ""), 200) || cur.name;
+  await run(env.DB, "UPDATE website_media SET content_type = ?, size = ?, name = ?, updated_at = ? WHERE key = ?", type, buf.byteLength, name, now(), key);
+  await audit(env.DB, a, { action: "Website update", resource: "Website image", meta: `Replaced ${cur.name} with ${name} (same link)` });
+  return { url: `/site/media/${key}`, key };
+}
+
+export async function deleteMedia(env: AppEnv, a: Actor, key: string, site: SiteKey = "mkb") {
+  perm(a, site, "approve");
+  const cur = await one<{ name: string }>(env.DB, "SELECT name FROM website_media WHERE key = ? AND site = ? AND deleted_at IS NULL", key, site);
+  if (!cur) throw notFound("Picture not found.");
+  await run(env.DB, "UPDATE website_media SET deleted_at = ? WHERE key = ?", now(), key);
+  await env.FILES.delete(`website/${key}`).catch(() => {});
+  await audit(env.DB, a, { action: "Website update", resource: "Website image", meta: `Deleted ${cur.name}` });
+  return { ok: true };
 }
 
 /** Public: a website image. Only files registered as website media are served. */
 export async function getMedia(env: AppEnv, key: string) {
   if (!/^[A-Za-z0-9_-]+\.(png|jpg|webp|gif)$/.test(key)) return null;
-  if (!(await one(env.DB, "SELECT 1 FROM website_media WHERE key = ?", key))) return null;
+  const m = await one<{ content_type: string }>(env.DB, "SELECT content_type FROM website_media WHERE key = ? AND deleted_at IS NULL", key);
+  if (!m) return null;
   return env.FILES.get(`website/${key}`);
 }
 

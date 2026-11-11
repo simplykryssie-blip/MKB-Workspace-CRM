@@ -2,7 +2,7 @@ import { body, handle, jsonResponse, str } from "@/lib/server/core";
 import { authenticate } from "@/lib/server/auth";
 import { deletePage, savePage, unpublishPage, siteParam } from "@/lib/server/website";
 
-export const PUT = handle<{ id: string }>(async (req, env, { id }) => jsonResponse(await savePage(env, await authenticate(env, req), id, await body(req), siteParam(req))));
+export const PUT = handle<{ id: string }>(async (req, env, { id }) => jsonResponse(await savePage(env, await authenticate(env, req), id, await body(req, 600_000), siteParam(req))));
 /** { action: "delete" | "unpublish" } */
 export const POST = handle<{ id: string }>(async (req, env, { id }) => {
   const action = str((await body(req)).action, 20);

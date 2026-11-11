@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, Copy, Eye, ExternalLink, FilePlus2, Globe, ImageUp, Plus, Rocket, Settings2, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Code2, Copy, Eye, ExternalLink, FilePlus2, Globe, ImageIcon, ImageUp, Plus, RefreshCw, Rocket, Settings2, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Checkbox, SelectField, TextArea, TextField } from "@/components/ui/Field";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -11,8 +11,8 @@ import { useTeam } from "@/lib/store/team-store";
 import { BACKEND, RemoteError, call, debouncer } from "@/lib/sync/remote";
 import { MKB_PAGES, MKB_SETTINGS } from "@/lib/website/mkb-content";
 import { MONARCH_PAGES, MONARCH_SETTINGS } from "@/lib/website/monarch-content";
-import { SECTION_TYPES, TONES, slugifyPage, type Section, type SectionType, type SiteItem, type SiteKey, type SitePage, type SiteSettings, type Website } from "@/lib/website/types";
-import "@/components/site/site.css";
+import { HTML_PAGE_STARTER, preparePage } from "@/lib/website/html";
+import { SECTION_TYPES, TONES, isHtmlPage, slugifyPage, type Section, type SectionType, type SiteItem, type SiteKey, type SitePage, type SiteSettings, type Website } from "@/lib/website/types";
 
 const save = debouncer(800);
 const uid = (p: string) => `${p}-${Math.random().toString(36).slice(2, 9)}`;
@@ -91,12 +91,13 @@ export function WebsiteEditor({ which = "mkb" }: { which?: SiteKey }) {
     if (p) updatePage(id, { draft: fn(p.draft) });
   };
 
-  const addPage = async () => {
+  const addPage = async (kind: "html" | "sections" = "sections") => {
     const title = window.prompt("Name of the new page (e.g. Expungement)")?.trim();
     if (!title || !site) return;
     let slug = slugifyPage(title) || "page";
     for (let i = 2; site.pages.some((p) => p.slug === slug); i++) slug = `${slugifyPage(title)}-${i}`;
     const page: SitePage = { id: uid("pg"), slug, title, description: "", nav: true, position: Math.max(0, ...site.pages.map((p) => p.position)) + 1, draft: [{ id: uid("sec"), type: "hero", eyebrow: title, title, body: "", buttons: [{ label: "Let's Talk About Your Business", href: "/contact", style: "gold" }] }, { id: uid("sec"), type: "cta", title: "You're building something. Let's build the foundation with it.", body: "Strategy • Growth • Legacy", buttons: [{ label: "Get Started", href: "/contact", style: "dark" }] }], published: null, rev: 1 };
+    if (kind === "html") { page.draft = [{ id: uid("sec"), type: "document", html: HTML_PAGE_STARTER.replace(/New page/g, title) }]; page.nav = false; }
     if (BACKEND) {
       try {
         const r = await call<{ rev: number; slug: string }>("POST", api("/api/website/pages"), { page });
@@ -220,11 +221,15 @@ export function WebsiteEditor({ which = "mkb" }: { which?: SiteKey }) {
               </button>
             ))}
           </nav>
-          {canEdit && <Button className="mt-3 w-full" icon={FilePlus2} onClick={addPage}>Add page</Button>}
+          {canEdit && <Button className="mt-3 w-full" variant="primary" icon={Code2} onClick={() => void addPage("html")}>Add HTML page</Button>}
+          {canEdit && <Button className="mt-2 w-full" icon={FilePlus2} onClick={() => void addPage("sections")}>Add section page</Button>}
+          <Button className="mt-2 w-full" icon={ImageIcon} onClick={() => setSel("media")}>Media library</Button>
         </aside>
 
         <div className="min-w-0">
-          {sel === "settings" || !page ? (
+          {sel === "media" ? (
+            <MediaLibrary which={which} canEdit={canEdit} canDelete={canPublish} />
+          ) : sel === "settings" || !page ? (
             <SettingsForm s={site.settings.draft} onChange={updateSettings} disabled={!canEdit} />
           ) : (
             <PageForm key={page.id} page={page} onChange={(patch) => updatePage(page.id, patch)} setSections={(fn) => setSections(page.id, fn)} onDelete={() => removePage(page)} disabled={!canEdit} canDelete={canPublish && page.slug !== ""} onPublish={canPublish ? () => publishPage(page) : undefined} onUnpublish={canPublish && page.slug !== "" ? () => unpublishPage(page) : undefined} busy={busy} />
@@ -232,7 +237,13 @@ export function WebsiteEditor({ which = "mkb" }: { which?: SiteKey }) {
         </div>
       </div>
 
-      {preview && (
+      {preview && page && isHtmlPage(page.draft) && (
+        <div className="fixed inset-0 z-[100] flex flex-col bg-white" role="dialog" aria-label="Website preview">
+          <div className="draftbar" style={{ background: "#111", color: "#fff", padding: "8px 14px", fontSize: 13 }}>Preview of your unpublished draft · <button type="button" onClick={() => setPreview(false)} style={{ fontWeight: 800, textDecoration: "underline" }}>Close preview</button></div>
+          <iframe title="Page preview" className="w-full flex-1 border-0" srcDoc={preparePage(page.draft[0].html ?? "", which === "monarch" ? "/msite" : "/site")} />
+        </div>
+      )}
+      {preview && !(page && isHtmlPage(page.draft)) && (
         <div className="fixed inset-0 z-[100] overflow-y-auto bg-white" role="dialog" aria-label="Website preview">
           <SiteRenderer
             settings={site.settings.draft}
@@ -302,6 +313,7 @@ function PageForm({ page, onChange, setSections, onDelete, disabled, canDelete, 
     setOpen(sec.id);
     setAdding(false);
   };
+  const htmlMode = isHtmlPage(page.draft);
   return (
     <div className="space-y-5">
       <Panel title={isHome ? "Home page" : "Page details"} actions={canDelete ? <Button size="sm" variant="ghost" icon={Trash2} onClick={onDelete}>Delete page</Button> : undefined}>
@@ -309,8 +321,8 @@ function PageForm({ page, onChange, setSections, onDelete, disabled, canDelete, 
           <TextField label="Page name" value={page.title} disabled={disabled} onChange={(e) => onChange({ title: e.target.value })} />
           {isHome ? <TextField label="Web address" value="/ (home)" disabled /> : <TextField label="Web address" hint={`/${page.slug}`} value={page.slug} disabled={disabled} onChange={(e) => onChange({ slug: slugifyPage(e.target.value) })} onBlur={(e) => onChange({ slug: slugifyPage(e.target.value) || slugifyPage(page.title) })} />}
           <div className="sm:col-span-2"><TextArea label="Search engine description (1–2 sentences)" value={page.description} disabled={disabled} onChange={(e) => onChange({ description: e.target.value })} /></div>
-          {!isHome && <Checkbox label="Show in the menu" checked={page.nav} disabled={disabled} onChange={(e) => onChange({ nav: e.target.checked })} />}
-          {!isHome && <Checkbox label="Funnel page — hide the menu" hint="Visitors see only your logo and this page’s buttons, so they stay on the path" checked={!!page.hideNav} disabled={disabled} onChange={(e) => onChange({ hideNav: e.target.checked })} />}
+          {!isHome && !htmlMode && <Checkbox label="Show in the menu" checked={page.nav} disabled={disabled} onChange={(e) => onChange({ nav: e.target.checked })} />}
+          {!isHome && !htmlMode && <Checkbox label="Funnel page — hide the menu" hint="Visitors see only your logo and this page’s buttons, so they stay on the path" checked={!!page.hideNav} disabled={disabled} onChange={(e) => onChange({ hideNav: e.target.checked })} />}
           <TextField label="Menu order" type="number" min={0} max={999} value={page.position} disabled={disabled} onChange={(e) => onChange({ position: Number(e.target.value) })} />
         </div>
         {page.published ? (
@@ -326,6 +338,8 @@ function PageForm({ page, onChange, setSections, onDelete, disabled, canDelete, 
         )}
       </Panel>
 
+      {htmlMode ? <HtmlPageEditor html={page.draft[0].html ?? ""} disabled={disabled} onChange={(html) => setSections((s) => [{ ...s[0], html }])} /> : <>
+      {!disabled && <p className="flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-line-strong px-3 py-2 text-[13px] text-muted">Want to write this page in your own HTML? <button type="button" className="font-semibold text-accent hover:underline" onClick={() => { if (confirm("Switch this page to your own HTML? Its sections are replaced by an HTML page you can paste into (the live page doesn't change until you publish).")) setSections(() => [{ id: uid("sec"), type: "document", html: HTML_PAGE_STARTER.replace(/New page/g, page.title) }]); }}>Switch to HTML</button></p>}
       <div>
         <h2 className="mb-2 text-[15px] font-semibold text-ink">Sections</h2>
         <ol className="space-y-3">
@@ -357,7 +371,7 @@ function PageForm({ page, onChange, setSections, onDelete, disabled, canDelete, 
           <div className="mt-3 rounded-2xl border border-line bg-surface p-3">
             <div className="mb-2 flex items-center justify-between"><span className="text-[13px] font-semibold text-ink">Add a section</span><IconBtn label="Cancel" icon={X} onClick={() => setAdding(false)} /></div>
             <div className="grid gap-2 sm:grid-cols-2">
-              {SECTION_TYPES.map((t) => (
+              {SECTION_TYPES.filter((t) => t.key !== "document").map((t) => (
                 <button key={t.key} type="button" onClick={() => add(t.key)} className="rounded-xl border border-line p-3 text-left hover:border-accent hover:bg-accent-soft/40">
                   <span className="block text-[14px] font-semibold text-ink">{t.label}</span>
                   <span className="block text-[12.5px] text-muted">{t.hint}</span>
@@ -367,6 +381,141 @@ function PageForm({ page, onChange, setSections, onDelete, disabled, canDelete, 
           </div>
         ) : <Button className="mt-3" icon={Plus} onClick={() => setAdding(true)}>Add section</Button>)}
       </div>
+      </>}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- HTML pages */
+const WIDGET_TAGS: [string, string][] = [
+  ["Contact form (MKB Leads)", '<div data-mkb-widget="form" data-form="contact"></div>'],
+  ["Form that opens a page after (funnels)", '<div data-mkb-widget="form" data-form="tax-calculator" data-after="/calculator"></div>'],
+  ["Monarch contact form (Monarch leads)", '<div data-mkb-widget="monarch-contact"></div>'],
+  ["WISP Generator (Monarch leads)", '<div data-mkb-widget="wisp" data-next="/wisp-next-steps"></div>'],
+];
+
+function HtmlPageEditor({ html, disabled, onChange }: { html: string; disabled: boolean; onChange: (html: string) => void }) {
+  const toast = useToast();
+  const siteKey = useContext(SiteCtx);
+  const [show, setShow] = useState(true);
+  const [doc, setDoc] = useState(html);
+  // The preview refreshes a moment after typing stops.
+  useEffect(() => { const t = setTimeout(() => setDoc(html), 600); return () => clearTimeout(t); }, [html]);
+  const prefix = siteKey === "monarch" ? "/msite" : "/site";
+  const copy = (t: string) => void navigator.clipboard?.writeText(t).then(() => toast("Copied"), () => toast("Couldn't copy — select and copy it instead.", "info"));
+  return (
+    <div className="space-y-4">
+      <Panel title="Page HTML" actions={<Button size="sm" variant="ghost" icon={Eye} onClick={() => setShow((v) => !v)}>{show ? "Hide preview" : "Show preview"}</Button>}>
+        <p className="mb-3 text-[13px] text-muted">Paste or write the whole page — <code>&lt;!doctype html&gt;</code>, your <code>&lt;head&gt;</code> with styles, your header, menu and footer. It&rsquo;s shown to visitors exactly as written. Drafts save automatically; visitors see it when you publish.</p>
+        <div className={`grid gap-4 ${show ? "xl:grid-cols-2" : ""}`}>
+          <textarea
+            aria-label="Page HTML"
+            value={html}
+            disabled={disabled}
+            spellCheck={false}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== "Tab") return;
+              e.preventDefault();
+              const t = e.currentTarget, a = t.selectionStart, b = t.selectionEnd;
+              onChange(`${html.slice(0, a)}  ${html.slice(b)}`);
+              requestAnimationFrame(() => { t.selectionStart = t.selectionEnd = a + 2; });
+            }}
+            className="h-[70vh] min-h-[420px] w-full resize-y rounded-xl border border-line bg-[#0f172a] p-3 font-mono text-[12.5px] leading-relaxed text-[#e2e8f0]"
+          />
+          {show && <iframe title="Page preview" className="h-[70vh] min-h-[420px] w-full rounded-xl border border-line bg-white" srcDoc={preparePage(doc, prefix)} />}
+        </div>
+        <p className="mt-2 text-[12px] text-muted">{Math.round(html.length / 1024)} KB · links to your other pages work on the live site (e.g. <code>/about</code>); pictures come from the Media library.</p>
+      </Panel>
+      <Panel title="Forms & tools you can paste into your HTML">
+        <ul className="space-y-2">
+          {WIDGET_TAGS.map(([label, tag]) => (
+            <li key={tag} className="flex flex-wrap items-center gap-2 rounded-xl bg-surface-2 px-3 py-2 ring-1 ring-line">
+              <span className="min-w-[180px] flex-1 text-[13px] font-semibold text-ink">{label}</span>
+              <code className="min-w-0 flex-[2] break-all text-[12px] text-ink-2">{tag}</code>
+              <Button size="sm" icon={Copy} onClick={() => copy(tag)}>Copy</Button>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-2 text-[12px] text-muted">For <code>data-form</code>, use a published form&rsquo;s link name from Forms. Each one becomes the live form, sized to fit, and answers go to your CRM.</p>
+      </Panel>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- media library */
+type Media = { key: string; url: string; name: string; contentType: string; size: number; uploadedAt: string; updatedAt?: string };
+function MediaLibrary({ which, canEdit, canDelete }: { which: SiteKey; canEdit: boolean; canDelete: boolean }) {
+  const toast = useToast();
+  const [items, setItems] = useState<Media[] | null>(BACKEND ? null : []);
+  const [busy, setBusy] = useState<string | null>(null);
+  const addRef = useRef<HTMLInputElement>(null);
+  const repRef = useRef<HTMLInputElement>(null);
+  const repKey = useRef<string>("");
+  const [v, setV] = useState(0);
+  const load = useCallback(async () => {
+    if (!BACKEND) return;
+    try { setItems((await call<{ media: Media[] }>("GET", withSite("/api/website/media", which))).media); } catch (e) { toast(e instanceof RemoteError ? e.message : "Couldn't load the media library.", "info"); setItems([]); }
+  }, [which, toast]);
+  useEffect(() => { void load(); }, [load]);
+  const send = async (method: "POST" | "PUT", path: string, file: File) => {
+    const r = await fetch(withSite(path, which), { method, credentials: "same-origin", headers: { "content-type": file.type, "x-file-name": encodeURIComponent(file.name) }, body: file });
+    const d = (await r.json().catch(() => ({}))) as { error?: string };
+    if (!r.ok) throw new Error(d.error ?? "Upload failed.");
+  };
+  const upload = async (files: FileList) => {
+    setBusy("upload");
+    let n = 0;
+    for (const f of Array.from(files)) {
+      try { await send("POST", "/api/website/media", f); n++; } catch (e) { toast(`${f.name}: ${e instanceof Error ? e.message : "upload failed"}`, "info"); }
+    }
+    setBusy(null);
+    if (n) { toast(`${n} picture${n === 1 ? "" : "s"} uploaded`); await load(); }
+  };
+  const replace = async (key: string, f: File) => {
+    setBusy(key);
+    try { await send("PUT", `/api/website/media/${key}`, f); toast("Picture replaced — the link stays the same. The site shows the new picture within a few minutes."); setV((x) => x + 1); await load(); }
+    catch (e) { toast(e instanceof Error ? e.message : "Upload failed.", "info"); }
+    setBusy(null);
+  };
+  const remove = async (m: Media) => {
+    if (!confirm(`Delete ${m.name}? Pages that use its link will show a broken picture.`)) return;
+    setBusy(m.key);
+    try { await call("POST", withSite(`/api/website/media/${m.key}`, which), {}); toast("Picture deleted"); await load(); } catch (e) { toast(e instanceof RemoteError ? e.message : "Couldn't delete.", "info"); }
+    setBusy(null);
+  };
+  const full = (m: Media) => `${window.location.origin}${m.url}`;
+  const copy = (t: string) => void navigator.clipboard?.writeText(t).then(() => toast("Link copied — paste it into your HTML, e.g. <img src=\"…\">"), () => toast("Couldn't copy — select the link and copy it.", "info"));
+  return (
+    <div className="space-y-4">
+      <Panel title="Media library" actions={canEdit ? <Button size="sm" variant="primary" icon={ImageUp} disabled={busy === "upload"} onClick={() => addRef.current?.click()}>{busy === "upload" ? "Uploading…" : "Upload pictures"}</Button> : undefined}>
+        <input ref={addRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple className="hidden" onChange={(e) => { const f = e.target.files; if (f?.length) void upload(f); e.target.value = ""; }} />
+        <input ref={repRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f && repKey.current) void replace(repKey.current, f); }} />
+        <p className="mb-3 text-[13px] text-muted">Upload pictures, then <b>Copy link</b> and paste it into your page&rsquo;s HTML: <code>&lt;img src=&quot;/site/media/…&quot;&gt;</code>. <b>Replace</b> swaps the picture but keeps the same link, so every page using it updates. PNG, JPG, WebP or GIF, up to 10 MB.</p>
+        {!items ? <p className="text-[14px] text-muted" role="status">Loading…</p> : !items.length ? <p className="rounded-xl border border-dashed border-line-strong px-4 py-8 text-center text-[14px] text-muted">No pictures yet.</p> : (
+          <ul className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+            {items.map((m) => (
+              <li key={m.key} className="overflow-hidden rounded-xl border border-line bg-surface">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <div className="grid h-40 place-items-center bg-[repeating-conic-gradient(#f1f1f1_0_25%,#fff_0_50%)] bg-[length:16px_16px]"><img src={`${m.url}?v=${v}-${m.updatedAt ?? ""}`} alt={m.name} className="max-h-40 max-w-full object-contain" /></div>
+                <div className="space-y-2 p-3">
+                  <p className="truncate text-[13px] font-semibold text-ink" title={m.name}>{m.name}</p>
+                  <p className="text-[11.5px] text-muted">{Math.max(1, Math.round(m.size / 1024))} KB{m.updatedAt ? " · replaced" : ""}</p>
+                  <div className="flex items-center gap-1.5">
+                    <input readOnly value={m.url} aria-label={`Link to ${m.name}`} onFocus={(e) => e.currentTarget.select()} className="h-8 min-w-0 flex-1 rounded-lg border border-line bg-surface-2 px-2 font-mono text-[11.5px] text-ink-2" />
+                    <Button size="sm" icon={Copy} onClick={() => copy(m.url)}>Copy link</Button>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <Button size="sm" variant="ghost" onClick={() => copy(full(m))}>Copy full address</Button>
+                    {canEdit && <Button size="sm" variant="ghost" icon={RefreshCw} disabled={busy === m.key} onClick={() => { repKey.current = m.key; repRef.current?.click(); }}>Replace</Button>}
+                    {canDelete && <Button size="sm" variant="ghost" icon={Trash2} disabled={busy === m.key} onClick={() => void remove(m)}>Delete</Button>}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Panel>
     </div>
   );
 }

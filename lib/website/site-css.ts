@@ -1,4 +1,5 @@
-/* MKB public website — black, white and gold foil (from the original site). Scoped to .mkbsite. */
+/** Styles for section-built website pages (scoped to .mkbsite). Used in the editor preview and on the public pages. */
+export const SITE_CSS = String.raw`/* MKB public website — black, white and gold foil (from the original site). Scoped to .mkbsite. */
 .mkbsite {
   --b: #0b0b0b; --w: #fff; --g: #b87912; --gd: #f6d37a; --warm: #f7f6f2; --m: #626262; --l: #ddd; --max: 1180px;
   --foil: linear-gradient(115deg, #6e4105, #b87912, #f7d77f, #a96808, #ffe7a1, #b87912, #6e4105);
@@ -173,3 +174,4 @@
   .mkbsite.site-mkb .header .logo { padding: 6px 12px 8px; }
   .mkbsite.site-mkb .header .logo img { height: 84px; }
 }
+`;

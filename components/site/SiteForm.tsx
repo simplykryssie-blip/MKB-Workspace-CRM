@@ -23,7 +23,7 @@ export function SiteForm({ slug, preview, afterHref }: { slug: string; preview?:
     const r = await fetch(`/api/public/forms/${encodeURIComponent(slug)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ data, honeypot, embed: true }) });
     if (!r.ok) return ((await r.json().catch(() => ({}))) as { error?: string }).error ?? "Something went wrong. Please try again or call us.";
     // Funnels: go straight on to the next page.
-    if (afterHref) window.location.assign(afterHref);
+    if (afterHref) (window.top ?? window).location.assign(afterHref);
   };
   if (form === undefined) return <p style={{ color: "#777" }}>Loading…</p>;
   if (!form)

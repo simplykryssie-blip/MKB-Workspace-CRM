@@ -7,7 +7,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ key: string }>
   try {
     const obj = await getMedia(await getEnv(), key);
     if (!obj) return new Response("Not found", { status: 404 });
-    return new Response(obj.body, { headers: { "content-type": obj.httpMetadata?.contentType ?? "application/octet-stream", "cache-control": "public, max-age=31536000, immutable", "x-content-type-options": "nosniff", etag: obj.httpEtag } });
+    return new Response(obj.body, { headers: { "content-type": obj.httpMetadata?.contentType ?? "application/octet-stream", "cache-control": "public, max-age=300", "x-content-type-options": "nosniff", etag: obj.httpEtag } });
   } catch {
     return new Response("Not found", { status: 404 });
   }

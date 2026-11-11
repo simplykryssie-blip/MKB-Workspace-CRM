@@ -13,6 +13,7 @@ export const SECTION_TYPES = [
   { key: "cta", label: "Call to action", hint: "Gold band with a headline and a button." },
   { key: "form", label: "Contact form", hint: "One of your published Forms; answers become Leads." },
   { key: "embed", label: "Custom code", hint: "Your own HTML, shown in a sealed frame." },
+  { key: "document", label: "Full HTML page", hint: "The whole page is your own HTML." },
   { key: "wisp", label: "WISP Generator", hint: "Monarch's free WISP builder — answers become Monarch leads." },
 ] as const;
 export type SectionType = (typeof SECTION_TYPES)[number]["key"];
@@ -126,6 +127,7 @@ export function cleanSection(x: Partial<Section>): Section {
   if (cleanImage(x.image)) out.image = cleanImage(x.image);
   if (s(x.formSlug, 60)) out.formSlug = slugifyPage(s(x.formSlug, 60));
   if (type === "form" && cleanHref(x.afterHref)) out.afterHref = cleanHref(x.afterHref);
+  if (type === "document") out.html = typeof x.html === "string" ? x.html.slice(0, 400_000) : "";
   if (type === "embed") {
     out.html = typeof x.html === "string" ? x.html.slice(0, 60000) : "";
     out.height = Math.min(4000, Math.max(200, Math.round(Number(x.height) || 900)));
@@ -159,4 +161,6 @@ export function cleanSettings(v: Partial<SiteSettings> | undefined, fallbackName
   };
 }
 /** Total size limit for one page (keeps the database row small). */
-export const PAGE_LIMIT = 200_000;
+export const PAGE_LIMIT = 450_000;
+/** A page that is one full HTML document (pasted in by the owner). */
+export const isHtmlPage = (sections: Section[] | null | undefined) => sections?.length === 1 && sections[0].type === "document";
