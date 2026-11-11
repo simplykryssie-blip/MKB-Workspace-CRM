@@ -26,15 +26,14 @@ export const MKB_SETTINGS: SiteSettings = {
   footerBlurb: "Professional financial services for entrepreneurs building something real.",
   ctaLabel: "Let's Talk",
   ctaHref: "/contact",
-  bookingLabel: "Book a Consultation",
-  bookingHref: "/contact",
+  bookingLabel: "",
+  bookingHref: "",
   portalHref: "",
 };
 
 let n = 0;
 const id = () => `sec-${(++n).toString(36).padStart(4, "0")}`;
 const talk = { label: "Let's Talk About Your Business", href: "/contact", style: "gold" as const };
-const book = { label: "Book a Consultation", href: "/contact", style: "outline" as const };
 const hero = (eyebrow: string, title: string, body: string, buttons: SiteButton[] = [talk]): Section => ({ id: id(), type: "hero", eyebrow, title, body, buttons, image: OLD_PHOTO });
 const cta = (title: string): Section => ({ id: id(), type: "cta", title, body: "Strategy • Growth • Legacy", buttons: [{ label: "Get Started", href: "/contact", style: "dark" }] });
 const text = (tone: Section["tone"], eyebrow: string, title: string, body: string): Section => ({ id: id(), type: "text", tone, eyebrow, title, body });
@@ -45,7 +44,7 @@ const page = (slug: string, title: string, description: string, position: number
 
 export const MKB_PAGES: SitePage[] = [
   page("", "Home", "Bookkeeping, business services, tax preparation and payroll for entrepreneurs in Louisiana, Texas and virtually.", 0, [
-    hero("MKB Financial Group", "Build your business with a stronger financial foundation.", "Bookkeeping. Business services. Tax preparation. Payroll. Financial guidance. MKB helps entrepreneurs start right, stay organized, plan strategically, and grow intentionally.", [talk, book]),
+    hero("MKB Financial Group", "Build your business with a stronger financial foundation.", "Bookkeeping. Business services. Tax preparation. Payroll. Financial guidance. MKB helps entrepreneurs start right, stay organized, plan strategically, and grow intentionally.", [talk]),
     text("light", "The MKB perspective", "Starting a business is easy. Building one is different.", "Your business has financial records to maintain, taxes to plan for, payroll responsibilities to manage, numbers to track, and decisions to make. MKB helps connect those pieces."),
     cards("warm", "Your business journey", [
       { label: "01 / Thinking", title: "Thinking", body: "You have an idea and are preparing to launch." },
