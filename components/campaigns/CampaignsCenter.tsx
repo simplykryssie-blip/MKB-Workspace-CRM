@@ -54,7 +54,7 @@ export function CampaignsCenter({ brand }: { brand: Brand }) {
       {tab === "campaigns" ? <CampaignList brand={brand} list={list} loading={!data} />
         : tab === "audiences" ? <Audiences brand={brand} />
         : tab === "templates" ? <Templates brand={brand} />
-        : <SettingsTab brand={brand} />}
+        : <><SettingsTab brand={brand} /><div className="mt-5"><TextSettings brand={brand} /></div></>}
       <NewCampaign brand={brand} open={creating} onClose={() => setCreating(false)} list={list} />
     </>
   );
@@ -70,10 +70,10 @@ function CampaignList({ brand, list, loading }: { brand: Brand; list: Campaign[]
           <li key={c.id}>
             <Link href={campaignHref(brand, c.id)} className="flex flex-wrap items-center gap-3 px-5 py-3.5 hover:bg-surface-hover sm:px-6">
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[14.5px] font-semibold text-ink">{c.name}</span>
-                <span className="block truncate text-[12.5px] text-muted">{c.content.subject || "No subject yet"} · {c.status === "scheduled" && c.scheduledAt ? `scheduled ${fmtDateTime(c.scheduledAt)}` : c.status === "sent" && c.finishedAt ? `sent ${relTime(c.finishedAt)}` : `edited ${relTime(c.updatedAt)}`}</span>
+                <span className="block truncate text-[14.5px] font-semibold text-ink">{c.name} <span className="ml-1 rounded-md bg-surface-2 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted">{c.channel === "sms" ? "Text" : "Email"}</span></span>
+                <span className="block truncate text-[12.5px] text-muted">{c.channel === "sms" ? c.content.body.slice(0, 60) || "No message yet" : c.content.subject || "No subject yet"} · {c.status === "scheduled" && c.scheduledAt ? `scheduled ${fmtDateTime(c.scheduledAt)}` : c.status === "sent" && c.finishedAt ? `sent ${relTime(c.finishedAt)}` : `edited ${relTime(c.updatedAt)}`}</span>
               </span>
-              {c.stats && c.stats.total > 0 && <span className="text-[12.5px] text-muted">{c.stats.sent}/{c.stats.total} sent · {pct(c.stats.opened, c.stats.sent)} opened · {pct(c.stats.clicked, c.stats.sent)} clicked</span>}
+              {c.stats && c.stats.total > 0 && <span className="text-[12.5px] text-muted">{c.stats.sent}/{c.stats.total} sent · {c.channel === "sms" ? `${c.stats.delivered ?? 0} delivered · ${c.stats.replied ?? 0} replied` : `${pct(c.stats.opened, c.stats.sent)} opened · ${pct(c.stats.clicked, c.stats.sent)} clicked`}</span>}
               <Badge tone={TONE[c.status]}>{STATUS_LABEL[c.status]}</Badge>
             </Link>
           </li>
@@ -88,6 +88,7 @@ function NewCampaign({ brand, open, onClose, list }: { brand: Brand; open: boole
   const toast = useToast();
   const [name, setName] = useState("");
   const [start, setStart] = useState("blank");
+  const [channel, setChannel] = useState<"email" | "sms">("email");
   const [templates, setTemplates] = useState<{ id: string; name: string }[]>([]);
   const [busy, setBusy] = useState(false);
   useEffect(() => { if (open) call<{ templates: { id: string; name: string }[] }>("GET", `/api/campaigns/templates?brand=${brand}`).then((r) => setTemplates(r.templates)).catch(() => {}); }, [open, brand]);
@@ -95,16 +96,17 @@ function NewCampaign({ brand, open, onClose, list }: { brand: Brand; open: boole
     setBusy(true);
     try {
       const [kind, id] = start.split(":");
-      const r = await call<{ campaign: Campaign }>("POST", "/api/campaigns", { brand, name, templateId: kind === "tpl" ? id : undefined, copyOf: kind === "copy" ? id : undefined });
+      const r = await call<{ campaign: Campaign }>("POST", "/api/campaigns", { brand, name, channel, templateId: kind === "tpl" ? id : undefined, copyOf: kind === "copy" ? id : undefined });
       router.push(campaignHref(brand, r.campaign.id));
     } catch (e) { toast(e instanceof Error ? e.message : "Couldn't create", "info"); setBusy(false); }
   };
   return (
-    <Modal open={open} onClose={onClose} title="New campaign" description={`An email from ${BRANDS[brand].label}. It stays a draft until you send or schedule it.`}
+    <Modal open={open} onClose={onClose} title="New campaign" description={`From ${BRANDS[brand].label}. It stays a draft until you send or schedule it.`}
       footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={busy || !name.trim()} onClick={create}>{busy ? "Creating…" : "Create draft"}</Button></>}>
       <div className="space-y-3">
         <TextField label="Campaign name (only you see this)" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. January — tax season is open" autoFocus />
-        <SelectField label="Start from" value={start} onChange={(e) => setStart(e.target.value)} options={[["blank", "A blank email"], ...templates.map((t) => [`tpl:${t.id}`, `Template: ${t.name}`] as [string, string]), ...list.slice(0, 15).map((c) => [`copy:${c.id}`, `Copy of: ${c.name}`] as [string, string])]} />
+        <div role="radiogroup" aria-label="Send as" className="grid grid-cols-2 gap-2">{([["email", "Email", "Branded email with a button"], ["sms", "Text message", "Only to people who opted in to texts"]] as const).map(([k, l, d]) => <button key={k} type="button" role="radio" aria-checked={channel === k} onClick={() => { setChannel(k); setStart("blank"); }} className={`rounded-xl border p-3 text-left ${channel === k ? "border-accent bg-accent-soft" : "border-line hover:bg-surface-hover"}`}><span className="block text-[14px] font-semibold text-ink">{l}</span><span className="block text-[12px] text-muted">{d}</span></button>)}</div>
+        <SelectField label="Start from" value={start} onChange={(e) => setStart(e.target.value)} options={[["blank", channel === "sms" ? "A blank text" : "A blank email"], ...(channel === "email" ? templates.map((t) => [`tpl:${t.id}`, `Template: ${t.name}`] as [string, string]) : []), ...list.filter((c) => c.channel === channel).slice(0, 15).map((c) => [`copy:${c.id}`, `Copy of: ${c.name}`] as [string, string])]} />
       </div>
     </Modal>
   );
@@ -206,3 +208,45 @@ function SettingsTab({ brand }: { brand: Brand }) {
   );
 }
 
+
+/** Twilio account (shared) and the text number for each brand. */
+function TextSettings({ brand }: { brand: Brand }) {
+  const toast = useToast();
+  const team = useTeam();
+  type S = { accountSid: string; tokenSaved: { last4: string; at: string } | null; numbers: { mkb: string; monarch: string }; webhooks: { inbound: string; status: string }; simulated: boolean };
+  const [s, setS] = useState<S | null>(null);
+  const [token, setToken] = useState("");
+  const [testTo, setTestTo] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { call<S>("GET", "/api/sms/settings").then(setS).catch(() => {}); }, []);
+  if (!s) return null;
+  const can = team.can("campaigns", "settings");
+  const save = async () => {
+    setBusy(true);
+    try { const r = await call<S>("PUT", "/api/sms/settings", { accountSid: s.accountSid, authToken: token || undefined, mkbNumber: s.numbers.mkb, monarchNumber: s.numbers.monarch }); setS(r); setToken(""); toast("Text messaging settings saved"); }
+    catch (e) { toast(e instanceof Error ? e.message : "Couldn't save", "info"); }
+    setBusy(false);
+  };
+  const test = async () => {
+    try { await call("POST", "/api/sms/test", { brand, to: testTo }); toast(s.simulated && !s.tokenSaved ? "Test recorded (test mode — not really sent)" : "Test text sent"); }
+    catch (e) { toast(e instanceof Error ? e.message : "Couldn't send", "info"); }
+  };
+  const copy = (t: string) => navigator.clipboard.writeText(t).then(() => toast("Copied"), () => toast("Couldn't copy", "info"));
+  return (
+    <Card>
+      <CardHeader title="Text messaging (Twilio)" subtitle="One Twilio account for both brands, with a separate number for MKB and for Monarch. Your Auth Token is stored encrypted and never shown again." />
+      <fieldset disabled={!can} className="grid gap-4 border-t border-line px-5 py-5 sm:grid-cols-2 sm:px-6">
+        <TextField label="Account SID" value={s.accountSid} onChange={(e) => setS({ ...s, accountSid: e.target.value.trim() })} placeholder="AC…" />
+        <TextField label="Auth Token" type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} placeholder={s.tokenSaved ? `Saved (ends in ${s.tokenSaved.last4}) — type to replace` : "Paste from your Twilio console"} />
+        <TextField label="MKB Financial Group text number" type="tel" value={s.numbers.mkb} onChange={(e) => setS({ ...s, numbers: { ...s.numbers, mkb: e.target.value } })} placeholder="(318) 555-0100" />
+        <TextField label="Monarch Tax Suite text number" type="tel" value={s.numbers.monarch} onChange={(e) => setS({ ...s, numbers: { ...s.numbers, monarch: e.target.value } })} placeholder="(318) 555-0200" />
+        <div className="space-y-2 rounded-xl bg-surface-2 p-3.5 text-[13px] text-ink-2 sm:col-span-2">
+          <p className="font-semibold text-ink">In Twilio, for each of the two numbers (Phone Numbers → Manage → your number → Messaging):</p>
+          <p>“A message comes in” → Webhook, HTTP POST: <code className="break-all rounded bg-surface px-1">{s.webhooks.inbound}</code> <button type="button" className="font-semibold text-accent" onClick={() => copy(s.webhooks.inbound)}>Copy</button></p>
+          <p className="text-muted">Delivery updates come back automatically to {s.webhooks.status}.</p>
+        </div>
+        {can && <div className="flex flex-wrap items-end gap-2 sm:col-span-2"><Button variant="primary" disabled={busy} onClick={() => void save()}>{busy ? "Saving…" : "Save text settings"}</Button><span className="mx-2 h-6 w-px bg-line" /><div className="w-48"><TextField label="Send a test to" type="tel" value={testTo} onChange={(e) => setTestTo(e.target.value)} placeholder="Your mobile" /></div><Button onClick={() => void test()}>Send test text</Button></div>}
+      </fieldset>
+    </Card>
+  );
+}

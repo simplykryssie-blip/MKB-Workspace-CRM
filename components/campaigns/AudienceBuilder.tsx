@@ -6,7 +6,7 @@ import { call } from "@/lib/sync/remote";
 import { US_STATES } from "@/lib/validation";
 import { CLIENT_STATUSES, LEAD_STATUSES, OFFICE_STAGES, SERVICE_OPTIONS, type Brand, type Filters } from "@/lib/campaigns/config";
 
-type Preview = { count: number; skipped: { noEmail: number; unsubscribed: number; duplicate: number }; sample: { name: string; type: string }[] };
+type Preview = { count: number; skipped: { noEmail: number; unsubscribed: number; duplicate: number; noPhone?: number; notSubscribed?: number }; sample: { name: string; type: string }[] };
 const TYPE_LABEL: Record<string, string> = { lead: "Lead", client: "Client", office: "Firm", reseller: "Reseller" };
 
 /** One line describing who's included. */
@@ -45,16 +45,16 @@ function Group({ title, on, onToggle, children }: { title: string; on: boolean; 
 }
 
 /** Pick who gets a campaign, with a live count of who's included and who's skipped. */
-export function AudienceBuilder({ brand, filters: f, onChange, disabled }: { brand: Brand; filters: Filters; onChange: (f: Filters) => void; disabled?: boolean }) {
+export function AudienceBuilder({ brand, filters: f, onChange, disabled, channel = "email" }: { brand: Brand; filters: Filters; onChange: (f: Filters) => void; disabled?: boolean; channel?: "email" | "sms" }) {
   const [opts, setOpts] = useState<{ stages: { id: string; name: string }[]; tags: string[] }>({ stages: [], tags: [] });
   const [pv, setPv] = useState<Preview | null>(null);
   useEffect(() => { call<typeof opts>("GET", "/api/campaigns/audience").then(setOpts).catch(() => {}); }, []);
   const key = JSON.stringify(f);
   useEffect(() => {
     setPv(null);
-    const t = setTimeout(() => { call<Preview>("POST", "/api/campaigns/audience", { brand, filters: JSON.parse(key) }).then(setPv).catch(() => {}); }, 350);
+    const t = setTimeout(() => { call<Preview>("POST", "/api/campaigns/audience", { brand, channel, filters: JSON.parse(key) }).then(setPv).catch(() => {}); }, 350);
     return () => clearTimeout(t);
-  }, [brand, key]);
+  }, [brand, key, channel]);
   const states = US_STATES.map(([code]) => [code, code] as const);
 
   return (
@@ -88,8 +88,10 @@ export function AudienceBuilder({ brand, filters: f, onChange, disabled }: { bra
         <Users size={18} className="mt-0.5 shrink-0 text-accent" />
         {pv ? (
           <div className="text-[13px] text-ink-2">
-            <p className="text-[15px] font-semibold text-ink">{pv.count} {pv.count === 1 ? "person" : "people"} will get this email</p>
-            <p className="text-muted">Skipped: {pv.skipped.unsubscribed} unsubscribed · {pv.skipped.noEmail} without an email · {pv.skipped.duplicate} duplicates (same email counted once)</p>
+            <p className="text-[15px] font-semibold text-ink">{pv.count} {pv.count === 1 ? "person" : "people"} will get this {channel === "sms" ? "text" : "email"}</p>
+            {channel === "sms"
+              ? <p className="text-muted">Skipped: {pv.skipped.notSubscribed ?? 0} haven&rsquo;t opted in to texts · {pv.skipped.unsubscribed} replied STOP · {pv.skipped.noPhone ?? 0} without a mobile number · {pv.skipped.duplicate} duplicates</p>
+              : <p className="text-muted">Skipped: {pv.skipped.unsubscribed} unsubscribed · {pv.skipped.noEmail} without an email · {pv.skipped.duplicate} duplicates (same email counted once)</p>}
             {pv.sample.length > 0 && <p className="mt-1 truncate">e.g. {pv.sample.map((s) => `${s.name} (${TYPE_LABEL[s.type] ?? s.type})`).join(", ")}</p>}
           </div>
         ) : <p className="text-[13px] text-muted">Counting…</p>}

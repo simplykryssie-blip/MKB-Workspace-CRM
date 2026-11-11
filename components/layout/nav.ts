@@ -24,6 +24,7 @@ import {
   SlidersHorizontal,
   Wallet,
   Megaphone,
+  MessageSquareText,
   type LucideIcon,
 } from "lucide-react";
 
@@ -33,7 +34,7 @@ export type NavItem = {
   icon: LucideIcon;
   badge?: number;
   /** Live badge computed in the sidebar (e.g. follow-ups due). */
-  badgeKey?: "leadsDue";
+  badgeKey?: "leadsDue" | "textsUnread" | "monarchTextsUnread";
   /** Active only on this exact address (not its sub-pages). */
   exact?: boolean;
   /** CSS var for a small service-color dot */
@@ -50,6 +51,7 @@ export const NAV: { section?: string; items: NavItem[] }[] = [
       { label: "Forms", href: "/forms", icon: ClipboardList },
       { label: "Website", href: "/website", icon: Globe },
       { label: "Campaigns", href: "/campaigns", icon: Megaphone },
+      { label: "Text inbox", href: "/texts", icon: MessageSquareText, badgeKey: "textsUnread" },
     ],
   },
   {
@@ -97,6 +99,7 @@ export const MONARCH_NAV: { section?: string; items: NavItem[] }[] = [
       { label: "Resellers & Commissions", href: "/monarch/resellers", icon: Handshake },
       { label: "Bank reports", href: "/monarch/bank-reports", icon: Landmark },
       { label: "Campaigns", href: "/monarch/campaigns", icon: Megaphone },
+      { label: "Text inbox", href: "/monarch/texts", icon: MessageSquareText, badgeKey: "monarchTextsUnread" },
     ],
   },
   {

@@ -10,7 +10,7 @@ import { all, badRequest, now, run, type AppEnv } from "./core";
 import { randomId } from "./crypto";
 import { loadMembers, loadPolicy, requireStaff, type Actor } from "./identity";
 
-export type NotificationKind = "lead" | "form" | "intake" | "followup" | "documents" | "signoff" | "approval" | "payment";
+export type NotificationKind = "lead" | "form" | "intake" | "followup" | "documents" | "signoff" | "approval" | "payment" | "text";
 export type Notice = { id: string; kind: NotificationKind; title: string; body: string; href: string; createdAt: string; readAt?: string };
 
 type Target = { module: ModuleKey; ownersOnly?: boolean; memberIds?: string[]; exceptId?: string };

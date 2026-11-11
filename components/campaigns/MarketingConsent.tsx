@@ -50,7 +50,8 @@ export function MarketingConsentCard({ email, phone, brand = "mkb" }: { email?: 
   };
   return (
     <Card>
-      <CardHeader icon={Megaphone} title="Marketing" subtitle="Campaign emails and texts. Service emails (intake links, receipts) aren't affected." />
+      <CardHeader icon={Megaphone} title="Marketing" subtitle="Campaign emails and texts. Service emails (intake links, receipts) aren't affected."
+        action={phone && phone.replace(/\D/g, "").length >= 10 && team.can(brand === "monarch" ? "monarch" : "communication", "edit") ? <Button size="sm" href={`${brand === "monarch" ? "/monarch/texts" : "/texts"}?phone=${phone.replace(/\D/g, "").slice(-10)}`}>Text them</Button> : undefined} />
       {!c ? <p className="border-t border-line px-6 py-3 text-[13px] text-muted">Loading…</p> : <ul className="divide-y divide-line border-t border-line">{row("email", "Marketing emails", c.email, email)}{row("sms", "Marketing texts", c.sms, phone)}</ul>}
       <Modal open={!!rec} onClose={() => setRec(null)} title={rec?.status === "subscribed" ? "Record their consent" : "Unsubscribe them"}
         description={rec?.status === "subscribed" ? "Only when they agreed to hear from you — say how and when. Texts need clear permission to send marketing texts." : "They won't get campaign emails or texts on this channel."}

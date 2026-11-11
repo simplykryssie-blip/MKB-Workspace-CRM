@@ -33,6 +33,7 @@ export function moduleForPath(path: string): ModuleKey | null {
     ["/monarch/campaigns", "campaigns"],
     ["/monarch", "monarch"],
     ["/campaigns", "campaigns"],
+    ["/texts", "communication"],
     ["/tasks", "dashboard"],
     ["/team", "team"],
     ["/settings", "settings"],

@@ -34,11 +34,11 @@ export type CampaignStatus = "draft" | "scheduled" | "sending" | "sent" | "cance
 export const STATUS_LABEL: Record<CampaignStatus, string> = { draft: "Draft", scheduled: "Scheduled", sending: "Sending", sent: "Sent", cancelled: "Cancelled" };
 
 export type Campaign = {
-  id: string; brand: Brand; channel: "email"; name: string; content: Content; filters: Filters; status: CampaignStatus;
+  id: string; brand: Brand; channel: "email" | "sms"; name: string; content: Content; filters: Filters; status: CampaignStatus;
   scheduledAt?: string; startedAt?: string; finishedAt?: string; createdAt: string; createdBy?: string; sentBy?: string; updatedAt: string; rev: number;
-  stats?: { total: number; queued: number; sent: number; failed: number; skipped: number; opened: number; clicked: number; unsubscribed: number };
+  stats?: { total: number; queued: number; sent: number; failed: number; skipped: number; opened: number; clicked: number; unsubscribed: number; delivered?: number; replied?: number };
 };
-export type CampaignSettings = { brand: Brand; fromName: string; fromEmail: string; replyTo: string; mailingAddress: string; dailyLimit: number; reserve: number };
+export type CampaignSettings = { brand: Brand; fromName: string; fromEmail: string; replyTo: string; mailingAddress: string; dailyLimit: number; reserve: number; smsNumber?: string };
 
 export const LEAD_STATUSES = [["open", "Open"], ["lost", "Lost"], ["converted", "Became a client"]] as const;
 export const CLIENT_STATUSES = [["active", "Active"], ["onboarding", "Onboarding"], ["inactive", "Inactive"]] as const;
@@ -95,3 +95,35 @@ ${body}${btn}
   ].join("\n");
   return { subject: f(c.subject), html, text };
 }
+
+/* ---------------------------------------------------------------- texts (SMS) */
+/** Marketing texts always say who they're from and how to opt out (added when missing). */
+export function smsText(body: string, fromName: string) {
+  let t = body.trim();
+  const short = fromName.replace(/\s+(LLC|Inc\.?)$/i, "");
+  if (!t.toLowerCase().includes(short.toLowerCase())) t = `${short}: ${t}`;
+  if (!/\bstop\b/i.test(t)) t += " Reply STOP to opt out.";
+  return t;
+}
+const GSM = /^[@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !"#¤%&'()*+,\-./0-9:;<=>?¡A-ZÄÖÑÜ§¿a-zäöñüà^{}\\[~\]|€]*$/;
+/** Characters and billed parts (a text over 160 plain characters, or 70 with emoji, is billed as several). */
+export function smsSegments(t: string) {
+  const plain = GSM.test(t);
+  const len = [...t].length;
+  const one = plain ? 160 : 70, many = plain ? 153 : 67;
+  return { length: len, plain, segments: len <= one ? 1 : Math.ceil(len / many) };
+}
+/** Time zone by state, for quiet hours (texts only between 8am and 9pm where the person lives). */
+const TZ: Record<string, string> = {
+  CT: "America/New_York", DE: "America/New_York", DC: "America/New_York", FL: "America/New_York", GA: "America/New_York", IN: "America/Indiana/Indianapolis", KY: "America/New_York", ME: "America/New_York", MD: "America/New_York", MA: "America/New_York", MI: "America/Detroit", NH: "America/New_York", NJ: "America/New_York", NY: "America/New_York", NC: "America/New_York", OH: "America/New_York", PA: "America/New_York", RI: "America/New_York", SC: "America/New_York", VT: "America/New_York", VA: "America/New_York", WV: "America/New_York", PR: "America/Puerto_Rico", VI: "America/St_Thomas",
+  AL: "America/Chicago", AR: "America/Chicago", IL: "America/Chicago", IA: "America/Chicago", KS: "America/Chicago", LA: "America/Chicago", MN: "America/Chicago", MS: "America/Chicago", MO: "America/Chicago", NE: "America/Chicago", ND: "America/Chicago", OK: "America/Chicago", SD: "America/Chicago", TN: "America/Chicago", TX: "America/Chicago", WI: "America/Chicago",
+  AZ: "America/Phoenix", CO: "America/Denver", ID: "America/Boise", MT: "America/Denver", NM: "America/Denver", UT: "America/Denver", WY: "America/Denver",
+  CA: "America/Los_Angeles", NV: "America/Los_Angeles", OR: "America/Los_Angeles", WA: "America/Los_Angeles", AK: "America/Anchorage", HI: "Pacific/Honolulu", GU: "Pacific/Guam", AS: "Pacific/Pago_Pago", MP: "Pacific/Saipan",
+};
+/** Is it between 8am and 9pm for someone in this state (Central time when the state isn't known)? */
+export function quietHoursOk(state: string, at = new Date()) {
+  const tz = TZ[(state || "").toUpperCase()] ?? "America/Chicago";
+  const h = Number(new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", hourCycle: "h23" }).format(at));
+  return h >= 8 && h < 21;
+}
+export const fmtPhone = (p: string) => { const d = p.replace(/\D/g, "").slice(-10); return d.length === 10 ? `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` : p; };

@@ -12,12 +12,13 @@
  *  - Only staff with Campaigns "Approve" can send or schedule (the Owner by default).
  * Server-only.
  */
-import { BRANDS, DEFAULT_FILTERS, EMPTY_CONTENT, renderCampaign, type Brand, type Campaign, type CampaignSettings, type Content, type Filters } from "@/lib/campaigns/config";
+import { BRANDS, DEFAULT_FILTERS, EMPTY_CONTENT, fillIn, quietHoursOk, renderCampaign, smsText, type Brand, type Campaign, type CampaignSettings, type Content, type Filters } from "@/lib/campaigns/config";
 import { all, badRequest, HttpError, isDev, json, notFound, now, one, run, type AppEnv } from "./core";
 import { randomId, sha256 } from "./crypto";
 import { audit, requirePermission, requireStaff, type Actor } from "./identity";
 import { linkOrigin } from "./books-intake";
 import { publicAssetOrigin } from "./email";
+import { phone10, sendText, smsNumber } from "./sms";
 
 type Contact = { type: "lead" | "client" | "office" | "reseller"; id: string; name: string; firstName: string; businessName: string; email: string; phone: string; state: string };
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -50,8 +51,8 @@ async function readToken(env: AppEnv, token: string) {
 }
 
 /* ================================================================ settings */
-type SettingsRow = { brand: Brand; from_name: string; from_email: string; reply_to: string; mailing_address: string; daily_limit: number; reserve: number };
-const toSettings = (r: SettingsRow): CampaignSettings => ({ brand: r.brand, fromName: r.from_name, fromEmail: r.from_email, replyTo: r.reply_to, mailingAddress: r.mailing_address, dailyLimit: r.daily_limit, reserve: r.reserve });
+type SettingsRow = { brand: Brand; from_name: string; from_email: string; reply_to: string; mailing_address: string; daily_limit: number; reserve: number; sms_number?: string };
+const toSettings = (r: SettingsRow): CampaignSettings => ({ brand: r.brand, fromName: r.from_name, fromEmail: r.from_email, replyTo: r.reply_to, mailingAddress: r.mailing_address, dailyLimit: r.daily_limit, reserve: r.reserve, smsNumber: r.sms_number ?? "" });
 async function settingsFor(env: AppEnv, brand: Brand) {
   const r = await one<SettingsRow>(env.DB, "SELECT * FROM campaign_settings WHERE brand = ?", brand);
   if (!r) throw new HttpError(500, "Campaign settings are missing.");
@@ -183,9 +184,26 @@ async function contacts(env: AppEnv, brand: Brand, f: Filters): Promise<Contact[
   return out;
 }
 
-/** Who will get it, and who's skipped (and why). */
-async function resolve(env: AppEnv, brand: Brand, f: Filters) {
+/** Who will get it, and who's skipped (and why). Texts only go to people who opted in to texts. */
+async function resolve(env: AppEnv, brand: Brand, f: Filters, channel: "email" | "sms" = "email") {
   const list = await contacts(env, brand, f);
+  if (channel === "sms") {
+    const rows = await all<{ address: string; status: string }>(env.DB, "SELECT address, status FROM marketing_consent WHERE brand = ? AND channel = 'sms'", brand);
+    const sub = new Set(rows.filter((r) => r.status === "subscribed").map((r) => r.address)), out = new Set(rows.filter((r) => r.status === "unsubscribed").map((r) => r.address));
+    const seenP = new Set<string>();
+    const sendP: (Contact & { email: string })[] = [];
+    const sk = { noPhone: 0, notSubscribed: 0, unsubscribed: 0, duplicate: 0, noEmail: 0 };
+    for (const c of [...list.filter((x) => x.type === "client"), ...list.filter((x) => x.type !== "client")]) {
+      const ph = phone10(c.phone);
+      if (ph.length !== 10) { sk.noPhone++; continue; }
+      if (out.has(ph)) { sk.unsubscribed++; continue; }
+      if (!sub.has(ph)) { sk.notSubscribed++; continue; }
+      if (seenP.has(ph)) { sk.duplicate++; continue; }
+      seenP.add(ph);
+      sendP.push({ ...c, email: ph });
+    }
+    return { send: sendP, skipped: sk };
+  }
   const unsub = new Set((await all<{ address: string }>(env.DB, "SELECT address FROM marketing_consent WHERE brand = ? AND channel = 'email' AND status = 'unsubscribed'", brand)).map((r) => r.address));
   const seen = new Set<string>();
   const send: (Contact & { email: string })[] = [];
@@ -201,10 +219,10 @@ async function resolve(env: AppEnv, brand: Brand, f: Filters) {
   }
   return { send, skipped };
 }
-export async function previewAudience(env: AppEnv, a: Actor, b: { brand?: unknown; filters?: unknown }) {
+export async function previewAudience(env: AppEnv, a: Actor, b: { brand?: unknown; filters?: unknown; channel?: unknown }) {
   requirePermission(a, "campaigns", "view");
   if (!isBrand(b.brand)) throw badRequest("Unknown brand.");
-  const r = await resolve(env, b.brand, cleanFilters(b.brand, b.filters));
+  const r = await resolve(env, b.brand, cleanFilters(b.brand, b.filters), b.channel === "sms" ? "sms" : "email");
   return { count: r.send.length, skipped: r.skipped, sample: r.send.slice(0, 8).map((c) => ({ name: c.name || c.businessName, type: c.type })) };
 }
 /** Options for the audience builder: stages, tags, states in use. */
@@ -279,12 +297,13 @@ export async function deleteTemplate(env: AppEnv, a: Actor, id: string) {
 }
 
 /* ================================================================ campaigns */
-type Row = { id: string; brand: Brand; channel: "email"; name: string; content: string; filters: string; status: Campaign["status"]; scheduled_at: string | null; started_at: string | null; finished_at: string | null; created_at: string; created_by: string | null; sent_by: string | null; updated_at: string; rev: number };
+type Row = { id: string; brand: Brand; channel: "email" | "sms"; name: string; content: string; filters: string; status: Campaign["status"]; scheduled_at: string | null; started_at: string | null; finished_at: string | null; created_at: string; created_by: string | null; sent_by: string | null; updated_at: string; rev: number };
 const toCampaign = (r: Row): Campaign => ({ id: r.id, brand: r.brand, channel: r.channel, name: r.name, content: json<Content>(r.content, EMPTY_CONTENT), filters: json<Filters>(r.filters, DEFAULT_FILTERS[r.brand]), status: r.status, scheduledAt: r.scheduled_at ?? undefined, startedAt: r.started_at ?? undefined, finishedAt: r.finished_at ?? undefined, createdAt: r.created_at, createdBy: r.created_by ?? undefined, sentBy: r.sent_by ?? undefined, updatedAt: r.updated_at, rev: r.rev });
 async function stats(env: AppEnv, id: string) {
   const r = await one<Record<string, number>>(env.DB, "SELECT count(*) AS total, sum(status = 'queued') AS queued, sum(status = 'sent') AS sent, sum(status = 'failed') AS failed, sum(status = 'skipped') AS skipped, sum(opened_at IS NOT NULL) AS opened, sum(clicked_at IS NOT NULL) AS clicked, sum(unsubscribed_at IS NOT NULL) AS unsubscribed FROM campaign_recipients WHERE campaign_id = ?", id);
   const n = (k: string) => Number(r?.[k] ?? 0);
-  return { total: n("total"), queued: n("queued"), sent: n("sent"), failed: n("failed"), skipped: n("skipped"), opened: n("opened"), clicked: n("clicked"), unsubscribed: n("unsubscribed") };
+  const sms = await one<{ delivered: number; replied: number }>(env.DB, "SELECT (SELECT count(*) FROM sms_messages WHERE campaign_id = ? AND status = 'delivered') AS delivered, (SELECT count(DISTINCT i.phone) FROM sms_messages i JOIN campaign_recipients cr ON cr.campaign_id = ? AND cr.address = i.phone AND cr.sent_at IS NOT NULL WHERE i.direction = 'in' AND i.created_at >= cr.sent_at) AS replied", id, id);
+  return { delivered: Number(sms?.delivered ?? 0), replied: Number(sms?.replied ?? 0), total: n("total"), queued: n("queued"), sent: n("sent"), failed: n("failed"), skipped: n("skipped"), opened: n("opened"), clicked: n("clicked"), unsubscribed: n("unsubscribed") };
 }
 async function campaignRow(env: AppEnv, id: string) {
   const r = await one<Row>(env.DB, "SELECT * FROM campaigns WHERE id = ?", id);
@@ -303,23 +322,24 @@ export async function getCampaign(env: AppEnv, a: Actor, id: string) {
   const recipients = r.status === "draft" ? [] : await all<{ id: string; address: string; name: string; contact_type: string; contact_id: string; status: string; error: string | null; sent_at: string | null; opened_at: string | null; clicked_at: string | null; unsubscribed_at: string | null }>(env.DB, "SELECT id, address, name, contact_type, contact_id, status, error, sent_at, opened_at, clicked_at, unsubscribed_at FROM campaign_recipients WHERE campaign_id = ? ORDER BY name LIMIT 2000", id);
   return { campaign: { ...toCampaign(r), stats: await stats(env, id) }, recipients, settings: await settingsFor(env, r.brand), usage: await usageToday(env) };
 }
-export async function createCampaign(env: AppEnv, a: Actor, b: { brand?: unknown; name?: unknown; templateId?: unknown; copyOf?: unknown }) {
+export async function createCampaign(env: AppEnv, a: Actor, b: { brand?: unknown; name?: unknown; templateId?: unknown; copyOf?: unknown; channel?: unknown }) {
   requirePermission(a, "campaigns", "create");
   requireStaff(a);
   if (!isBrand(b.brand)) throw badRequest("Unknown brand.");
   let content: Content = EMPTY_CONTENT, filters: Filters = DEFAULT_FILTERS[b.brand];
+  let channel: "email" | "sms" = b.channel === "sms" ? "sms" : "email";
   if (typeof b.templateId === "string" && b.templateId) {
     const t = await one<{ content: string }>(env.DB, "SELECT content FROM campaign_templates WHERE id = ? AND brand = ?", b.templateId, b.brand);
     if (t) content = json<Content>(t.content, EMPTY_CONTENT);
   }
   if (typeof b.copyOf === "string" && b.copyOf) {
     const c = await one<Row>(env.DB, "SELECT * FROM campaigns WHERE id = ? AND brand = ?", b.copyOf, b.brand);
-    if (c) { content = json<Content>(c.content, EMPTY_CONTENT); filters = json<Filters>(c.filters, filters); }
+    if (c) { content = json<Content>(c.content, EMPTY_CONTENT); filters = json<Filters>(c.filters, filters); channel = c.channel; }
   }
   const id = randomId("cmp");
   const t = now();
   const name = (typeof b.name === "string" && b.name.trim().slice(0, 100)) || "Untitled campaign";
-  await run(env.DB, "INSERT INTO campaigns (id, brand, channel, name, content, filters, status, created_at, created_by, updated_at) VALUES (?, ?, 'email', ?, ?, ?, 'draft', ?, ?, ?)", id, b.brand, name, JSON.stringify(content), JSON.stringify(filters), t, a.member.id, t);
+  await run(env.DB, "INSERT INTO campaigns (id, brand, channel, name, content, filters, status, created_at, created_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?)", id, b.brand, channel, name, JSON.stringify(content), JSON.stringify(filters), t, a.member.id, t);
   return getCampaign(env, a, id);
 }
 export async function saveCampaign(env: AppEnv, a: Actor, id: string, b: { name?: unknown; content?: unknown; filters?: unknown; rev?: unknown }) {
@@ -342,6 +362,14 @@ export async function deleteCampaign(env: AppEnv, a: Actor, id: string) {
 }
 
 /* ---- rendering & sending */
+async function readyFor(env: AppEnv, r: { brand: Brand; channel: "email" | "sms" }, c: Content, s: CampaignSettings) {
+  if (r.channel === "sms") {
+    if (!c.body.trim()) return "Write the text message.";
+    if (!(await smsNumber(env, r.brand)) && !isDev(env)) return "Add this brand's text number in Campaigns → Settings → Text messaging.";
+    return null;
+  }
+  return ready(c, s);
+}
 function ready(c: Content, s: CampaignSettings) {
   if (!c.subject.trim()) return "Add a subject line.";
   if (!c.body.trim()) return "Write the message.";
@@ -399,8 +427,15 @@ export async function testCampaign(env: AppEnv, a: Actor, id: string, b: { to?: 
   const r = await campaignRow(env, id);
   const s = await settingsFor(env, r.brand);
   const content = json<Content>(r.content, EMPTY_CONTENT);
-  const problem = ready(content, s);
+  const problem = await readyFor(env, r, content, s);
   if (problem) throw badRequest(problem);
+  if (r.channel === "sms") {
+    const ph = typeof b.to === "string" ? phone10(b.to) : "";
+    if (ph.length !== 10) throw badRequest("Enter your 10-digit mobile number for the test.");
+    const out = await sendText(env, { brand: r.brand, to: ph, body: `[Test] ${smsText(fillIn(content.body, { "first name": firstOf(a.member.name), name: a.member.name, "business name": "Sample Business LLC" }), s.fromName)}`, memberId: a.member.id });
+    if (!out.ok) throw new HttpError(502, `The test didn't send: ${out.error}`);
+    return { sentTo: ph };
+  }
   const to = (typeof b.to === "string" && b.to.trim() ? b.to : a.member.email).trim().toLowerCase();
   if (!EMAIL_RE.test(to)) throw badRequest("Enter the address for the test.");
   const m = await renderFor(env, r.brand, content, s, { email: to, name: a.member.name, firstName: firstOf(a.member.name), businessName: "Sample Business LLC" });
@@ -416,7 +451,7 @@ export async function sendCampaign(env: AppEnv, a: Actor, id: string, b: { at?: 
   const r = await campaignRow(env, id);
   if (r.status !== "draft") throw badRequest("This campaign was already sent or scheduled.");
   const s = await settingsFor(env, r.brand);
-  const problem = ready(json<Content>(r.content, EMPTY_CONTENT), s);
+  const problem = await readyFor(env, r, json<Content>(r.content, EMPTY_CONTENT), s);
   if (problem) throw badRequest(problem);
   const at = typeof b.at === "string" && b.at ? new Date(b.at) : null;
   if (at && (isNaN(at.getTime()) || at.getTime() < Date.now() - 60_000)) throw badRequest("Choose a time in the future.");
@@ -451,8 +486,8 @@ export async function processCampaigns(env: AppEnv, onlyId?: string) {
   const t = now();
   const due = await all<Row>(env.DB, `SELECT * FROM campaigns WHERE status = 'scheduled' AND scheduled_at <= ?${onlyId ? " AND id = ?" : ""}`, ...(onlyId ? [t, onlyId] : [t]));
   for (const r of due) {
-    const { send, skipped } = await resolve(env, r.brand, json<Filters>(r.filters, {}));
-    const stmts = send.map((c) => env.DB.prepare("INSERT OR IGNORE INTO campaign_recipients (id, campaign_id, address, name, contact_type, contact_id, vars, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'queued')").bind(randomId("r").replace(/[^A-Za-z0-9_]/g, "x"), r.id, c.email, c.name || c.businessName, c.type, c.id, JSON.stringify({ firstName: c.firstName, businessName: c.businessName })));
+    const { send, skipped } = await resolve(env, r.brand, json<Filters>(r.filters, {}), r.channel);
+    const stmts = send.map((c) => env.DB.prepare("INSERT OR IGNORE INTO campaign_recipients (id, campaign_id, address, name, contact_type, contact_id, vars, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'queued')").bind(randomId("r").replace(/[^A-Za-z0-9_]/g, "x"), r.id, c.email, c.name || c.businessName, c.type, c.id, JSON.stringify({ firstName: c.firstName, businessName: c.businessName, state: c.state })));
     for (let i = 0; i < stmts.length; i += 50) await env.DB.batch(stmts.slice(i, i + 50));
     await run(env.DB, "UPDATE campaigns SET status = 'sending', started_at = ?, updated_at = ?, rev = rev + 1 WHERE id = ?", t, t, r.id);
     console.log("campaign started", r.id, send.length, JSON.stringify(skipped));
@@ -462,7 +497,9 @@ export async function processCampaigns(env: AppEnv, onlyId?: string) {
   for (const r of sending) {
     const s = await settingsFor(env, r.brand);
     const content = json<Content>(r.content, EMPTY_CONTENT);
-    if (room > 0) {
+    if (r.channel === "sms") {
+      await sendTexts(env, r, content, s);
+    } else if (room > 0) {
       const batch = await all<{ id: string; address: string; name: string; contact_type: string; contact_id: string; vars: string }>(env.DB, "SELECT id, address, name, contact_type, contact_id, vars FROM campaign_recipients WHERE campaign_id = ? AND status = 'queued' LIMIT ?", r.id, Math.min(room, 200));
       const unsub = new Set((await all<{ address: string }>(env.DB, "SELECT address FROM marketing_consent WHERE brand = ? AND channel = 'email' AND status = 'unsubscribed'", r.brand)).map((x) => x.address));
       for (const p of batch) {
@@ -479,6 +516,23 @@ export async function processCampaigns(env: AppEnv, onlyId?: string) {
     }
     const left = (await one<{ n: number }>(env.DB, "SELECT count(*) AS n FROM campaign_recipients WHERE campaign_id = ? AND status = 'queued'", r.id))?.n ?? 0;
     if (!left) await run(env.DB, "UPDATE campaigns SET status = 'sent', finished_at = ?, updated_at = ?, rev = rev + 1 WHERE id = ?", now(), now(), r.id);
+  }
+}
+/** Text campaign: only people still opted in, only between 8am and 9pm where they live (the rest wait for the next run). */
+async function sendTexts(env: AppEnv, r: Row, content: Content, s: CampaignSettings) {
+  const batch = await all<{ id: string; address: string; name: string; contact_type: string; contact_id: string; vars: string }>(env.DB, "SELECT id, address, name, contact_type, contact_id, vars FROM campaign_recipients WHERE campaign_id = ? AND status = 'queued' LIMIT 300", r.id);
+  const subscribed = new Set((await all<{ address: string }>(env.DB, "SELECT address FROM marketing_consent WHERE brand = ? AND channel = 'sms' AND status = 'subscribed'", r.brand)).map((x) => x.address));
+  let sent = 0;
+  for (const p of batch) {
+    if (!subscribed.has(p.address)) { await run(env.DB, "UPDATE campaign_recipients SET status = 'skipped', error = 'No longer opted in to texts' WHERE id = ?", p.id); continue; }
+    const v = json<{ firstName?: string; businessName?: string; state?: string }>(p.vars, {});
+    if (!quietHoursOk(v.state ?? "")) continue;
+    const body = smsText(fillIn(content.body, { "first name": v.firstName || "there", name: p.name || "there", "business name": v.businessName || p.name || "" }), s.fromName);
+    const out = await sendText(env, { brand: r.brand, to: p.address, body, contact: { type: p.contact_type, id: p.contact_id }, campaignId: r.id, recipientId: p.id });
+    const at = now();
+    await run(env.DB, "UPDATE campaign_recipients SET status = ?, error = ?, sent_at = ? WHERE id = ?", out.ok ? "sent" : "failed", out.error, out.ok ? at : null, p.id);
+    if (out.ok) await timeline(env, p.contact_type, p.contact_id, `Marketing text sent: “${r.name}”`, at);
+    if (++sent >= 150) break;
   }
 }
 async function timeline(env: AppEnv, type: string, id: string, text: string, at: string) {

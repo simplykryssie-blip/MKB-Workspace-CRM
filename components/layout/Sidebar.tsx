@@ -118,7 +118,9 @@ export function Sidebar({ collapsed, onToggleCollapsed, mobileOpen, onCloseMobil
 function NavRow({ item, collapsed, onNavigate }: { item: NavItem; collapsed: boolean; onNavigate: () => void }) {
   const pathname = usePathname();
   const { leads } = useLeads();
-  const liveBadge = item.badgeKey === "leadsDue" ? leads.filter((l) => l.status === "open" && ["overdue", "today"].includes(followUpBucket(l))).length : undefined;
+  const texts = useUnreadTexts(item.badgeKey === "textsUnread" || item.badgeKey === "monarchTextsUnread");
+  const liveBadge = item.badgeKey === "leadsDue" ? leads.filter((l) => l.status === "open" && ["overdue", "today"].includes(followUpBucket(l))).length
+    : item.badgeKey === "textsUnread" ? texts?.mkb || undefined : item.badgeKey === "monarchTextsUnread" ? texts?.monarch || undefined : undefined;
   const badge = liveBadge ?? item.badge;
   const active = pathname === item.href || (!item.exact && item.href !== "/dashboard" && pathname.startsWith(item.href + "/"));
   const hasChildren = !!item.children?.length;
@@ -249,4 +251,17 @@ function WorkspaceSwitch({ monarch, collapsed, onNavigate }: { monarch: boolean;
       )}
     </div>
   );
+}
+
+/** Unread incoming texts per brand (checked every minute) — for the Text inbox menu item. */
+function useUnreadTexts(on: boolean) {
+  const [n, setN] = useState<{ mkb: number; monarch: number } | null>(null);
+  useEffect(() => {
+    if (!on || process.env.NEXT_PUBLIC_BACKEND !== "1") return;
+    const get = () => fetch("/api/texts/unread", { credentials: "same-origin" }).then((r) => (r.ok ? (r.json() as Promise<{ mkb: number; monarch: number }>) : null)).then((d) => d && setN(d)).catch(() => {});
+    get();
+    const t = setInterval(get, 60_000);
+    return () => clearInterval(t);
+  }, [on]);
+  return n;
 }
