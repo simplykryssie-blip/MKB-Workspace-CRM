@@ -12,11 +12,11 @@ import { NextResponse, type NextRequest } from "next/server";
  */
 const ON = process.env.NEXT_PUBLIC_BACKEND === "1";
 const OLD_PATHS: Record<string, string> = { "/about-mkb": "/about", "/about-us": "/about", "/get-started": "/contact", "/mkb-financial-group": "/" };
-const STAFF_FREE = /^\/(api|login|portal(\/|$)|f\/|i\/|w\/|site(\/|$)|msite(\/|$)|_next|brand|favicon|icon|apple-icon)/;
+const STAFF_FREE = /^\/(api|login|portal(\/|$)|f\/|i\/|u\/|w\/|site(\/|$)|msite(\/|$)|_next|brand|favicon|icon|apple-icon)/;
 
 // 3. The client portal's own address (PORTAL_HOSTS, e.g. "portal.mkbfinancialgroup.com") only serves
 //    the portal, client sign-in and the public links — never staff screens or staff APIs.
-const PORTAL_OK = /^\/(portal(\/|$)|api\/portal\/|api\/public\/|api\/auth\/(logout|session|password\/forgot|password\/reset|invite\/accept)$|i\/|_next|brand|favicon|icon|apple-icon)/;
+const PORTAL_OK = /^\/(portal(\/|$)|u\/|api\/portal\/|api\/public\/|api\/auth\/(logout|session|password\/forgot|password\/reset|invite\/accept)$|i\/|_next|brand|favicon|icon|apple-icon)/;
 
 export function middleware(req: NextRequest) {
   const host = (req.headers.get("host") ?? "").toLowerCase().split(":")[0];
@@ -66,7 +66,7 @@ export function middleware(req: NextRequest) {
       url.pathname = "/brand/mkb-seal.ico";
       return NextResponse.rewrite(url);
     }
-    if (/^\/(_next|brand|favicon|icon|apple-icon|f\/|i\/|w\/|api\/public\/)/.test(path)) return NextResponse.next();
+    if (/^\/(_next|brand|favicon|icon|apple-icon|f\/|i\/|u\/|w\/|api\/public\/)/.test(path)) return NextResponse.next();
     if (path.startsWith("/api/")) return new NextResponse("Not found", { status: 404 });
     const url = req.nextUrl.clone();
     url.pathname = path.startsWith("/site/media/") ? path : `/site${path === "/" ? "" : path}`;

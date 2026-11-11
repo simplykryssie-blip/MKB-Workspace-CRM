@@ -24,6 +24,8 @@ export type FieldType =
   | "yesno"
   | "services"
   | "consent"
+  /** Optional "send me news and offers" checkbox: when ticked, the person is subscribed to marketing email and texts. */
+  | "marketing"
   | "heading"
   | "paragraph";
 
@@ -41,6 +43,7 @@ export const FIELD_TYPES: { key: FieldType; label: string; input: boolean }[] = 
   { key: "date", label: "Date", input: true },
   { key: "services", label: "MKB services picker", input: true },
   { key: "consent", label: "Consent checkbox", input: true },
+  { key: "marketing", label: "Marketing opt-in (optional)", input: true },
   { key: "heading", label: "Section heading", input: false },
   { key: "paragraph", label: "Text block", input: false },
 ];
@@ -169,6 +172,9 @@ export const baseFields = (): FormField[] => [
   { id: fid(), type: "email", label: "Email", required: true, map: "email" },
   { id: fid(), type: "phone", label: "Phone", required: true, map: "phone" },
 ];
+/** Default wording for the optional marketing opt-in. */
+export const MARKETING_OPT_IN = "Yes — send me tips, deadline reminders and offers from MKB Financial Group by email and text. Message frequency varies; message and data rates may apply. Reply STOP to opt out of texts.";
+
 export const consentField = (): FormField => ({
   id: fid(),
   type: "consent",

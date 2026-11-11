@@ -63,6 +63,7 @@ import { BACKEND } from "@/lib/sync/remote";
 import { ReturnStatusBadge } from "@/components/tax/TaxBits";
 import { BooksEnrollmentActions, BooksOnboardingStage, ClientBooksCard } from "@/components/books/ClientBooks";
 import { ClientServiceIntakesCard } from "@/components/intakes/ClientServiceIntakes";
+import { MarketingConsentCard } from "@/components/campaigns/MarketingConsent";
 
 export type Act = {
   go: (k: TabKey) => void;
@@ -206,6 +207,7 @@ export function OverviewTab({ c, act }: { c: Client; act: Act }) {
         <TaxReturnsCard c={c} />
         <ClientBooksCard c={c} />
         <ClientServiceIntakesCard c={c} />
+        <MarketingConsentCard email={c.email} phone={c.phone} />
 
         <Card>
           <CardHeader title="Recent activity" action={<Button size="sm" variant="ghost" onClick={() => act.go("activity")}>View all</Button>} />

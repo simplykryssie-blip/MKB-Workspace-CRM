@@ -84,7 +84,7 @@ function Field({ f, value, err, onChange, disabled }: { f: FormField; value: str
   if (f.type === "paragraph") return <p className="rounded-xl bg-surface-2 px-4 py-3 text-[14px] text-ink-2 ring-1 ring-line">{f.label}</p>;
   const pill = (on: boolean) => `flex items-center gap-2 rounded-xl border px-4 py-3 text-left text-[15px] ${on ? "border-accent bg-accent-soft text-accent-ink" : "border-line text-ink-2 hover:border-line-strong"}`;
   const group = f.type === "radio" || f.type === "yesno" || f.type === "checkboxes" || f.type === "services";
-  const text = <>{f.label}{f.required && f.type !== "consent" && <span className="text-danger"> *</span>}</>;
+  const text = <>{f.label}{f.required && f.type !== "consent" && f.type !== "marketing" && <span className="text-danger"> *</span>}</>;
   // Groups are named by their question (aria-labelledby); single inputs use a <label>.
   const label = group ? <p id={`${id}-l`} className="mb-1.5 block text-[15px] font-semibold text-ink">{text}</p> : <label htmlFor={id} id={`${id}-l`} className="mb-1.5 block text-[15px] font-semibold text-ink">{text}</label>;
   const help = f.help && <p className="mb-1.5 -mt-1 text-[13px] text-muted">{f.help}</p>;
@@ -94,6 +94,7 @@ function Field({ f, value, err, onChange, disabled }: { f: FormField; value: str
     return <div role="group" id={id} tabIndex={-1} aria-labelledby={`${id}-l`} className="grid gap-2 sm:grid-cols-2 focus:outline-none">{opts.map((o, i) => { const k = keys?.[i] ?? o; const on = set.includes(k); return <button type="button" key={k} disabled={disabled} aria-pressed={on} onClick={() => onChange((on ? set.filter((x) => x !== k) : [...set, k]).join("|"))} className={pill(on)}><span className={`grid h-4 w-4 shrink-0 place-items-center rounded border ${on ? "border-accent bg-accent text-white" : "border-line-strong"}`}>{on && <Check size={11} />}</span>{o}</button>; })}</div>;
   };
   switch (f.type) {
+    case "marketing":
     case "consent":
       return <div><label className={`flex items-start gap-3 rounded-xl border p-3.5 text-[13.5px] text-ink-2 ${err ? "border-danger" : "border-line"}`}><input id={id} type="checkbox" disabled={disabled} checked={value === "Yes"} onChange={(e) => onChange(e.target.checked ? "Yes" : "")} className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--accent)]" /><span>{f.label}</span></label>{error}</div>;
     case "textarea":

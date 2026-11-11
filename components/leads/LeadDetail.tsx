@@ -1,5 +1,6 @@
 "use client";
 
+import { MarketingConsentCard } from "@/components/campaigns/MarketingConsent";
 import { LeadIntakesCard, useLeadIntakes } from "./LeadIntakes";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -237,6 +238,7 @@ export function LeadDetail({ id }: { id: string }) {
       <div className="mt-5 grid grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
         <div className="space-y-5">
           <LeadIntakesCard lead={l} intakes={intakes} />
+          <MarketingConsentCard email={l.email} phone={l.phone} />
           {/* Follow-ups */}
           <Card>
             <CardHeader title="Follow-ups & reminders" subtitle={openReminders.length ? `Next: ${fmtDateTime(openReminders[0].at)}` : "Nothing scheduled"} action={open ? <Button size="sm" variant="primary" icon={BellPlus} onClick={() => setDialog("reminder")}>Add</Button> : undefined} />

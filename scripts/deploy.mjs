@@ -134,8 +134,18 @@ export default {
     }
     return worker.fetch(request, { ...env, ASSETS: assetsFor(env) }, ctx);
   },
-  // Daily job (cron trigger): automatic monthly bookkeeping invoices. Runs inside the app, proven by CRON_SECRET.
+  // Cron triggers. Every 15 minutes: campaigns (start scheduled ones, send what fits under the daily email cap),
+  // proven by a key derived from ENCRYPTION_KEY. Daily: automatic monthly bookkeeping invoices, proven by CRON_SECRET.
   async scheduled(event, env, ctx) {
+    if (event.cron === "*/15 * * * *") {
+      if (!env.ENCRYPTION_KEY) return;
+      const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("cron-campaigns:" + env.ENCRYPTION_KEY));
+      const key = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+      const origin = env.APP_ORIGIN || "https://app.internal";
+      const req = new Request(origin + "/api/cron/campaigns", { method: "POST", headers: { "x-cron-key": key, "content-type": "application/json" }, body: "{}" });
+      ctx.waitUntil(worker.fetch(req, { ...env, ASSETS: assetsFor(env) }, ctx).then(async (r) => { if (r.status !== 200) console.log("campaign job", r.status, (await r.text()).slice(0, 300)); }));
+      return;
+    }
     if (!env.CRON_SECRET) { console.log("daily job skipped: CRON_SECRET is not set"); return; }
     const origin = env.APP_ORIGIN || "https://app.internal";
     const req = new Request(origin + "/api/cron/daily", { method: "POST", headers: { "x-cron-key": env.CRON_SECRET, "content-type": "application/json" }, body: "{}" });
@@ -157,8 +167,8 @@ const deployConfig = {
   d1_databases: preview.d1_databases.map(({ migrations_dir, ...d }) => d),
   r2_buckets: [...preview.r2_buckets, { binding: "STATIC", bucket_name: STATIC_BUCKET }],
   vars: preview.vars,
-  // Once a day, 6:23 am Central (12:23 UTC): automatic monthly invoices.
-  triggers: { crons: ["23 12 * * *"] },
+  // Once a day, 6:23 am Central (12:23 UTC): automatic monthly invoices. Every 15 minutes: campaigns.
+  triggers: { crons: ["23 12 * * *", "*/15 * * * *"] },
 };
 writeFileSync(join(ROOT, `.open-next/wrangler.${ENV}.json`), JSON.stringify(deployConfig, null, 2));
 const deployArgs = ["wrangler", "deploy", "-c", `.open-next/wrangler.${ENV}.json`];

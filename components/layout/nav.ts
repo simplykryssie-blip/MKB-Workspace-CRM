@@ -23,6 +23,7 @@ import {
   Package,
   SlidersHorizontal,
   Wallet,
+  Megaphone,
   type LucideIcon,
 } from "lucide-react";
 
@@ -48,6 +49,7 @@ export const NAV: { section?: string; items: NavItem[] }[] = [
       { label: "Leads", href: "/leads", icon: UserPlus, badgeKey: "leadsDue" },
       { label: "Forms", href: "/forms", icon: ClipboardList },
       { label: "Website", href: "/website", icon: Globe },
+      { label: "Campaigns", href: "/campaigns", icon: Megaphone },
     ],
   },
   {
@@ -94,6 +96,7 @@ export const MONARCH_NAV: { section?: string; items: NavItem[] }[] = [
       { label: "Sales & Payments", href: "/monarch/sales", icon: Wallet },
       { label: "Resellers & Commissions", href: "/monarch/resellers", icon: Handshake },
       { label: "Bank reports", href: "/monarch/bank-reports", icon: Landmark },
+      { label: "Campaigns", href: "/monarch/campaigns", icon: Megaphone },
     ],
   },
   {

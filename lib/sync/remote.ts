@@ -12,8 +12,8 @@ export class RemoteError extends Error {
   }
 }
 
-export async function call<T = unknown>(method: "GET" | "POST" | "PUT", path: string, body?: unknown): Promise<T> {
-  const r = await fetch(path, { method, credentials: "same-origin", headers: { "content-type": "application/json" }, body: method === "GET" ? undefined : JSON.stringify(body ?? {}) });
+export async function call<T = unknown>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown): Promise<T> {
+  const r = await fetch(path, { method, credentials: "same-origin", headers: { "content-type": "application/json" }, body: method === "GET" || method === "DELETE" ? undefined : JSON.stringify(body ?? {}) });
   const data = (await r.json().catch(() => ({}))) as T & { error?: string; code?: string };
   if (r.status === 401) {
     // Signed out (or session expired): back to sign-in.

@@ -11,6 +11,7 @@ import { randomId } from "./crypto";
 import { notify } from "./notifications";
 import { audit, loadMember, loadPolicy, requirePermission, type Actor } from "./identity";
 import { sendLeadIntake } from "./prospects";
+import { recordConsent } from "./campaigns";
 
 /** Keeps a valid "send the intake automatically" setting (anything else is dropped). */
 function autoIntakeOf(v: unknown): { autoIntake?: AutoIntake } {
@@ -150,7 +151,7 @@ async function process(env: AppEnv, f: LeadForm, raw: Record<string, unknown>, c
   // Keep only answers to this form's questions.
   const data: Record<string, string> = {};
   for (const fld of f.fields) if (typeof raw[fld.id] === "string") data[fld.id] = (raw[fld.id] as string).slice(0, 2000);
-  for (const fld of visibleFields(f, data)) if (fld.type === "consent" && data[fld.id] && data[fld.id] !== "Yes") data[fld.id] = "";
+  for (const fld of visibleFields(f, data)) if ((fld.type === "consent" || fld.type === "marketing") && data[fld.id] && data[fld.id] !== "Yes") data[fld.id] = "";
   const db = env.DB;
   const subId = randomId("sub");
   const t = now();
@@ -160,6 +161,12 @@ async function process(env: AppEnv, f: LeadForm, raw: Record<string, unknown>, c
   if (Object.keys(errs).length) throw new HttpError(400, "Please check the highlighted answers.", "invalid");
 
   const L = extractLead(f, data);
+  // Ticked the optional marketing opt-in: subscribed to MKB marketing email and texts (with where and when).
+  if (channel !== "Staff test" && visibleFields(f, data).some((x) => x.type === "marketing" && data[x.id] === "Yes")) {
+    const src = `Website form: ${f.name}`;
+    if (L.email) await recordConsent(env, "mkb", "email", L.email, "subscribed", src, null);
+    if (digits(L.phone).length === 10) await recordConsent(env, "mkb", "sms", digits(L.phone), "subscribed", src, null);
+  }
   const phoneDigits = digits(L.phone);
   const norm = "replace(replace(replace(replace(replace(phone, '(', ''), ')', ''), '-', ''), ' ', ''), '+1', '')";
   const client = await one<{ id: string }>(db, `SELECT id FROM clients WHERE status NOT IN ('prospect', 'declined') AND ((? != '' AND email = ?) OR (length(?) = 10 AND ${norm} = ?)) LIMIT 1`, L.email, L.email, phoneDigits, phoneDigits);

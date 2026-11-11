@@ -12,7 +12,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useForms } from "@/lib/store/forms-store";
 import { useLeads } from "@/lib/store/leads-store";
 import { useTeam } from "@/lib/store/team-store";
-import { FIELD_TYPES, MAP_TARGETS, MOST_RECENT_YEAR, OUTCOME_META, TAX_RETURN_CHOICES, publicOrigin, fid, hasOptions, publicPath, sensitiveReason, type FieldType, type FormField, type LeadForm, type Submission } from "@/lib/forms/config";
+import { FIELD_TYPES, MAP_TARGETS, MARKETING_OPT_IN, MOST_RECENT_YEAR, OUTCOME_META, TAX_RETURN_CHOICES, publicOrigin, fid, hasOptions, publicPath, sensitiveReason, type FieldType, type FormField, type LeadForm, type Submission } from "@/lib/forms/config";
 import { SERVICES } from "@/lib/sample-data";
 import { relTime } from "@/lib/format";
 import type { ServiceKey } from "@/lib/types";
@@ -115,7 +115,7 @@ function Build({ f, can }: { f: LeadForm; can: boolean }) {
               {warn && <p className="mx-4 mb-3 rounded-lg bg-danger-soft/40 px-3 py-2 text-[12.5px] text-danger-ink">{warn}</p>}
               {open && (
                 <fieldset disabled={!can} className="grid gap-3 border-t border-line p-4 sm:grid-cols-2">
-                  <div className="sm:col-span-2"><TextArea id={`fb-label-${x.id}`} label={x.type === "paragraph" ? "Text" : x.type === "consent" ? "Consent wording" : "Question"} value={x.label} onChange={(e) => upd(x.id, { label: e.target.value })} /></div>
+                  <div className="sm:col-span-2"><TextArea id={`fb-label-${x.id}`} label={x.type === "paragraph" ? "Text" : x.type === "consent" ? "Consent wording" : x.type === "marketing" ? "Opt-in wording" : "Question"} value={x.label} onChange={(e) => upd(x.id, { label: e.target.value })} /></div>
                   {x.type !== "heading" && x.type !== "paragraph" && <TextField id={`fb-help-${x.id}`} label="Help text (optional)" value={x.help ?? ""} onChange={(e) => upd(x.id, { help: e.target.value || undefined })} />}
                   <SelectField id={`fb-type-${x.id}`} label="Answer type" value={x.type} onChange={(e) => upd(x.id, { type: e.target.value as FieldType, options: hasOptions(e.target.value as FieldType) ? x.options ?? ["Option 1"] : undefined })} options={FIELD_TYPES.map((t) => [t.key, t.label] as [string, string])} />
                   {hasOptions(x.type) && <div className="sm:col-span-2"><TextArea id={`fb-opts-${x.id}`} label="Options (one per line)" value={(x.options ?? []).join("\n")} onChange={(e) => upd(x.id, { options: e.target.value.split("\n") })} /></div>}
@@ -135,7 +135,7 @@ function Build({ f, can }: { f: LeadForm; can: boolean }) {
         {can && (
           <Card className="flex flex-wrap items-end gap-2 p-4">
             <div className="min-w-[200px] flex-1"><SelectField id="fb-add" label="Add a field" value={adding} onChange={(e) => setAdding(e.target.value as FieldType)} options={FIELD_TYPES.map((t) => [t.key, t.label] as [string, string])} /></div>
-            <Button icon={Plus} onClick={() => { const nf: FormField = { id: fid(), type: adding, label: adding === "heading" ? "Section heading" : adding === "paragraph" ? "Add some helpful text." : "New question", required: adding !== "heading" && adding !== "paragraph", map: adding === "services" ? "services" : "none", options: hasOptions(adding) ? ["Option 1", "Option 2"] : undefined }; const consentAt = f.fields.findIndex((y) => y.type === "consent"); const a = [...f.fields]; a.splice(consentAt >= 0 ? consentAt : a.length, 0, nf); setFields(a); setOpenId(nf.id); }}>Add field</Button>
+            <Button icon={Plus} onClick={() => { const nf: FormField = { id: fid(), type: adding, label: adding === "heading" ? "Section heading" : adding === "paragraph" ? "Add some helpful text." : adding === "marketing" ? MARKETING_OPT_IN : "New question", required: adding !== "heading" && adding !== "paragraph" && adding !== "marketing", map: adding === "services" ? "services" : "none", options: hasOptions(adding) ? ["Option 1", "Option 2"] : undefined }; const consentAt = f.fields.findIndex((y) => y.type === "consent"); const a = [...f.fields]; a.splice(consentAt >= 0 ? consentAt : a.length, 0, nf); setFields(a); setOpenId(nf.id); }}>Add field</Button>
             <p className="w-full text-[12px] text-muted">Public forms can&rsquo;t ask for SSNs, bank or card numbers, dates of birth or criminal-history details — those are collected later in the secure client portal.</p>
           </Card>
         )}

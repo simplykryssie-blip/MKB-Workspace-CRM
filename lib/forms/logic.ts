@@ -51,6 +51,6 @@ export function extractLead(f: Pick<LeadForm, "fields" | "services">, data: Reco
     zip: byMap("zip")[0] ?? "",
     state: stateRaw ? STATE_NAMES[stateRaw] ?? (stateRaw.length === 2 ? stateRaw : undefined) : undefined,
     services: [...new Set([...f.services, ...byMap("services").flatMap((v) => v.split("|")).map((v) => SERVICE_KEYS[v]).filter(Boolean)])] as ServiceKey[],
-    summary: vis.filter((x) => x.type !== "heading" && x.type !== "paragraph" && x.type !== "consent" && (data[x.id] ?? "").trim()).map((x) => `${x.label}: ${(data[x.id] ?? "").split("|").join(", ")}`).join("\n"),
+    summary: vis.filter((x) => x.type !== "heading" && x.type !== "paragraph" && x.type !== "consent" && x.type !== "marketing" && (data[x.id] ?? "").trim()).map((x) => `${x.label}: ${(data[x.id] ?? "").split("|").join(", ")}`).join("\n"),
   };
 }
