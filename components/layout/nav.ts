@@ -99,6 +99,7 @@ export const MONARCH_NAV: { section?: string; items: NavItem[] }[] = [
   {
     section: "Administration",
     items: [
+      { label: "Website", href: "/monarch/website", icon: Globe },
       { label: "Packages", href: "/monarch/packages", icon: Package },
       { label: "Setup", href: "/monarch/setup", icon: SlidersHorizontal },
     ],

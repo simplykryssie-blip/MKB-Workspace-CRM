@@ -1,5 +1,6 @@
 import { SiteForm } from "./SiteForm";
-import type { Section, SitePage, SiteSettings } from "@/lib/website/types";
+import { MonarchSiteForm } from "./MonarchSiteForm";
+import type { Section, SiteKey, SitePage, SiteSettings } from "@/lib/website/types";
 
 /**
  * Renders a public website page (black-and-gold MKB design). Pure: used by the
@@ -7,9 +8,9 @@ import type { Section, SitePage, SiteSettings } from "@/lib/website/types";
  * prefix ("" on the website's own domain, "/site" inside the app).
  */
 export type NavLink = { slug: string; title: string };
-type Props = { settings: SiteSettings; page: Pick<SitePage, "slug" | "title">; sections: Section[]; nav: NavLink[]; base: string; preview?: boolean; banner?: React.ReactNode };
+type Props = { settings: SiteSettings; page: Pick<SitePage, "slug" | "title">; sections: Section[]; nav: NavLink[]; base: string; preview?: boolean; banner?: React.ReactNode; site?: SiteKey };
 
-export function SiteRenderer({ settings: st, sections, nav, base, preview, banner }: Props) {
+export function SiteRenderer({ settings: st, sections, nav, base, preview, banner, site = "mkb" }: Props) {
   const L = (href: string) => (href.startsWith("/") && !href.startsWith("/f/") ? `${base}${href === "/" ? "" : href}` || "/" : href);
   const ext = (href: string) => (/^https?:/i.test(href) ? { target: "_blank", rel: "noopener noreferrer" } : {});
   const headerCta = st.ctaLabel && st.ctaHref ? { label: st.ctaLabel, href: st.ctaHref } : null;
@@ -44,7 +45,7 @@ export function SiteRenderer({ settings: st, sections, nav, base, preview, banne
       </header>
 
       <main>
-        {sections.map((s) => <SectionView key={s.id} s={s} L={L} ext={ext} base={base} preview={preview} />)}
+        {sections.map((s) => <SectionView key={s.id} s={s} L={L} ext={ext} base={base} preview={preview} site={site} />)}
         {!sections.length && (
           <section className="sec tone-light"><div className="wrap"><p className="lead">This page has no sections yet.</p></div></section>
         )}
@@ -55,7 +56,7 @@ export function SiteRenderer({ settings: st, sections, nav, base, preview, banne
           <div className="foot">
             <div>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              {st.logo ? <img src={st.logo} alt={st.siteName} /> : <p style={{ font: "600 20px Georgia, serif", color: "#fff" }}>{st.siteName}</p>}
+              {st.logo ? <img src={st.logo.replace("/brand/monarch-logo-light.", "/brand/monarch-logo-dark.")} alt={st.siteName} /> : <p style={{ font: "600 20px Georgia, serif", color: "#fff" }}>{st.siteName}</p>}
               {st.footerBlurb && <p>{st.footerBlurb}</p>}
               {st.tagline && <p style={{ color: "#f6d37a" }}>{st.tagline}</p>}
             </div>
@@ -111,7 +112,7 @@ function Head({ s, as = "h2" }: { s: Section; as?: "h1" | "h2" }) {
   );
 }
 
-function SectionView({ s, L, ext, base, preview }: { s: Section; L: (h: string) => string; ext: (h: string) => object; base: string; preview?: boolean }) {
+function SectionView({ s, L, ext, base, preview, site }: { s: Section; L: (h: string) => string; ext: (h: string) => object; base: string; preview?: boolean; site: SiteKey }) {
   const tone = `tone-${s.tone ?? "light"}`;
   switch (s.type) {
     case "hero":
@@ -142,13 +143,13 @@ function SectionView({ s, L, ext, base, preview }: { s: Section; L: (h: string) 
                     {it.label && <div className="lbl">{it.label}</div>}
                     <h3>{it.title}</h3>
                     {it.price && <div className="amt">{it.price}{it.unit && <small>{it.unit}</small>}</div>}
-                    {it.body && <p>{it.body}</p>}
+                    {it.body && <p style={{ whiteSpace: "pre-line" }}>{it.body}</p>}
                   </div>
                 ) : (
                   <div key={i} className="card">
                     {it.label && <div className="lbl">{it.label}</div>}
                     <h3>{it.title}</h3>
-                    {it.body && <p>{it.body}</p>}
+                    {it.body && <p style={{ whiteSpace: "pre-line" }}>{it.body}</p>}
                   </div>
                 ),
               )}
@@ -187,7 +188,7 @@ function SectionView({ s, L, ext, base, preview }: { s: Section; L: (h: string) 
           <div className="wrap">
             <Head s={s} />
             {s.body && <div className="lead">{paras(s.body)}</div>}
-            <div className="formbox"><SiteForm slug={s.formSlug ?? ""} preview={preview} /></div>
+            <div className="formbox">{site === "monarch" ? <MonarchSiteForm preview={preview} /> : <SiteForm slug={s.formSlug ?? ""} preview={preview} />}</div>
           </div>
         </section>
       );

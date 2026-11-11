@@ -12,7 +12,7 @@ import { NextResponse, type NextRequest } from "next/server";
  */
 const ON = process.env.NEXT_PUBLIC_BACKEND === "1";
 const OLD_PATHS: Record<string, string> = { "/about-mkb": "/about", "/about-us": "/about", "/get-started": "/contact", "/mkb-financial-group": "/" };
-const STAFF_FREE = /^\/(api|login|portal(\/|$)|f\/|i\/|site(\/|$)|_next|brand|favicon|icon|apple-icon)/;
+const STAFF_FREE = /^\/(api|login|portal(\/|$)|f\/|i\/|site(\/|$)|msite(\/|$)|_next|brand|favicon|icon|apple-icon)/;
 
 // 3. The client portal's own address (PORTAL_HOSTS, e.g. "portal.mkbfinancialgroup.com") only serves
 //    the portal, client sign-in and the public links — never staff screens or staff APIs.
@@ -27,6 +27,22 @@ export function middleware(req: NextRequest) {
     if (p === "/favicon.ico") { const url = req.nextUrl.clone(); url.pathname = "/brand/mkb-seal.ico"; return NextResponse.rewrite(url); }
     if (PORTAL_OK.test(p)) return NextResponse.next();
     return p.startsWith("/api/") ? new NextResponse("Not found", { status: 404 }) : NextResponse.redirect(`https://${host}/portal`, 302);
+  }
+  // 4. Monarch Tax Suite's domains (MONARCH_HOSTS) show Monarch's website: "/software" is served from "/msite/software".
+  const monarchHosts = (process.env.MONARCH_HOSTS ?? "").toLowerCase().split(",").map((h) => h.trim()).filter(Boolean);
+  if (monarchHosts.includes(host)) {
+    const p = req.nextUrl.pathname;
+    const search = req.nextUrl.search;
+    if (!host.startsWith("www.") && monarchHosts.includes(`www.${host}`)) return NextResponse.redirect(`https://www.${host}${p}${search}`, 301);
+    if (p === "/msite" || p.startsWith("/msite/")) return NextResponse.redirect(`https://${host}${p.slice(6) || "/"}${search}`, 301);
+    if (p === "/favicon.ico") { const url = req.nextUrl.clone(); url.pathname = "/brand/monarch-icon-32.png"; return NextResponse.rewrite(url); }
+    if (/^\/(_next|brand|site\/media\/|i\/m\/|api\/public\/)/.test(p)) return NextResponse.next();
+    if (p.startsWith("/api/")) return new NextResponse("Not found", { status: 404 });
+    const url = req.nextUrl.clone();
+    url.pathname = `/msite${p === "/" ? "" : p}`;
+    const h = new Headers(req.headers);
+    h.set("x-monarch-site", "1");
+    return NextResponse.rewrite(url, { request: { headers: h } });
   }
   const siteHosts = (process.env.WEBSITE_HOSTS ?? "").toLowerCase().split(",").map((h) => h.trim()).filter(Boolean);
   const path = req.nextUrl.pathname;

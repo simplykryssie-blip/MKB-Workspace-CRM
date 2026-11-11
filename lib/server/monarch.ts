@@ -391,3 +391,33 @@ export async function deleteOffice(env: AppEnv, a: Actor, id: string) {
   await note(a, `Office ${r.name}`, "Office deleted", env);
   return loadAll(env, a);
 }
+
+/* ---------------------------------------------------------------- website contact form */
+/**
+ * Public: the contact form on Monarch's website. Creates a new office in the
+ * "Interested" stage and rings the bell for Monarch staff. Rate-limited; a
+ * hidden field catches bots. Never reads anything back.
+ */
+export async function websiteInquiry(env: AppEnv, ip: string, b: Record<string, unknown>) {
+  if (str(b.website, 200)) return { ok: true }; // spam trap
+  if (!(await rateLimitIp(env, ip))) throw new HttpError(429, "Too many requests. Please wait a few minutes and try again.", "rate_limited");
+  const name = str(b.name, 120), office = str(b.office, 160), email = str(b.email, 200).toLowerCase(), phone = str(b.phone, 40);
+  if (name.length < 2) throw badRequest("Please enter your name.");
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw badRequest("Please enter a valid email address.");
+  if (phone.replace(/\D/g, "").length < 10) throw badRequest("Please enter a phone number.");
+  if (!b.consent) throw badRequest("Please check the box so we can contact you.");
+  const message = str(b.message, 2000);
+  const locations = str(b.locations, 20);
+  const t = now();
+  const id = randomId("of");
+  const notes = [`From the website contact form (${new Date(t).toLocaleDateString("en-US", { dateStyle: "medium", timeZone: "America/Chicago" })}).`, locations && `Locations: ${locations}`, message && `Message: ${message}`].filter(Boolean).join("\n");
+  await run(env.DB, "INSERT INTO mon_offices (id, name, contact_name, email, phone, city, state, stage, notes, created_at, created_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'interested', ?, ?, NULL, ?)",
+    id, office || name, name, email, phone, str(b.city, 80), str(b.state, 2).toUpperCase(), notes, t, t);
+  const { notify } = await import("./notifications");
+  await notify(env, { module: "monarch" }, { kind: "lead", title: `New Monarch lead: ${office || name}`, body: `${name} filled out the Monarch website form.`, href: `/monarch/offices/${id}` });
+  return { ok: true };
+}
+async function rateLimitIp(env: AppEnv, ip: string) {
+  const { rateLimit } = await import("./core");
+  return rateLimit(env.DB, `moninq:${ip}`, 5, 60);
+}

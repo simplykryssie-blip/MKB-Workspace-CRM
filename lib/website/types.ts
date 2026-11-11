@@ -76,6 +76,9 @@ export type SitePage = {
   updatedAt?: string;
 };
 
+/** Which public website: MKB Financial Group or Monarch Tax Suite. */
+export type SiteKey = "mkb" | "monarch";
+
 export type Website = { settings: { draft: SiteSettings; published: SiteSettings | null; rev: number; publishedAt?: string }; pages: SitePage[] };
 
 /* ---------------------------------------------------------------- validation (server and editor) */
@@ -90,10 +93,10 @@ export function cleanHref(v: unknown): string {
   if (/^[a-z0-9.-]+\.[a-z]{2,}(\/.*)?$/i.test(h)) return `https://${h}`;
   return "";
 }
-/** Images: https addresses or files uploaded to the site (/site/media/...). */
+/** Images: https addresses, files uploaded to the site (/site/media/...) or the built-in brand images (/brand/...). */
 export const cleanImage = (v: unknown) => {
   const h = s(v, 600);
-  return /^https:\/\//i.test(h) || /^\/site\/media\/[A-Za-z0-9._-]+$/.test(h) ? h : "";
+  return /^https:\/\//i.test(h) || /^\/(site\/media|brand)\/[A-Za-z0-9._-]+$/.test(h) ? h : "";
 };
 
 export function cleanSection(x: Partial<Section>): Section {
@@ -129,10 +132,10 @@ export function cleanSections(v: unknown): Section[] {
   const seen = new Set<string>();
   return out.map((x) => (seen.has(x.id) ? { ...x, id: `sec-${Math.random().toString(36).slice(2, 9)}` } : (seen.add(x.id), x)));
 }
-export function cleanSettings(v: Partial<SiteSettings> | undefined): SiteSettings {
+export function cleanSettings(v: Partial<SiteSettings> | undefined, fallbackName = "MKB Financial Group"): SiteSettings {
   const x = v ?? {};
   return {
-    siteName: s(x.siteName, 120) || "MKB Financial Group",
+    siteName: s(x.siteName, 120) || fallbackName,
     tagline: s(x.tagline, 120),
     topBar: s(x.topBar, 160),
     logo: cleanImage(x.logo),

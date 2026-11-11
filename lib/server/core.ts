@@ -24,6 +24,8 @@ export type AppEnv = Omit<CloudflareEnv, "APP_ENV" | "BACKEND_ENABLED"> & {
   CRON_SECRET?: string;
   /** Domains that show the public website, e.g. "mkbfinancialgroup.com,www.mkbfinancialgroup.com". */
   WEBSITE_HOSTS?: string;
+  /** Domains that show Monarch Tax Suite's website, e.g. "monarchtaxsuite.com,www.monarchtaxsuite.com". */
+  MONARCH_HOSTS?: string;
   /** One-time link secret for creating the Owner account in an empty database. */
   OWNER_SETUP_TOKEN?: string;
   /** Stripe secret key (sk_live_… / sk_test_…). Without it, invoices show "pay at our office". */
@@ -90,7 +92,7 @@ export function checkSameOrigin(req: Request, env: AppEnv, rawBody = false) {
 }
 
 /** https origins of the public website's domains (WEBSITE_HOSTS, comma-separated). */
-export const websiteOrigins = (env: AppEnv) => (env.WEBSITE_HOSTS ?? "").toLowerCase().split(",").map((h) => h.trim()).filter(Boolean).map((h) => `https://${h}`);
+export const websiteOrigins = (env: AppEnv) => `${env.WEBSITE_HOSTS ?? ""},${env.MONARCH_HOSTS ?? ""}`.toLowerCase().split(",").map((h) => h.trim()).filter(Boolean).map((h) => `https://${h}`);
 
 /** Parses a JSON body (max 64 KB unless a route allows more). */
 export async function body<T = Record<string, unknown>>(req: Request, maxBytes = 65_536): Promise<T> {

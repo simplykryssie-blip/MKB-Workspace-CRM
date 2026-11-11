@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Copy, Eye, ExternalLink, FilePlus2, Globe, ImageUp, Plus, Rocket, Settings2, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Checkbox, SelectField, TextArea, TextField } from "@/components/ui/Field";
@@ -10,42 +10,51 @@ import { SiteRenderer } from "@/components/site/SiteRenderer";
 import { useTeam } from "@/lib/store/team-store";
 import { BACKEND, RemoteError, call, debouncer } from "@/lib/sync/remote";
 import { MKB_PAGES, MKB_SETTINGS } from "@/lib/website/mkb-content";
-import { SECTION_TYPES, TONES, slugifyPage, type Section, type SectionType, type SiteItem, type SitePage, type SiteSettings, type Website } from "@/lib/website/types";
+import { MONARCH_PAGES, MONARCH_SETTINGS } from "@/lib/website/monarch-content";
+import { SECTION_TYPES, TONES, slugifyPage, type Section, type SectionType, type SiteItem, type SiteKey, type SitePage, type SiteSettings, type Website } from "@/lib/website/types";
 import "@/components/site/site.css";
 
 const save = debouncer(800);
 const uid = (p: string) => `${p}-${Math.random().toString(36).slice(2, 9)}`;
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
-const sample = (): Website => ({ settings: { draft: structuredClone(MKB_SETTINGS), published: structuredClone(MKB_SETTINGS), rev: 1 }, pages: structuredClone(MKB_PAGES) });
+const sample = (site: SiteKey): Website => site === "monarch"
+  ? { settings: { draft: structuredClone(MONARCH_SETTINGS), published: null, rev: 1 }, pages: structuredClone(MONARCH_PAGES) }
+  : { settings: { draft: structuredClone(MKB_SETTINGS), published: structuredClone(MKB_SETTINGS), rev: 1 }, pages: structuredClone(MKB_PAGES) };
+/** Which website the editor is working on (MKB's or Monarch's). */
+const SiteCtx = createContext<SiteKey>("mkb");
+const withSite = (path: string, site: SiteKey) => (site === "monarch" ? `${path}${path.includes("?") ? "&" : "?"}site=monarch` : path);
 
 /**
  * Website editor: pages made of sections, edited as drafts and published when
  * ready. With the backend on, drafts save automatically and the server checks
  * Company Settings permissions (edit to change, approve to publish).
  */
-export function WebsiteEditor() {
+export function WebsiteEditor({ which = "mkb" }: { which?: SiteKey }) {
   const team = useTeam();
   const toast = useToast();
-  const [site, setSite] = useState<Website | null>(BACKEND ? null : sample());
+  const api = (path: string) => withSite(path, which);
+  const [site, setSite] = useState<Website | null>(BACKEND ? null : sample(which));
   const [sel, setSel] = useState<string>("settings");
   const [preview, setPreview] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const siteRef = useRef(site);
   siteRef.current = site;
-  const canEdit = team.can("settings", "edit");
-  const canPublish = team.can("settings", "approve");
+  const mod = which === "monarch" ? "monarch" : "settings";
+  const canView = team.can(mod, "view");
+  const canEdit = team.can(mod, "edit");
+  const canPublish = team.can(mod, "approve");
 
   const load = useCallback(async () => {
     if (!BACKEND) return;
     try {
-      const w = await call<Website>("GET", "/api/website");
+      const w = await call<Website>("GET", api("/api/website"));
       setSite(w);
       setSel((s) => (s === "settings" || w.pages.some((p) => p.id === s) ? s : w.pages[0]?.id ?? "settings"));
     } catch (e) {
       setErr(e instanceof RemoteError ? e.message : "Couldn't load the website.");
     }
-  }, []);
+  }, [which]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { if (site && sel === "settings" && site.pages[0] && !BACKEND) setSel(site.pages[0].id); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -61,7 +70,7 @@ export function WebsiteEditor() {
     if (BACKEND) save("settings", async () => {
       const w = siteRef.current!;
       try {
-        const r = await call<{ rev: number }>("PUT", "/api/website/settings", { settings: w.settings.draft, rev: w.settings.rev });
+        const r = await call<{ rev: number }>("PUT", api("/api/website/settings"), { settings: w.settings.draft, rev: w.settings.rev });
         setSite((x) => (x ? { ...x, settings: { ...x.settings, rev: r.rev } } : x));
       } catch (e) { fail(e); }
     });
@@ -72,7 +81,7 @@ export function WebsiteEditor() {
       const p = siteRef.current!.pages.find((x) => x.id === id);
       if (!p) return;
       try {
-        const r = await call<{ rev: number; slug: string }>("PUT", `/api/website/pages/${id}`, { page: p, rev: p.rev });
+        const r = await call<{ rev: number; slug: string }>("PUT", api(`/api/website/pages/${id}`), { page: p, rev: p.rev });
         setSite((x) => (x ? { ...x, pages: x.pages.map((q) => (q.id === id ? { ...q, rev: r.rev, slug: r.slug } : q)) } : x));
       } catch (e) { fail(e); }
     });
@@ -90,7 +99,7 @@ export function WebsiteEditor() {
     const page: SitePage = { id: uid("pg"), slug, title, description: "", nav: true, position: Math.max(0, ...site.pages.map((p) => p.position)) + 1, draft: [{ id: uid("sec"), type: "hero", eyebrow: title, title, body: "", buttons: [{ label: "Let's Talk About Your Business", href: "/contact", style: "gold" }] }, { id: uid("sec"), type: "cta", title: "You're building something. Let's build the foundation with it.", body: "Strategy • Growth • Legacy", buttons: [{ label: "Get Started", href: "/contact", style: "dark" }] }], published: null, rev: 1 };
     if (BACKEND) {
       try {
-        const r = await call<{ rev: number; slug: string }>("POST", "/api/website/pages", { page });
+        const r = await call<{ rev: number; slug: string }>("POST", api("/api/website/pages"), { page });
         page.rev = r.rev;
         page.slug = r.slug;
       } catch (e) { return fail(e); }
@@ -100,7 +109,7 @@ export function WebsiteEditor() {
   };
   const removePage = async (p: SitePage) => {
     if (!window.confirm(`Delete “${p.title}”? It disappears from the editor and from the live site.`)) return;
-    if (BACKEND) try { await call("POST", `/api/website/pages/${p.id}`, { action: "delete" }); } catch (e) { return fail(e); }
+    if (BACKEND) try { await call("POST", api(`/api/website/pages/${p.id}`), { action: "delete" }); } catch (e) { return fail(e); }
     setSite((w) => (w ? { ...w, pages: w.pages.filter((x) => x.id !== p.id) } : w));
     setSel("settings");
   };
@@ -109,7 +118,7 @@ export function WebsiteEditor() {
     try {
       if (BACKEND) {
         await new Promise((r) => setTimeout(r, 900)); // let pending saves finish
-        await call("POST", "/api/website/publish", {});
+        await call("POST", api("/api/website/publish"), {});
         await load();
       } else setSite((w) => (w ? { settings: { ...w.settings, published: w.settings.draft }, pages: w.pages.map((p) => (p.published ? { ...p, published: p.draft } : p)) } : w));
       toast("Published — your changes to live pages are on the site.");
@@ -121,7 +130,7 @@ export function WebsiteEditor() {
     try {
       if (BACKEND) {
         await new Promise((r) => setTimeout(r, 900));
-        await call("POST", "/api/website/publish", { pageIds: [p.id] });
+        await call("POST", api("/api/website/publish"), { pageIds: [p.id] });
         await load();
       } else setSite((w) => (w ? { ...w, pages: w.pages.map((x) => (x.id === p.id ? { ...x, published: x.draft } : x)) } : w));
       toast(`“${p.title}” is live.`);
@@ -131,23 +140,33 @@ export function WebsiteEditor() {
   const unpublishPage = async (p: SitePage) => {
     if (!window.confirm(`Take “${p.title}” off the live site? It stays here as a draft.`)) return;
     try {
-      if (BACKEND) { await call("POST", `/api/website/pages/${p.id}`, { action: "unpublish" }); await load(); }
+      if (BACKEND) { await call("POST", api(`/api/website/pages/${p.id}`), { action: "unpublish" }); await load(); }
       else setSite((w) => (w ? { ...w, pages: w.pages.map((x) => (x.id === p.id ? { ...x, published: null } : x)) } : w));
       toast(`“${p.title}” is now a draft.`, "info");
     } catch (e) { fail(e); }
   };
   const importMkb = async () => {
     setBusy(true);
-    try { await call("POST", "/api/website/import", {}); await load(); toast("MKB's website is loaded and live."); } catch (e) { fail(e); }
+    try { await call("POST", api("/api/website/import"), {}); await load(); toast(which === "monarch" ? "Monarch's website is ready to edit — nothing is public until you publish." : "MKB's website is loaded and live."); } catch (e) { fail(e); }
     setBusy(false);
   };
 
   const pending = useMemo(() => (site ? (!same(site.settings.draft, site.settings.published) ? 1 : 0) + site.pages.filter((p) => p.published && !same(p.draft, p.published)).length : 0), [site]);
   const nav = useMemo(() => (site ? [...site.pages].sort((a, b) => a.position - b.position).filter((p) => p.nav && p.slug).map((p) => ({ slug: p.slug, title: p.title })) : []), [site]);
 
-  if (!team.can("settings", "view")) return <p className="text-[14px] text-muted">You don&rsquo;t have access to the website editor.</p>;
+  if (!canView) return <p className="text-[14px] text-muted">You don&rsquo;t have access to the website editor.</p>;
   if (err) return <p role="alert" className="rounded-xl bg-danger-soft/60 px-3 py-2 text-[14px] text-danger-ink">{err}</p>;
   if (!site) return <div className="grid min-h-[40vh] place-items-center text-[14px] text-muted" role="status">Loading website…</div>;
+
+  if (!site.pages.length && which === "monarch")
+    return (
+      <div className="mx-auto max-w-xl rounded-3xl border border-line bg-surface p-8 text-center shadow-soft">
+        <Globe size={34} className="mx-auto text-accent" />
+        <h1 className="mt-3 text-[20px] font-bold text-ink">Monarch&rsquo;s website</h1>
+        <p className="mt-2 text-[14px] text-ink-2">Start from a ready-made Monarch website — Home, Software &amp; Packages, Bank Products, Partners, About and a Contact page whose form sends new leads to Monarch&rsquo;s Onboarding board. Everything starts as a draft: nothing is public until you press Publish.</p>
+        <Button variant="primary" className="mt-5" icon={Rocket} disabled={busy || !canPublish} onClick={importMkb}>{busy ? "Starting…" : "Start Monarch’s website"}</Button>
+      </div>
+    );
 
   if (!site.pages.length)
     return (
@@ -162,12 +181,13 @@ export function WebsiteEditor() {
 
   const page = site.pages.find((p) => p.id === sel);
   const pages = [...site.pages].sort((a, b) => a.position - b.position);
-  const livePath = (p?: SitePage) => `/site${p && p.slug ? `/${p.slug}` : ""}`;
+  const livePath = (p?: SitePage) => `${which === "monarch" ? "/msite" : "/site"}${p && p.slug ? `/${p.slug}` : ""}`;
 
   return (
+    <SiteCtx.Provider value={which}>
     <div>
       <PageHeader
-        title="Website"
+        title={which === "monarch" ? "Monarch website" : "Website"}
         subtitle={pending ? `${pending} unpublished change${pending === 1 ? "" : "s"} to live pages — visitors still see the last published version.` : "Live pages are up to date."}
         actions={
           <div className="flex flex-wrap gap-2">
@@ -219,7 +239,8 @@ export function WebsiteEditor() {
             page={page ?? pages[0]}
             sections={(page ?? pages[0]).draft}
             nav={nav}
-            base="/site"
+            base={which === "monarch" ? "/msite" : "/site"}
+            site={which}
             preview
             banner={<div className="draftbar">Preview of your unpublished draft · <button type="button" onClick={() => setPreview(false)} style={{ fontWeight: 800, textDecoration: "underline" }}>Close preview</button></div>}
           />
@@ -227,6 +248,7 @@ export function WebsiteEditor() {
         </div>
       )}
     </div>
+    </SiteCtx.Provider>
   );
 }
 
@@ -350,6 +372,7 @@ function PageForm({ page, onChange, setSections, onDelete, disabled, canDelete, 
 
 /* ---------------------------------------------------------------- one section */
 function SectionForm({ s, onChange, disabled }: { s: Section; onChange: (p: Partial<Section>) => void; disabled: boolean }) {
+  const siteKey = useContext(SiteCtx);
   const t = s.type;
   const items = s.items ?? [];
   const setItem = (i: number, p: Partial<SiteItem>) => onChange({ items: items.map((x, j) => (j === i ? { ...x, ...p } : x)) });
@@ -390,8 +413,9 @@ function SectionForm({ s, onChange, disabled }: { s: Section; onChange: (p: Part
         </div>
       )}
       {(t === "pricing" || t === "cards") && <TextArea label="Small print under the cards" value={s.note ?? ""} disabled={disabled} onChange={(e) => onChange({ note: e.target.value })} />}
-      {t === "form" && (
-        <TextField label="Form link name" hint="from Forms, e.g. contact" value={s.formSlug ?? ""} disabled={disabled} onChange={(e) => onChange({ formSlug: e.target.value })} />
+      {t === "form" && (siteKey === "monarch"
+        ? <p className="rounded-xl bg-accent-soft px-3 py-2 text-[13px] text-accent-ink">Monarch&rsquo;s contact form: name, office, email, phone, city, number of locations and a message. Each answer becomes a new &ldquo;Interested&rdquo; office on Monarch&rsquo;s Onboarding board.</p>
+        : <TextField label="Form link name" hint="from Forms, e.g. contact" value={s.formSlug ?? ""} disabled={disabled} onChange={(e) => onChange({ formSlug: e.target.value })} />
       )}
       {t === "embed" && (
         <>
@@ -431,6 +455,7 @@ function ButtonsField({ value, onChange, disabled }: { value: NonNullable<Sectio
 }
 
 function ImageField({ label, value, onChange, disabled }: { label: string; value: string; onChange: (v: string) => void; disabled: boolean }) {
+  const siteKey = useContext(SiteCtx);
   const toast = useToast();
   const [up, setUp] = useState(false);
   const upload = async (file: File) => {
@@ -438,7 +463,7 @@ function ImageField({ label, value, onChange, disabled }: { label: string; value
     if (file.size > 5_000_000) return toast("Images can be up to 5 MB.", "info");
     setUp(true);
     try {
-      const r = await fetch("/api/website/media", { method: "POST", credentials: "same-origin", headers: { "content-type": file.type, "x-file-name": encodeURIComponent(file.name) }, body: file });
+      const r = await fetch(withSite("/api/website/media", siteKey), { method: "POST", credentials: "same-origin", headers: { "content-type": file.type, "x-file-name": encodeURIComponent(file.name) }, body: file });
       const d = (await r.json().catch(() => ({}))) as { url?: string; error?: string };
       if (!r.ok || !d.url) throw new Error(d.error ?? "Upload failed.");
       onChange(d.url);
