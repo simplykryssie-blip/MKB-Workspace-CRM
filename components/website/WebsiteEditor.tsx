@@ -11,7 +11,11 @@ import { useTeam } from "@/lib/store/team-store";
 import { BACKEND, RemoteError, call, debouncer } from "@/lib/sync/remote";
 import { MKB_PAGES, MKB_SETTINGS } from "@/lib/website/mkb-content";
 import { MONARCH_PAGES, MONARCH_SETTINGS } from "@/lib/website/monarch-content";
-import { HTML_PAGE_STARTER, preparePage } from "@/lib/website/html";
+import { HTML_PAGE_STARTER, WIDGET_SCRIPT, preparePage } from "@/lib/website/html";
+import { renderSectionsBody } from "@/lib/website/render";
+
+/** Previews shown inside the editor: links open in a new tab instead of inside the little preview window. */
+const linksInNewTab = (h: string) => (/<head[^>]*>/i.test(h) ? h.replace(/<head([^>]*)>/i, '<head$1><base target="_blank">') : `<base target="_blank">${h}`);
 import { SECTION_TYPES, TONES, isHtmlPage, slugifyPage, type Section, type SectionType, type SiteItem, type SiteKey, type SitePage, type SiteSettings, type Website } from "@/lib/website/types";
 
 const save = debouncer(800);
@@ -183,6 +187,29 @@ export function WebsiteEditor({ which = "mkb" }: { which?: SiteKey }) {
   const page = site.pages.find((p) => p.id === sel);
   const pages = [...site.pages].sort((a, b) => a.position - b.position);
   const livePath = (p?: SitePage) => `${which === "monarch" ? "/msite" : "/site"}${p && p.slug ? `/${p.slug}` : ""}`;
+  /**
+   * Shows the unpublished draft in a new browser tab, so the CRM stays where it
+   * was. (If the browser blocks the new tab, the preview opens over the CRM.)
+   */
+  const openPreview = () => {
+    const pg = page ?? pages[0];
+    if (!pg) return;
+    const base = which === "monarch" ? "/msite" : "/site";
+    const bar = `<div style="position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:2147483647;background:#111;color:#fff;font:600 13px/1.3 Arial,sans-serif;padding:10px 16px;border-radius:999px;box-shadow:0 8px 24px rgba(0,0,0,.35)">Draft preview — not published yet · close this tab to return to your CRM</div>`;
+    let doc: string;
+    if (isHtmlPage(pg.draft)) {
+      const h = preparePage(pg.draft[0].html ?? "", base);
+      doc = /<\/body>/i.test(h) ? h.replace(/<\/body>/i, `${bar}</body>`) : h + bar;
+    } else {
+      const body = renderSectionsBody({ settings: site.settings.draft, page: pg, sections: pg.draft, nav, base, site: which });
+      doc = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Preview — ${pg.title.replace(/</g, "&lt;")}</title><style>body{margin:0}</style></head><body>${body}${body.includes("data-mkb-frame") ? WIDGET_SCRIPT : ""}${bar}</body></html>`;
+    }
+    const w = window.open("", "_blank");
+    if (!w) { setPreview(true); return; }
+    w.document.open();
+    w.document.write(doc);
+    w.document.close();
+  };
 
   return (
     <SiteCtx.Provider value={which}>
@@ -192,8 +219,8 @@ export function WebsiteEditor({ which = "mkb" }: { which?: SiteKey }) {
         subtitle={pending ? `${pending} unpublished change${pending === 1 ? "" : "s"} to live pages — visitors still see the last published version.` : "Live pages are up to date."}
         actions={
           <div className="flex flex-wrap gap-2">
-            <Button icon={Eye} onClick={() => setPreview(true)}>Preview</Button>
-            <Button icon={ExternalLink} href={livePath(page)}>Live site</Button>
+            <Button icon={Eye} onClick={openPreview}>Preview</Button>
+            <Button icon={ExternalLink} href={livePath(page)} newTab>Live site</Button>
             <Button variant="primary" icon={Rocket} disabled={busy || !pending || !canPublish} onClick={publishAll} title={canPublish ? undefined : "Your role can't publish"}>{busy ? "Publishing…" : "Publish"}</Button>
           </div>
         }
@@ -240,7 +267,7 @@ export function WebsiteEditor({ which = "mkb" }: { which?: SiteKey }) {
       {preview && page && isHtmlPage(page.draft) && (
         <div className="fixed inset-0 z-[100] flex flex-col bg-white" role="dialog" aria-label="Website preview">
           <div className="draftbar" style={{ background: "#111", color: "#fff", padding: "8px 14px", fontSize: 13 }}>Preview of your unpublished draft · <button type="button" onClick={() => setPreview(false)} style={{ fontWeight: 800, textDecoration: "underline" }}>Close preview</button></div>
-          <iframe title="Page preview" className="w-full flex-1 border-0" srcDoc={preparePage(page.draft[0].html ?? "", which === "monarch" ? "/msite" : "/site")} />
+          <iframe title="Page preview" className="w-full flex-1 border-0" srcDoc={linksInNewTab(preparePage(page.draft[0].html ?? "", which === "monarch" ? "/msite" : "/site"))} />
         </div>
       )}
       {preview && !(page && isHtmlPage(page.draft)) && (
@@ -423,7 +450,7 @@ function HtmlPageEditor({ html, disabled, onChange }: { html: string; disabled: 
             }}
             className="h-[70vh] min-h-[420px] w-full resize-y rounded-xl border border-line bg-[#0f172a] p-3 font-mono text-[12.5px] leading-relaxed text-[#e2e8f0]"
           />
-          {show && <iframe title="Page preview" className="h-[70vh] min-h-[420px] w-full rounded-xl border border-line bg-white" srcDoc={preparePage(doc, prefix)} />}
+          {show && <iframe title="Page preview" className="h-[70vh] min-h-[420px] w-full rounded-xl border border-line bg-white" srcDoc={linksInNewTab(preparePage(doc, prefix))} />}
         </div>
         <p className="mt-2 text-[12px] text-muted">{Math.round(html.length / 1024)} KB · links to your other pages work on the live site (e.g. <code>/about</code>); pictures come from the Media library.</p>
       </Panel>

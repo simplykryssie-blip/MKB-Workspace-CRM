@@ -212,7 +212,7 @@ function Share({ f }: { f: LeadForm }) {
         <CardHeader icon={Link2} title="Direct link" subtitle="For social media bios, texts, emails and QR codes" />
         <div className="space-y-3 px-5 pb-5 sm:px-6">
           <code className="block break-all rounded-xl bg-surface-2 px-3 py-2.5 text-[13px] text-ink ring-1 ring-line">{url}</code>
-          <div className="flex flex-wrap gap-2"><Button icon={Copy} onClick={() => copy(url, "Link")}>Copy link</Button><Button variant="ghost" icon={ExternalLink} href={publicPath(f.slug)}>Open public page</Button></div>
+          <div className="flex flex-wrap gap-2"><Button icon={Copy} onClick={() => copy(url, "Link")}>Copy link</Button><Button variant="ghost" icon={ExternalLink} href={publicPath(f.slug)} newTab>Open public page</Button></div>
         </div>
       </Card>
       <Card>

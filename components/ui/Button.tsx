@@ -12,12 +12,14 @@ type Props = {
   variant?: Variant;
   icon?: LucideIcon;
   href?: string;
+  /** Opens the link in a new browser tab (e.g. the website or a public form). */
+  newTab?: boolean;
   size?: "sm" | "md";
   className?: string;
   children?: React.ReactNode;
 } & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "className" | "children">;
 
-export function Button({ variant = "secondary", icon: Icon, href, size = "md", className = "", children, ...rest }: Props) {
+export function Button({ variant = "secondary", icon: Icon, href, newTab, size = "md", className = "", children, ...rest }: Props) {
   const cls = `inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl font-semibold transition-colors disabled:opacity-50 ${
     size === "sm" ? "h-8 px-3 text-[13px]" : "h-10 px-4 text-[14px]"
   } ${V[variant]} ${className}`;
@@ -29,7 +31,7 @@ export function Button({ variant = "secondary", icon: Icon, href, size = "md", c
   );
   if (href)
     return (
-      <Link href={href} className={cls}>
+      <Link href={href} className={cls} {...(newTab ? { target: "_blank", rel: "noopener noreferrer" } : {})}>
         {inner}
       </Link>
     );
