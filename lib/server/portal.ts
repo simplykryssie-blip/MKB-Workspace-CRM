@@ -160,7 +160,8 @@ export async function portalCompleteTask(env: AppEnv, a: Actor, wsId: string, ta
 export async function portalDocuments(env: AppEnv, a: Actor) {
   requireClient(a);
   const c = await me(env, a);
-  const docs = json<MD>(c.module_data, {}).documents ?? [];
+  const stored = new Set((await all<{ id: string }>(env.DB, "SELECT id FROM client_files WHERE client_id = ?", c.id)).map((f) => f.id));
+  const docs = (json<MD>(c.module_data, {}).documents ?? []).map((d) => (stored.has(d.id) ? { ...d, hasFile: true } : d));
   const shape = (d: ClientDocument & { hasFile?: boolean; fileName?: string }) => ({ id: d.id, name: d.name, fileName: d.fileName, secureForm: secureForm(d), service: d.service, serviceName: SERVICE_NAME[d.service] ?? "", category: d.category, taxYear: d.taxYear, requestedAt: d.requestedAt, uploadedAt: d.uploadedAt, uploadedBy: d.uploadedBy, status: d.status, hasFile: !!d.hasFile });
   return {
     requested: docs.filter((d) => d.status === "requested").map(shape),

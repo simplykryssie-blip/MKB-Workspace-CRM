@@ -144,6 +144,21 @@ const maskedDob = (iso?: string) => (iso ? `${iso.slice(0, 4)}-••-••` : 
 
 function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => number, getVault: () => Record<string, VaultEntry>, remote?: Remote) {
   const up = (id: string, fn: (c: Client) => Client) => dispatch({ type: "update", id, fn });
+  /** Live CRM: sends the file to private storage under the document's id, then marks the record as having its file. */
+  const storeFile = async (id: string, docId: string, file: Blob & { name?: string }, name: string, sensitive: boolean) => {
+    const fname = (file.name || name).replace(/[\r\n]/g, " ").slice(0, 150);
+    try {
+      await pendingClientCreates.get(id); // a brand-new client must exist on the server first
+      const r = await fetch(`/api/clients/${encodeURIComponent(id)}/files/${encodeURIComponent(docId)}${sensitive ? "?sensitive=1" : ""}`, { method: "POST", credentials: "same-origin", headers: { "content-type": "application/octet-stream", "x-file-name": encodeURIComponent(fname) }, body: file });
+      const j = (await r.json().catch(() => ({}))) as { error?: string; sizeKb?: number };
+      if (!r.ok) throw new Error(j.error ?? "Upload failed.");
+      up(id, (c) => ({ ...c, documents: c.documents.map((x) => (x.id === docId ? { ...x, hasFile: true, fileName: fname, sizeKb: j.sizeKb ?? x.sizeKb } : x)) }));
+      return true;
+    } catch (e) {
+      notify(`"${name}" wasn't saved — ${e instanceof Error ? e.message : "upload failed"} Please upload it again.`);
+      return false;
+    }
+  };
 
   return {
     reset: () => dispatch({ type: "reset" }),
@@ -364,9 +379,10 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
       );
       return docId;
     },
-    uploadDocument(id: string, d: { name: string; service: ServiceKey; category: string; sensitive: boolean; sizeKb: number; replaces?: string; taxYear?: number; workspaceId?: string; period?: string; by?: "client" | "staff"; entityId?: string; bizRequestId?: string; expiresAt?: string; expMatterId?: string; expCaseId?: string }): string {
+    uploadDocument(id: string, d: { name: string; service: ServiceKey; category: string; sensitive: boolean; sizeKb: number; replaces?: string; taxYear?: number; workspaceId?: string; period?: string; by?: "client" | "staff"; entityId?: string; bizRequestId?: string; expiresAt?: string; expMatterId?: string; expCaseId?: string; /** The actual file (live CRM): stored privately under this document. */ file?: Blob & { name?: string } }): string {
       const docId = d.replaces ?? uid("d");
       const by = d.by ?? "staff";
+      if (BACKEND && d.file) void storeFile(id, docId, d.file, d.name, d.sensitive);
       up(id, (c) => {
         const doc: ClientDocument = { id: docId, name: d.name, service: d.service, category: d.category, sensitive: d.sensitive, status: "received", requestedAt: nowIso(), uploadedAt: nowIso(), sizeKb: d.sizeKb, uploadedBy: by, taxYear: d.taxYear, workspaceId: d.workspaceId, period: d.period, entityId: d.entityId, bizRequestId: d.bizRequestId, expiresAt: d.expiresAt, expMatterId: d.expMatterId, expCaseId: d.expCaseId };
         const documents = d.replaces
@@ -375,6 +391,10 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
         return log({ ...c, documents }, "upload", `Uploaded "${d.name}"`, by);
       });
       return docId;
+    },
+    /** Upload (or replace) the file behind an existing document record. */
+    attachFile(id: string, docId: string, file: Blob & { name?: string }, name: string, sensitive = false) {
+      return storeFile(id, docId, file, name, sensitive);
     },
     setDocStatus(id: string, docId: string, status: ClientDocument["status"]) {
       up(id, (c) => {

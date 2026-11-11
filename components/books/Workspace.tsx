@@ -1,5 +1,6 @@
 "use client";
 
+import { BACKEND } from "@/lib/sync/remote";
 import Link from "next/link";
 import { useClientGate } from "@/components/team/AccessGuard";
 import { useEffect, useMemo, useState } from "react";
@@ -46,7 +47,7 @@ import { Menu } from "@/components/ui/Menu";
 import { Breadcrumbs } from "@/components/ui/PageHeader";
 import { useToast } from "@/components/ui/Toast";
 import { Timeline } from "@/components/crm/ProfileTabs";
-import { PaymentDialog, downloadPlaceholder } from "@/components/crm/dialogs";
+import { PaymentDialog, downloadDoc, downloadPlaceholder } from "@/components/crm/dialogs";
 import { staffList, staffById } from "@/lib/sample/clients";
 import { useClients } from "@/lib/store/clients-store";
 import { balanceDue, currentMonth, nextAction, openTasks, unresolved, useBooks, workspaceDocs, workspaceInvoices, workspaceMessages } from "@/lib/store/books-store";
@@ -684,7 +685,7 @@ function DocsTab({ w, c, m, open }: { w: BooksWorkspace; c: Client; m: BooksMont
               <Button size="sm" icon={FilePlus2} onClick={() => open("request")}>Request</Button>
               <label className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-xl bg-accent px-3 text-[13px] font-semibold text-white hover:bg-accent-hover">
                 <UploadCloud size={15} /> Upload
-                <input type="file" className="sr-only" aria-label="Upload document" onChange={(e) => { const f = e.target.files?.[0]; if (!f) return; clientStore.uploadDocument(c.id, { name: f.name.replace(/\.[^.]+$/, ""), service: "books", category: "Supporting document", sensitive: false, sizeKb: Math.max(1, Math.round(f.size / 1024)), workspaceId: w.id, period: m.period }); toast(`Uploaded "${f.name}"`); e.target.value = ""; }} />
+                <input type="file" className="sr-only" aria-label="Upload document" onChange={(e) => { const f = e.target.files?.[0]; if (!f) return; clientStore.uploadDocument(c.id, { name: f.name.replace(/\.[^.]+$/, ""), service: "books", category: "Supporting document", sensitive: false, sizeKb: Math.max(1, Math.round(f.size / 1024)), workspaceId: w.id, period: m.period, file: f }); toast(`Uploaded "${f.name}"`); e.target.value = ""; }} />
               </label>
             </div>
           }
@@ -711,7 +712,7 @@ function DocsTab({ w, c, m, open }: { w: BooksWorkspace; c: Client; m: BooksMont
                 <div className="text-[12px] text-muted">{d.category} · {d.period ? periodLabel(d.period, true) : ""} · {d.uploadedAt ? `${d.uploadedBy === "staff" ? "MKB" : "client"} · ${relTime(d.uploadedAt)}${d.sizeKb ? ` · ${fileSize(d.sizeKb)}` : ""}` : `requested ${relTime(d.requestedAt)}`}</div>
               </div>
               <Badge tone={statusTone[d.status]}>{d.status === "requested" ? "Requested" : d.status === "reviewed" ? "Reviewed" : d.status === "rejected" ? "Re-upload" : "Received"}</Badge>
-              {d.status === "requested" ? <Button size="sm" variant="ghost" icon={Send} onClick={() => { clientStore.remindDocument(c.id, d.id); toast("Reminder sent"); }}>Remind</Button> : <Button size="sm" variant="ghost" icon={Download} aria-label={`Download ${d.name}`} onClick={() => { clientStore.logDocumentAccess(c.id, d.id, "Downloaded"); downloadPlaceholder(d.name); }} />}
+              {d.status === "requested" ? <Button size="sm" variant="ghost" icon={Send} onClick={() => { clientStore.remindDocument(c.id, d.id); toast("Reminder sent"); }}>Remind</Button> : <Button size="sm" variant="ghost" icon={Download} aria-label={`Download ${d.name}`} onClick={() => { if (!BACKEND) clientStore.logDocumentAccess(c.id, d.id, "Downloaded"); downloadDoc(c.id, d); }} />}
             </li>
           ))}
         </ul>

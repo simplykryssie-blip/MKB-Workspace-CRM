@@ -33,7 +33,7 @@ const TABS = [
   { key: "notes", label: "Internal notes", icon: Lock },
 ] as const;
 type Tab = (typeof TABS)[number]["key"];
-const toFiles = (fs: File[]) => fs.map((f) => ({ name: f.name.replace(/\.[^.]+$/, ""), sizeKb: Math.max(1, Math.round(f.size / 1024)) }));
+const toFiles = (fs: File[]) => fs.map((f) => ({ name: f.name.replace(/\.[^.]+$/, ""), sizeKb: Math.max(1, Math.round(f.size / 1024)), file: f }));
 
 export function MatterPage({ id }: { id: string }) {
   const exp = useExp();

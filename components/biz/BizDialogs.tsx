@@ -54,7 +54,7 @@ const today = () => SAMPLE_NOW.toISOString().slice(0, 10);
 const toIso = (date: string, h = 17) => new Date(`${date}T${String(h).padStart(2, "0")}:00`).toISOString();
 /** Read at render time, so it lists the real team once it has loaded. */
 const staffOptsNow = () => staffList().map((s) => [s.id, s.name] as [string, string]);
-const toFiles = (fs: File[]) => fs.map((f) => ({ name: f.name.replace(/\.[^.]+$/, ""), sizeKb: Math.max(1, Math.round(f.size / 1024)) }));
+const toFiles = (fs: File[]) => fs.map((f) => ({ name: f.name.replace(/\.[^.]+$/, ""), sizeKb: Math.max(1, Math.round(f.size / 1024)), file: f }));
 
 /** File picker that keeps files in the browser only. */
 export function FilePicker({ files, setFiles, label = "Attach files", multiple = true, required = false }: { files: File[]; setFiles: (f: File[]) => void; label?: string; multiple?: boolean; required?: boolean }) {

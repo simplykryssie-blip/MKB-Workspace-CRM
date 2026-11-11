@@ -423,10 +423,10 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       return items.length;
     },
     /** Staff records a document as received (uploaded or dropped off). */
-    receiveItem(id: string, itemId: string, sizeKb = 240) {
+    receiveItem(id: string, itemId: string, sizeKb = 240, file?: File) {
       const r = R(id);
       const it = r.checklist.find((i) => i.id === itemId)!;
-      const docId = clients().uploadDocument(r.clientId, { name: it.name, service: "tax", category: it.category, sensitive: it.sensitive, sizeKb, replaces: it.docId, taxYear: r.taxYear });
+      const docId = clients().uploadDocument(r.clientId, { name: it.name, service: "tax", category: it.category, sensitive: it.sensitive, sizeKb: file ? Math.max(1, Math.round(file.size / 1024)) : sizeKb, replaces: it.docId, taxYear: r.taxYear, file });
       up(id, (x) => log({ ...x, checklist: x.checklist.map((i) => (i.id === itemId ? { ...i, docId } : i)) }, "upload", `Received: ${it.name}`));
     },
     reviewItem(id: string, itemId: string, ok: boolean) {

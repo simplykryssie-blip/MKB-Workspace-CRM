@@ -199,7 +199,7 @@ export function CompleteTaskDialog({ w, task, by, onClose }: { w: BooksWorkspace
   const needsFile = task.type === "receipts" || task.type === "statement";
   const valid = (!needsAnswer || response.trim()) && (!needsFile || files.length > 0);
   return (
-    <Modal open={!!task} onClose={onClose} title={TASK_TYPE[task.type]} description={task.title} footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!valid} onClick={() => { books.completeTask(w.id, task.id, { response: response.trim() || undefined, files: files.map((f) => ({ name: f.name.replace(/\.[^.]+$/, ""), sizeKb: Math.max(1, Math.round(f.size / 1024)) })), by }); toast(by === "client" ? "Sent to MKB" : "Marked complete"); onClose(); }}>{by === "client" ? "Send to MKB" : "Mark complete"}</Button></>}>
+    <Modal open={!!task} onClose={onClose} title={TASK_TYPE[task.type]} description={task.title} footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!valid} onClick={() => { books.completeTask(w.id, task.id, { response: response.trim() || undefined, files: files.map((f) => ({ name: f.name.replace(/\.[^.]+$/, ""), sizeKb: Math.max(1, Math.round(f.size / 1024)), file: f })), by }); toast(by === "client" ? "Sent to MKB" : "Marked complete"); onClose(); }}>{by === "client" ? "Send to MKB" : "Mark complete"}</Button></>}>
       <div className="space-y-4">
         {task.detail && <p className="rounded-xl bg-surface-2 px-3 py-2 text-[13.5px] text-ink-2 ring-1 ring-line">{task.detail}</p>}
         {(needsAnswer || !needsFile) && <TextArea id="ct-response" label={needsAnswer ? "Your answer" : "Note (optional)"} required={needsAnswer} value={response} onChange={(e) => setResponse(e.target.value)} />}

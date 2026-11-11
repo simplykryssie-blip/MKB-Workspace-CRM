@@ -32,7 +32,7 @@ const TABS = [
   { key: "history", label: "History & notes", icon: Activity },
 ] as const;
 type Tab = (typeof TABS)[number]["key"];
-const toFiles = (fs: File[]) => fs.map((f) => ({ name: f.name.replace(/\.[^.]+$/, ""), sizeKb: Math.max(1, Math.round(f.size / 1024)) }));
+const toFiles = (fs: File[]) => fs.map((f) => ({ name: f.name.replace(/\.[^.]+$/, ""), sizeKb: Math.max(1, Math.round(f.size / 1024)), file: f }));
 const today = () => SAMPLE_NOW.toISOString().slice(0, 10);
 /** Read at render time, so it lists the real team once it has loaded. */
 const staffOptsNow = () => staffList().map((s) => [s.id, s.name] as [string, string]);

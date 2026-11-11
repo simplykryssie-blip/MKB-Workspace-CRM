@@ -206,7 +206,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       (opts.files ?? []).forEach((f, i) => {
         const replaces = i === 0 && t.requestDocId ? t.requestDocId : undefined;
         const category = t.type === "receipts" ? "Receipts" : t.type === "statement" ? "Statement" : "Supporting document";
-        docIds.push(clients().uploadDocument(w.clientId, { name: replaces ? clients().clients.find((c) => c.id === w.clientId)?.documents.find((d) => d.id === replaces)?.name ?? f.name : f.name, service: "books", category, sensitive: false, sizeKb: f.sizeKb, replaces, workspaceId: wsId, period: t.period, by: opts.by }));
+        docIds.push(clients().uploadDocument(w.clientId, { name: replaces ? clients().clients.find((c) => c.id === w.clientId)?.documents.find((d) => d.id === replaces)?.name ?? f.name : f.name, service: "books", category, sensitive: false, sizeKb: f.sizeKb, file: (f as { file?: File }).file, replaces, workspaceId: wsId, period: t.period, by: opts.by }));
       });
       up(wsId, (x) => {
         let next: BooksWorkspace = { ...x, tasks: x.tasks.map((y) => (y.id === taskId ? { ...y, status: "done", completedAt: nowIso(), completedBy: opts.by, response: opts.response ?? y.response, docIds: [...y.docIds, ...docIds] } : y)) };

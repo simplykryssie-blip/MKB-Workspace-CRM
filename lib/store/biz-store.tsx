@@ -295,7 +295,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       };
       if (input.clientId) {
         r.enrollmentId = clients().enroll(input.clientId, { service: "biz", title: `${svc.name} — ${r.businessName}`, staffId: input.assignedTo, fee: quoteTotal(r.quote), dueAt: r.dueAt });
-        (input.files ?? []).forEach((f) => clients().uploadDocument(input.clientId!, { name: f.name, service: "biz", category: "Client-provided document", sensitive: false, sizeKb: f.sizeKb, entityId, bizRequestId: id, by: input.source === "portal" ? "client" : "staff" }));
+        (input.files ?? []).forEach((f) => clients().uploadDocument(input.clientId!, { name: f.name, service: "biz", category: "Client-provided document", sensitive: false, sizeKb: f.sizeKb, file: (f as { file?: File }).file, entityId, bizRequestId: id, by: input.source === "portal" ? "client" : "staff" }));
       }
       set((s) => ({ ...s, requests: [r, ...s.requests], nextNumber: s.nextNumber + 1 }));
       return id;
@@ -406,7 +406,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       const docIds: string[] = [];
       (o.files ?? []).forEach((f, i) => {
         const replaces = i === 0 ? it.docIds.find((d) => r.clientId && clients().clients.find((c) => c.id === r.clientId)?.documents.find((x) => x.id === d)?.status === "requested") : undefined;
-        docIds.push(clients().uploadDocument(r.clientId!, { name: replaces ? it.label : f.name, service: "biz", category: "Client-provided document", sensitive: false, sizeKb: f.sizeKb, replaces, entityId: r.entityId, bizRequestId: r.id, by: o.by }));
+        docIds.push(clients().uploadDocument(r.clientId!, { name: replaces ? it.label : f.name, service: "biz", category: "Client-provided document", sensitive: false, sizeKb: f.sizeKb, file: (f as { file?: File }).file, replaces, entityId: r.entityId, bizRequestId: r.id, by: o.by }));
       });
       upReq(id, (x) => ({ ...x, info: x.info.map((i) => (i.id === infoId ? { ...i, status: "responded", response: o.response ?? i.response, docIds: [...new Set([...i.docIds, ...docIds])], respondedAt: nowIso() } : i)) }));
       if (o.response && o.by === "client") msg(r, `Re: ${it.label} — ${o.response}`, "client");
@@ -460,7 +460,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       const r = R(id);
       let confirmationDocId = e.confirmationDocId;
       if (e.confirmationFile && r.clientId)
-        confirmationDocId = clients().uploadDocument(r.clientId, { name: e.confirmationFile.name, service: "biz", category: "State filing confirmation", sensitive: false, sizeKb: e.confirmationFile.sizeKb, entityId: r.entityId, bizRequestId: r.id, by: "staff" });
+        confirmationDocId = clients().uploadDocument(r.clientId, { name: e.confirmationFile.name, service: "biz", category: "State filing confirmation", sensitive: false, sizeKb: e.confirmationFile.sizeKb, file: (e.confirmationFile as { file?: File }).file, entityId: r.entityId, bizRequestId: r.id, by: "staff" });
       // An approval is only recorded with a reference, a verified confirmation and the confirmation on file.
       if (e.kind === "approved" && (!e.verified || !e.reference || !confirmationDocId)) throw new Error("Approval needs a verified confirmation");
       const ev: AgencyEvent = { id: uid("a"), agency: e.agency, kind: e.kind, at: e.at, byId: e.byId, reference: e.reference, note: e.note, verified: e.verified, confirmationDocId };
@@ -497,7 +497,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     uploadDeliverable(id: string, delId: string, file: FileIn, expiresAt?: string) {
       const r = R(id);
       const d = r.deliverables.find((x) => x.id === delId)!;
-      const docId = clients().uploadDocument(r.clientId!, { name: d.name, service: "biz", category: d.category, sensitive: false, sizeKb: file.sizeKb, entityId: r.entityId, bizRequestId: r.id, by: "staff", expiresAt });
+      const docId = clients().uploadDocument(r.clientId!, { name: d.name, service: "biz", category: d.category, sensitive: false, sizeKb: file.sizeKb, file: (file as { file?: File }).file, entityId: r.entityId, bizRequestId: r.id, by: "staff", expiresAt });
       upReq(id, (x) => ({ ...x, deliverables: x.deliverables.map((y) => (y.id === delId ? { ...y, docId, status: "ready_for_review" } : y)) }));
     },
     reviewDeliverable(id: string, delId: string, approve: boolean, by: string) {

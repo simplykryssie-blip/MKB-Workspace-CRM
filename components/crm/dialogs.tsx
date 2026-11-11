@@ -1,5 +1,6 @@
 "use client";
 
+import { BACKEND } from "@/lib/sync/remote";
 import { useEffect, useState } from "react";
 import { FileText, Lock, UploadCloud } from "lucide-react";
 import { AddressFields, DOBInput, EINInput, EmailInput, PhoneInput, ResponsiblePartyFields, TaxIdInput } from "@/components/ui/FormattedInputs";
@@ -25,6 +26,18 @@ const isoDate = (daysFromNow: number) => {
 };
 
 /** Offline "download": a small text placeholder — no real files exist in the preview. */
+/** Downloads a client document: the stored file in the live CRM, a placeholder in the preview. */
+export function downloadDoc(clientId: string, d: { id: string; name: string; hasFile?: boolean; fileName?: string }, placeholderName?: string) {
+  if (BACKEND) {
+    if (!d.hasFile) { window.dispatchEvent(new CustomEvent("mkb:notice", { detail: `No file was uploaded for "${d.name}" — it was only marked received.` })); return; }
+    const a = document.createElement("a");
+    a.href = `/api/clients/${encodeURIComponent(clientId)}/files/${encodeURIComponent(d.id)}`;
+    a.download = d.fileName ?? d.name;
+    a.click();
+    return;
+  }
+  downloadPlaceholder(placeholderName ?? d.name);
+}
 export function downloadPlaceholder(filename: string, body = "MKB Business Suite — sample placeholder file.\nNo real client documents exist in this design preview.\n") {
   const url = URL.createObjectURL(new Blob([body], { type: "text/plain" }));
   const a = document.createElement("a");
@@ -358,7 +371,7 @@ export function UploadDocDialog({ client: c, open, onClose, replace }: DialogPro
     if (!replace) setName(f.name.replace(/\.[^.]+$/, ""));
   };
   const save = () => {
-    store.uploadDocument(c.id, { name: name.trim(), service, category: replace?.category ?? "Staff upload", sensitive, sizeKb: Math.max(1, Math.round((file?.size ?? 0) / 1024)), replaces: replace?.id });
+    store.uploadDocument(c.id, { name: name.trim(), service, category: replace?.category ?? "Staff upload", sensitive, sizeKb: Math.max(1, Math.round((file?.size ?? 0) / 1024)), replaces: replace?.id, file: file ?? undefined });
     toast(`Uploaded "${name.trim()}"`);
     onClose();
   };

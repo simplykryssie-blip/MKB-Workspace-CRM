@@ -1,5 +1,6 @@
 "use client";
 
+import { BACKEND } from "@/lib/sync/remote";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -37,7 +38,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useToast } from "@/components/ui/Toast";
-import { downloadPlaceholder } from "@/components/crm/dialogs";
+import { downloadDoc, downloadPlaceholder } from "@/components/crm/dialogs";
 import { STAFF, SAMPLE_NOW, staffById, staffList } from "@/lib/sample/clients";
 import { useClients } from "@/lib/store/clients-store";
 import { PAY_META, STANDING_META, deadlineSummary, dueState, entityStates, isClosed, nextReminder, nextStep, openInfo, payState, pendingReminders, useBiz, type PayState } from "@/lib/store/biz-store";
@@ -717,7 +718,7 @@ function DocumentsTab({ byId }: { byId: Map<string, Client> }) {
               </div>
               {exp != null && exp <= 60 && <Badge tone={exp < 0 ? "danger" : "warning"}>{exp < 0 ? "Expired" : `Expires in ${exp}d`}</Badge>}
               {d.status === "requested" ? <Badge tone="warning">Requested</Badge> : d.deliveredAt ? <Badge tone="success">Delivered {fmtDate(d.deliveredAt, { month: "short", day: "numeric" })}</Badge> : <Badge tone="neutral">On file</Badge>}
-              {d.status !== "requested" && <Button size="sm" variant="ghost" icon={Download} aria-label={`Download ${d.name}`} onClick={() => { clientStore.logDocumentAccess(c.id, d.id, "Downloaded"); downloadPlaceholder(d.name); }} />}
+              {d.status !== "requested" && <Button size="sm" variant="ghost" icon={Download} aria-label={`Download ${d.name}`} onClick={() => { if (!BACKEND) clientStore.logDocumentAccess(c.id, d.id, "Downloaded"); downloadDoc(c.id, d); }} />}
             </li>
           );
         })}

@@ -24,7 +24,7 @@ const sOpt = (v: unknown, max = 300) => (typeof v === "string" && v ? v.slice(0,
 
 /* ---------------------------------------------------------------- load */
 async function loadParts(db: Db, ids: string[]) {
-  if (!ids.length) return { enr: [], notes: [], act: [], team: [], inv: new Map() };
+  if (!ids.length) return { enr: [], notes: [], act: [], team: [], inv: new Map(), files: new Set<string>() };
   const q = ids.map(() => "?").join(",");
   const [enr, notes, act, team] = await Promise.all([
     all<{ id: string; client_id: string; service: ServiceKey; title: string; stage: string; progress: number; status: Enrollment["status"]; staff_id: string; started_at: string; due_at: string | null; fee: number }>(db, `SELECT * FROM client_enrollments WHERE client_id IN (${q}) ORDER BY started_at`, ...ids),
@@ -34,7 +34,9 @@ async function loadParts(db: Db, ids: string[]) {
   ]);
   // Invoices are their own server records (billing); never taken from the browser.
   const inv = await invoicesByClient({ DB: db } as AppEnv, ids);
-  return { enr, notes, act, team, inv };
+  // Documents whose file is actually stored (the record alone may be only a request or a note).
+  const files = new Set((await all<{ client_id: string; id: string }>(db, `SELECT client_id, id FROM client_files WHERE client_id IN (${q})`, ...ids)).map((f) => `${f.client_id}/${f.id}`));
+  return { enr, notes, act, team, inv, files };
 }
 
 function assemble(r: FullRow, parts: Awaited<ReturnType<typeof loadParts>>, l4: Record<string, string | null>, dobYear?: string): ClientSnapshot {
@@ -51,7 +53,7 @@ function assemble(r: FullRow, parts: Awaited<ReturnType<typeof loadParts>>, l4: 
     staffIds: parts.team.filter((t) => t.client_id === r.id).map((t) => t.member_id),
     status: r.status as Client["status"], portal: r.portal as Client["portal"], tags: json(r.tags, []), source: r.source, leadId: r.lead_id ?? undefined, since: r.since, lastActivityAt: r.last_activity_at,
     enrollments: parts.enr.filter((e) => e.client_id === r.id).map((e) => ({ id: e.id, service: e.service, title: e.title, stage: e.stage, progress: e.progress, status: e.status, staffId: e.staff_id, startedAt: e.started_at, dueAt: e.due_at ?? undefined, fee: e.fee })),
-    documents: md.documents ?? [], messages: md.messages ?? [], appointments: md.appointments ?? [], invoices: parts.inv.get(r.id) ?? [], signatures: md.signatures ?? [],
+    documents: (md.documents ?? []).map((d) => (parts.files.has(`${r.id}/${d.id}`) && !d.hasFile ? { ...d, hasFile: true } : d)), messages: md.messages ?? [], appointments: md.appointments ?? [], invoices: parts.inv.get(r.id) ?? [], signatures: md.signatures ?? [],
     notes: parts.notes.filter((n) => n.client_id === r.id).map((n): Note => ({ id: n.id, authorId: n.author_id, body: n.body, at: n.at, service: n.service ?? undefined, pinned: !!n.pinned || undefined })),
     activity: parts.act.filter((x) => x.client_id === r.id).map((x) => ({ id: x.id, kind: x.kind, text: x.text, at: x.at, actor: x.actor })),
     rev: r.rev,

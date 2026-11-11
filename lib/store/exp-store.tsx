@@ -87,7 +87,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     logClient(c.clientId, `${c.number}: ${status}${note ? ` — ${note}` : ""}`, byId === "client" ? "client" : "staff");
   };
   const upload = (c: ExpCase, f: FileIn, category: string, name: string, by: "client" | "staff" = "staff") =>
-    clients().uploadDocument(c.clientId, { name, service: "expunge", category, sensitive: true, sizeKb: f.sizeKb, expMatterId: c.matterId, expCaseId: c.id, by });
+    clients().uploadDocument(c.clientId, { name, service: "expunge", category, sensitive: true, sizeKb: f.sizeKb, file: (f as { file?: File }).file, expMatterId: c.matterId, expCaseId: c.id, by });
 
   const a = {
     reset: () => dispatch({ type: "reset" }),
@@ -131,7 +131,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     },
     uploadId(matterId: string, f: FileIn, by: "client" | "staff") {
       const m = M(matterId);
-      const docId = clients().uploadDocument(m.clientId, { name: "Identification document", service: "expunge", category: "Identity", sensitive: true, sizeKb: f.sizeKb, expMatterId: matterId, by });
+      const docId = clients().uploadDocument(m.clientId, { name: "Identification document", service: "expunge", category: "Identity", sensitive: true, sizeKb: f.sizeKb, file: (f as { file?: File }).file, expMatterId: matterId, by });
       upM(matterId, (x) => ({ ...x, intake: { ...x.intake, idDoc: "received", idDocId: docId } }));
     },
     submitIntake(matterId: string, by: "client" | "staff") {
@@ -367,7 +367,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       const docIds: string[] = [];
       (o.files ?? []).forEach((f, i) => {
         const replaces = i === 0 ? it.docIds[0] : undefined;
-        docIds.push(clients().uploadDocument(m.clientId, { name: replaces ? it.label : f.name, service: "expunge", category: "Requested from client", sensitive: true, sizeKb: f.sizeKb, replaces, expMatterId: matterId, expCaseId: it.caseId, by: o.by }));
+        docIds.push(clients().uploadDocument(m.clientId, { name: replaces ? it.label : f.name, service: "expunge", category: "Requested from client", sensitive: true, sizeKb: f.sizeKb, file: (f as { file?: File }).file, replaces, expMatterId: matterId, expCaseId: it.caseId, by: o.by }));
       });
       upM(matterId, (x) => ({ ...x, info: x.info.map((i) => (i.id === infoId ? { ...i, status: "responded", response: o.response ?? i.response, docIds: [...new Set([...i.docIds, ...docIds])], respondedAt: nowIso() } : i)) }));
       if (o.response && o.by === "client") msg(m, `Re: ${it.label} — ${o.response}`, "client");

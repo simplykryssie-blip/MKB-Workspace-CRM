@@ -510,10 +510,16 @@ function DocumentsTab({ r, client, onAdd, onWaive }: { r: TaxReturn; client: Cli
               <div className="flex items-center gap-1">
                 {s === "needed" && <Button size="sm" variant="ghost" disabled={!can} onClick={() => { tax.requestItem(r.id, i.id); toast(`Requested: ${i.name}`); }}>Request</Button>}
                 {(s === "requested" || s === "rejected") && <Button size="sm" variant="ghost" disabled={!can} onClick={() => { tax.remindItem(r.id, i.id); toast("Reminder sent"); }}>Remind</Button>}
-                {["needed", "requested", "rejected"].includes(s) && <Button size="sm" variant="ghost" icon={FileUp} disabled={!can} onClick={() => { tax.receiveItem(r.id, i.id); toast(`Received: ${i.name}`); }}>Received</Button>}
+                {["needed", "requested", "rejected"].includes(s) && can && (
+                  <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-xl px-2.5 text-[13px] font-semibold text-ink-2 hover:bg-surface-hover" title="Upload the file">
+                    <FileUp size={15} />Upload
+                    <input type="file" className="sr-only" aria-label={`Upload ${i.name}`} onChange={(e) => { const f = e.target.files?.[0]; if (!f) return; tax.receiveItem(r.id, i.id, 0, f); toast(`Uploading ${i.name}…`); e.target.value = ""; }} />
+                  </label>
+                )}
+                {["needed", "requested", "rejected"].includes(s) && <Button size="sm" variant="ghost" disabled={!can} title="Received on paper or elsewhere — no file" onClick={() => { tax.receiveItem(r.id, i.id); toast(`Received: ${i.name}`); }}>Mark received</Button>}
                 {s === "received" && <Button size="sm" variant="ghost" icon={CheckCircle2} disabled={!can || locked} onClick={() => { tax.reviewItem(r.id, i.id, true); toast(`Reviewed: ${i.name}`); }}>Review</Button>}
                 {["received", "reviewed"].includes(s) && !i.archived && (
-                  <button aria-label={locked ? "Requires sensitive-document permission" : `Preview ${i.name}`} title={locked ? "Requires sensitive-document permission" : "Preview (logged)"} disabled={locked} onClick={() => { const c = i.docId; if (c) { toast("Opened sample preview — access logged"); } }} className="grid h-8 w-8 place-items-center rounded-lg text-muted hover:bg-surface-hover hover:text-ink disabled:opacity-30"><Eye size={15} /></button>
+                  <button aria-label={locked ? "Requires sensitive-document permission" : `Preview ${i.name}`} title={locked ? "Requires sensitive-document permission" : "Preview (logged)"} disabled={locked} onClick={() => { const d = i.docId ? client?.documents.find((x) => x.id === i.docId) : undefined; if (BACKEND && d?.hasFile) window.open(`/api/clients/${r.clientId}/files/${d.id}?inline=1`, "_blank", "noopener"); else toast(BACKEND ? "No file was uploaded for this item (marked received only)." : "Opened sample preview — access logged", "info"); }} className="grid h-8 w-8 place-items-center rounded-lg text-muted hover:bg-surface-hover hover:text-ink disabled:opacity-30"><Eye size={15} /></button>
                 )}
                 <Menu
                   label={`More for ${i.name}`}
