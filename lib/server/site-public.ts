@@ -40,16 +40,23 @@ const ICONS: Record<SiteKey, string> = {
 };
 const OG: Record<SiteKey, string> = { mkb: "/brand/mkb-seal-512.png", monarch: "/brand/monarch-icon-512.png" };
 
-const html = (body: string, status = 200) => new Response(body, { status, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff", "referrer-policy": "strict-origin-when-cross-origin" } });
+/**
+ * Website pages opened through the app's own address (/site/…, /msite/… on the CRM host —
+ * e.g. the editor's preview) run in a sandbox: their scripts get an opaque origin, so a
+ * page's HTML can never act with a signed-in staff member's session.
+ */
+const SANDBOX = "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation";
+const html = (body: string, status = 200, sandboxed = false) => new Response(body, { status, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff", "referrer-policy": "strict-origin-when-cross-origin", ...(sandboxed ? { "content-security-policy": SANDBOX } : {}) } });
 
 export async function serveSite(req: Request, site: SiteKey, slugParts?: string[]) {
   const slug = (slugParts ?? []).join("/").toLowerCase();
   const s = await load(site, slug).catch(() => null);
-  const prefix = (await ownHost(req, site)) ? "" : site === "monarch" ? "/msite" : "/site";
-  if (!s) return html(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Page not found</title>${ICONS[site]}</head><body style="font-family:Arial,sans-serif;text-align:center;padding:80px 20px"><h1 style="font:500 34px Georgia,serif">Page not found</h1><p>This page doesn't exist.</p><p><a href="${prefix || "/"}">Go to the home page</a></p></body></html>`, 404);
-  if (isHtmlPage(s.sections)) return html(preparePage(s.sections[0].html ?? "", prefix));
+  const own = await ownHost(req, site);
+  const prefix = own ? "" : site === "monarch" ? "/msite" : "/site";
+  if (!s) return html(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Page not found</title>${ICONS[site]}</head><body style="font-family:Arial,sans-serif;text-align:center;padding:80px 20px"><h1 style="font:500 34px Georgia,serif">Page not found</h1><p>This page doesn't exist.</p><p><a href="${prefix || "/"}">Go to the home page</a></p></body></html>`, 404, !own);
+  if (isHtmlPage(s.sections)) return html(preparePage(s.sections[0].html ?? "", prefix), 200, !own);
   const name = s.settings.siteName;
   const title = s.page.slug ? `${s.page.title} | ${name}` : `${name}${s.settings.tagline ? ` | ${s.settings.tagline}` : ""}`;
   const body = renderSectionsBody({ settings: s.settings, page: s.page, sections: s.sections, nav: s.nav, base: prefix, site, legal: s.legal });
-  return html(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${s.page.description ? `<meta name="description" content="${esc(s.page.description)}">` : ""}<meta property="og:title" content="${esc(s.page.title)}"><meta property="og:site_name" content="${esc(name)}"><meta property="og:image" content="${OG[site]}">${ICONS[site]}<style>body{margin:0}</style></head><body>${body}${body.includes("data-mkb-frame") ? WIDGET_SCRIPT : ""}</body></html>`);
+  return html(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${s.page.description ? `<meta name="description" content="${esc(s.page.description)}">` : ""}<meta property="og:title" content="${esc(s.page.title)}"><meta property="og:site_name" content="${esc(name)}"><meta property="og:image" content="${OG[site]}">${ICONS[site]}<style>body{margin:0}</style></head><body>${body}${body.includes("data-mkb-frame") ? WIDGET_SCRIPT : ""}</body></html>`, 200, !own);
 }
