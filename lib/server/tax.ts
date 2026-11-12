@@ -120,6 +120,7 @@ export function stampNew<T>(before: T[] | undefined, after: T[] | undefined, fn:
 export async function saveReturn(env: AppEnv, a: Actor, id: string, next: ReturnSnapshot) {
   requirePermission(a, "tax", "view");
   if (a.kind !== "staff") throw forbidden();
+  if (!next || typeof next !== "object") throw badRequest("Invalid return.");
   const cur = await load(env, a, id);
   if (next.rev !== cur.rev) throw new HttpError(409, "Someone else updated this return. Reloading the latest version.", "conflict");
   // New notes and status steps are recorded as the signed-in person, whatever the browser says.
