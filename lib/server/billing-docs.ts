@@ -14,6 +14,7 @@ import { audit, type Actor } from "./identity";
 import { buildInvoicePdf } from "./intake-pdf";
 import { notify } from "./notifications";
 import { monarchStripePaid } from "./monarch-sales";
+import { bookingPaid } from "./booking";
 import { loadFees } from "./settings";
 
 const usd = (c: number) => `$${dollars(c).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -138,6 +139,8 @@ export async function stripeWebhook(env: AppEnv, req: Request) {
   const s = evt.data.object;
   if (s.payment_status !== "paid") return { received: true };
   // Monarch Tax Suite sales are paid through the same Stripe account.
+  // Paid consultations booked online.
+  if (s.metadata?.appointment_id) return bookingPaid(env, s.metadata.appointment_id, s.amount_total ?? 0, s.payment_intent ?? s.id);
   if (s.metadata?.monarch_sale_id) return monarchStripePaid(env, s.metadata.monarch_sale_id, s.amount_total ?? 0, s.payment_intent ?? s.id);
   const id = s.metadata?.invoice_id;
   const r = id ? await one<InvoiceRow>(env.DB, "SELECT * FROM invoices WHERE id = ?", id) : null;

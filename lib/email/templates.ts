@@ -6,7 +6,7 @@
  * document contents in an email.
  */
 
-export type TemplateKey = "tax_intake_received" | "tax_document_reminder" | "tax_document_request" | "tax_extension_filed" | "invoice_sent" | "books_intake_received" | "books_intake_link" | "books_proposal" | "books_proposal_signed" | "tax_interview_link" | "portal_invite" | "portal_message" | "books_items" | "books_reminder" | "books_reports_ready" | "service_intake_link" | "service_intake_received";
+export type TemplateKey = "tax_intake_received" | "tax_document_reminder" | "tax_document_request" | "tax_extension_filed" | "invoice_sent" | "books_intake_received" | "books_intake_link" | "books_proposal" | "books_proposal_signed" | "tax_interview_link" | "portal_invite" | "portal_message" | "books_items" | "books_reminder" | "books_reports_ready" | "service_intake_link" | "service_intake_received" | "booking_confirmed" | "booking_reminder" | "booking_changed" | "booking_cancelled";
 
 export type EmailWording = {
   subject: string;
@@ -262,6 +262,62 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
     steps: "",
     button: "Upload in your portal",
     closing: "Questions? Reply through your portal or call us at 833-379-3320.",
+  },
+  booking_confirmed: {
+    key: "booking_confirmed",
+    name: "Appointment confirmed",
+    when: "Sent when someone books online (after payment, for paid appointments) or when staff schedule an appointment and leave “Email them” ticked. A calendar invite is attached.",
+    placeholders: ["firstName", "typeName", "when", "where", "staffName", "paid"],
+    subject: "You're booked: {{typeName}} on {{when}}",
+    heading: "You're all set, {{firstName}}.",
+    intro: "Your {{typeName}} with {{staffName}} is confirmed for {{when}}. {{paid}}",
+    docsTitle: "Appointment details",
+    docsNote: "A calendar invite is attached — add it to your calendar so you don't miss it.",
+    steps: "",
+    button: "Reschedule or cancel",
+    closing: "Questions before we meet? Call us at 833-379-3320. Please don't email tax documents or your Social Security number.",
+  },
+  booking_reminder: {
+    key: "booking_reminder",
+    name: "Appointment reminder",
+    when: "Sent automatically before an appointment (24 hours and 1 hour before, by default — change it in Calendar → Booking settings).",
+    placeholders: ["firstName", "typeName", "when", "where", "staffName"],
+    subject: "Reminder: {{typeName}} on {{when}}",
+    heading: "See you soon, {{firstName}}.",
+    intro: "This is a reminder of your {{typeName}} with {{staffName}} on {{when}}.",
+    docsTitle: "Appointment details",
+    docsNote: "",
+    steps: "",
+    button: "Reschedule or cancel",
+    closing: "Running late or need to change the time? Call us at 833-379-3320.",
+  },
+  booking_changed: {
+    key: "booking_changed",
+    name: "Appointment moved",
+    when: "Sent when an appointment's time changes (rescheduled by the client online, or moved by staff with “Email them” ticked). An updated calendar invite is attached.",
+    placeholders: ["firstName", "typeName", "when", "where", "staffName"],
+    subject: "New time: {{typeName}} on {{when}}",
+    heading: "Your appointment has a new time, {{firstName}}.",
+    intro: "Your {{typeName}} with {{staffName}} is now {{when}}.",
+    docsTitle: "Appointment details",
+    docsNote: "An updated calendar invite is attached.",
+    steps: "",
+    button: "Reschedule or cancel",
+    closing: "Questions? Call us at 833-379-3320.",
+  },
+  booking_cancelled: {
+    key: "booking_cancelled",
+    name: "Appointment cancelled",
+    when: "Sent when an appointment is cancelled (by the client online, or by staff with “Email them” ticked).",
+    placeholders: ["firstName", "typeName", "when", "staffName"],
+    subject: "Cancelled: {{typeName}} on {{when}}",
+    heading: "Your appointment is cancelled, {{firstName}}.",
+    intro: "Your {{typeName}} with {{staffName}} on {{when}} has been cancelled.",
+    docsTitle: "",
+    docsNote: "",
+    steps: "",
+    button: "Book a new time",
+    closing: "Paid for this appointment? We'll be in touch about your refund. Questions? Call us at 833-379-3320.",
   },
 };
 

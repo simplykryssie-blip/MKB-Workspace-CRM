@@ -733,14 +733,14 @@ pages["contact"] = page("Contact | MKB Financial Group", "Have a question for MK
 <div class="formbox"><div data-mkb-widget="form" data-form="contact"></div></div></div></section>''')
 
 
-pages["book-consultation"] = page("Book a Consultation | MKB Financial Group", "Request a consultation with MKB Financial Group. Tell us when works for you and we'll reach out within one business day to confirm a time.",
-  hero2("Book a Consultation", f"Let’s find a time to {gold('talk.')}", "Schedule a call to discuss our services and what your business needs. Tell us what you’d like to talk about and when works best — we’ll reach out within one business day to confirm your consultation time.",
-        btn("Request my consultation", "#request") + f'<a class="btn-outline" href="tel:8333793320">Call {PHONE}</a>', "founder-headshot.webp", tag=("Phone or video", "Louisiana, Texas and virtual clients."))
+pages["book-consultation"] = page("Book a Consultation | MKB Financial Group", "Book a consultation with MKB Financial Group online. Choose a time that works for you and get an instant confirmation.",
+  hero2("Book a Consultation", f"Let’s find a time to {gold('talk.')}", "Pick a day and time that works for you and you’re booked instantly — you’ll get a confirmation email with a calendar invite right away. It’s a call to discuss your business and the MKB services that fit.",
+        btn("Choose a time", "#book") + f'<a class="btn-outline" href="tel:8333793320">Call {PHONE}</a>', "founder-headshot.webp", tag=("Phone or video", "Louisiana, Texas and virtual clients."))
   + f'''<section class="sec dark2"><div class="wrap split" style="align-items:start"><div>{head("What to expect", "Three simple steps.", "No obligation — the consultation is a call to discuss your business and the MKB services that fit.")}<p class="lead">Just have a quick question? <a href="/contact" style="color:#E8C46B;font-weight:600">Send us a message instead →</a></p></div>
-<div>{lines([("01", "Send your request", "Choose what you’d like to talk about and the days and times that work for you."), ("02", "We confirm a time", "We reach out by phone or email within one business day to confirm your consultation."), ("03", "Meet with MKB", "We talk through your business, answer your questions and recommend next steps.")])}</div></div></section>
-<section class="sec cream on-light" id="request"><div class="wrap">{head("Request a consultation", "When works for you?", f"Prefer to call? {PHONE} · {EMAIL}", center=True)}
-<div class="formbox"><div data-mkb-widget="form" data-form="consultation-request"></div></div>
-<p class="note center">Please don’t include Social Security numbers, account numbers or case details here — we’ll collect anything sensitive securely in your client portal.</p></div></section>''')
+<div>{lines([("01", "Choose a time", "Pick the kind of appointment and a day and time that work for you."), ("02", "Get your confirmation", "You’re booked instantly. We email a calendar invite — with your video link for video calls — and a link to reschedule if plans change."), ("03", "Meet with MKB", "We talk through your business, answer your questions and recommend next steps.")])}</div></div></section>
+<section class="sec cream on-light" id="book"><div class="wrap">{head("Book online", "When works for you?", f"Prefer to call? {PHONE} · {EMAIL}", center=True)}
+<div class="formbox"><div data-mkb-widget="booking" data-brand="mkb" data-type="apt-consult"></div></div>
+<p class="note center">Please don’t include Social Security numbers, account numbers or case details when booking — we’ll collect anything sensitive securely in your client portal.</p></div></section>''')
 
 
 START = [("tax", "Tax preparation", "tax", "start-tax-prep", "We email you a private link to your secure tax interview."),

@@ -51,9 +51,11 @@ export function ApptDialog({ draft, types, members, meId, canAll, onClose, onSav
   const [v, setV] = useState<ApptDraft | null>(draft);
   const [date, setDate] = useState(""), [time, setTime] = useState(""), [dur, setDur] = useState(30);
   const [busy, setBusy] = useState(false);
+  const [notify, setNotify] = useState(true);
   useEffect(() => {
     setV(draft);
     if (draft) {
+      setNotify(!draft.id || !!draft.guestEmail);
       const st = draft.startsAt ? new Date(draft.startsAt) : new Date(Math.ceil(Date.now() / 1800e3) * 1800e3);
       setDate(localDate(st)); setTime(localTime(st));
       setDur(draft.startsAt && draft.endsAt ? Math.round((Date.parse(draft.endsAt) - Date.parse(draft.startsAt)) / 60e3) : draft.kind === "block" ? 60 : 30);
@@ -69,20 +71,28 @@ export function ApptDialog({ draft, types, members, meId, canAll, onClose, onSav
     setBusy(true);
     try {
       const startsAt = toIso(date, time);
-      const r = await call<{ clashes: string[] }>("POST", "/api/calendar/appointments", { ...v, startsAt, endsAt: new Date(Date.parse(startsAt) + dur * 60e3).toISOString(), memberId: v.memberId ?? meId });
-      toast(r.clashes.length ? `Saved — note: overlaps ${r.clashes[0]}` : isNew ? (block ? "Time blocked" : "Appointment added") : "Saved", r.clashes.length ? "info" : undefined);
+      const endsAt = new Date(Date.parse(startsAt) + dur * 60e3).toISOString();
+      const moved = !isNew && (startsAt !== v.startsAt || endsAt !== v.endsAt);
+      const tell = !block && !!v.contact && notify && (isNew || moved);
+      const r = await call<{ clashes: string[] }>("POST", "/api/calendar/appointments", { ...v, startsAt, endsAt, memberId: v.memberId ?? meId, notify: tell });
+      toast(r.clashes.length ? `Saved — note: overlaps ${r.clashes[0]}` : isNew ? (block ? "Time blocked" : tell ? "Appointment added — confirmation sent" : "Appointment added") : tell ? "Saved — new time sent to them" : "Saved", r.clashes.length ? "info" : undefined);
       onSaved();
     } catch (e) { toast(e instanceof Error ? e.message : "Couldn't save", "info"); }
     setBusy(false);
   };
   const status = async (s: Appt["status"]) => {
-    try { await call("POST", `/api/calendar/appointments/${v.id}/status`, { status: s }); toast(`Marked ${STATUS_LABEL[s].toLowerCase()}`); onSaved(); } catch (e) { toast(e instanceof Error ? e.message : "Couldn't update", "info"); }
+    const tell = s === "cancelled" && !!v.guestEmail && window.confirm(`Email ${v.guestEmail} that it's cancelled?`);
+    try { await call("POST", `/api/calendar/appointments/${v.id}/status`, { status: s, notify: tell }); toast(`Marked ${STATUS_LABEL[s].toLowerCase()}`); onSaved(); } catch (e) { toast(e instanceof Error ? e.message : "Couldn't update", "info"); }
   };
   const remove = async () => {
     if (!window.confirm(block ? "Remove this time block?" : "Delete this appointment?")) return;
     try { await call("DELETE", `/api/calendar/appointments/${v.id}`); onSaved(); } catch (e) { toast(e instanceof Error ? e.message : "Couldn't delete", "info"); }
   };
   const href = contactHref(v.contact ?? null);
+  const resend = async () => {
+    try { const r = await call<{ to: string }>("POST", `/api/calendar/appointments/${v.id}/confirm`); toast(`Confirmation sent to ${r.to}`); onSaved(); } catch (e) { toast(e instanceof Error ? e.message : "Couldn't send", "info"); }
+  };
+  const PAY = { pending: "Waiting for payment", paid: "Paid", refunded: "Refunded", none: "" } as const;
   return (
     <Modal open onClose={onClose} size="lg" title={isNew ? (block ? "Block time" : "New appointment") : block ? "Time block" : v.title ?? "Appointment"}
       description={!isNew && !block && v.status !== "scheduled" ? `Status: ${STATUS_LABEL[v.status!]}` : undefined}
@@ -101,9 +111,18 @@ export function ApptDialog({ draft, types, members, meId, canAll, onClose, onSav
         <div className="grid grid-cols-2 gap-3"><TextField label="Start" type="time" value={time} onChange={(e) => setTime(e.target.value)} /><SelectField label="Length" value={String(dur)} onChange={(e) => setDur(Number(e.target.value))} options={[15, 30, 45, 60, 90, 120, 180, 240, 480].concat([dur]).filter((x, i, a) => a.indexOf(x) === i).sort((a, b) => a - b).map((m) => [String(m), m < 60 ? `${m} min` : `${m / 60} hr${m > 60 ? "s" : ""}`] as [string, string])} /></div>
         <SelectField label="Calendar" value={v.memberId ?? meId} onChange={(e) => set({ memberId: e.target.value })} options={members.filter((m) => canAll || m.id === meId || m.id === v.memberId).map((m) => [m.id, m.me ? `${m.name} (me)` : m.name] as [string, string])} />
         {!block && <SelectField label="Where" value={v.location ?? "video"} onChange={(e) => set({ location: e.target.value as Appt["location"] })} options={Object.entries(LOCATIONS)} />}
-        {!block && <div className="sm:col-span-2"><TextField label={v.location === "in_person" ? "Address" : v.location === "phone" ? "Phone details" : "Video link (Zoom links will be added automatically in the next step)"} value={v.locationNote ?? ""} onChange={(e) => set({ locationNote: e.target.value })} /></div>}
+        {!block && v.location === "video" && v.meetingUrl && <p className="text-[13px] sm:col-span-2"><span className="font-medium text-ink-2">Zoom: </span><a href={v.meetingUrl} target="_blank" rel="noopener noreferrer" className="break-all font-semibold text-accent">{v.meetingUrl}</a></p>}
+        {!block && <div className="sm:col-span-2"><TextField label={v.location === "in_person" ? "Address" : v.location === "phone" ? "Phone details" : "Other video link (optional — a Zoom link is made automatically when Zoom is connected)"} value={v.locationNote ?? ""} onChange={(e) => set({ locationNote: e.target.value })} /></div>}
         <label className="block sm:col-span-2"><span className="mb-1.5 block text-[13px] font-medium text-ink-2">Notes</span><textarea rows={3} value={v.notes ?? ""} onChange={(e) => set({ notes: e.target.value })} className={area} /></label>
-        {href && <p className="text-[13px] sm:col-span-2"><a href={href} className="font-semibold text-accent">Open {v.contact!.name}&rsquo;s record →</a></p>}
+        {!isNew && !block && (v.guestEmail || v.source === "booking" || (v.paymentStatus && v.paymentStatus !== "none")) && (
+          <div className="rounded-xl border border-line bg-surface-2 px-3 py-2.5 text-[13px] text-ink-2 sm:col-span-2">
+            {v.source === "booking" && <p className="font-semibold text-ink">Booked online</p>}
+            {v.guestEmail && <p>Emails go to {v.guestEmail}{v.guestPhone ? ` · ${v.guestPhone}` : ""}</p>}
+            {v.paymentStatus && v.paymentStatus !== "none" && <p>{PAY[v.paymentStatus]}{v.priceCents ? ` · $${(v.priceCents / 100).toFixed(2)}` : ""}</p>}
+          </div>
+        )}
+        {!block && v.contact && editable && v.status !== "cancelled" && <label className="flex items-start gap-2 text-[13.5px] text-ink sm:col-span-2"><input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} className="mt-0.5 h-4 w-4 accent-[var(--accent)]" /><span>Email them {isNew ? "a confirmation" : "if the time changes"}, with a calendar invite{v.location === "video" ? " and the Zoom link" : ""}, and send reminders</span></label>}
+        {href && <p className="flex flex-wrap items-center gap-3 text-[13px] sm:col-span-2"><a href={href} className="font-semibold text-accent">Open {v.contact!.name}&rsquo;s record →</a>{!isNew && editable && v.status === "scheduled" && <button type="button" onClick={() => void resend()} className="font-semibold text-accent">Email the confirmation again</button>}</p>}
       </fieldset>
     </Modal>
   );
@@ -173,11 +192,11 @@ export function TypesDialog({ open, types, members, meId, canSettings, onClose, 
   };
   const color = async (c: string) => { try { await call("PUT", "/api/calendar/me", { color: c }); onSaved(); } catch (e) { toast(e instanceof Error ? e.message : "Couldn't save", "info"); } };
   return (
-    <Modal open={open} onClose={onClose} size="lg" title="Calendar settings" description="Appointment types are shared by MKB and Monarch. Prices and online booking are used by booking pages (coming next).">
+    <Modal open={open} onClose={onClose} size="lg" title="Calendar settings" description="Appointment types are shared by MKB and Monarch. Types offered for online booking appear on the booking page of their business.">
       <div className="space-y-5">
         <div><p className="mb-2 text-[13px] font-medium text-ink-2">My calendar color</p><div className="flex flex-wrap gap-2">{COLORS.map((c) => <button key={c} type="button" aria-label={`Color ${c}`} onClick={() => void color(c)} className={`h-8 w-8 rounded-full border-2 ${me?.color === c ? "border-ink" : "border-transparent"}`} style={{ background: c }} />)}</div></div>
         <div>
-          <div className="mb-2 flex items-center justify-between"><p className="text-[13px] font-medium text-ink-2">Appointment types</p>{canSettings && <Button size="sm" icon={Plus} onClick={() => setEdit({ name: "", brand: "mkb", service: "other", durationMin: 30, location: "video", locationNote: "", color: COLORS[1], priceCents: 0, bufferMin: 15, description: "", bookable: true, active: true })}>New type</Button>}</div>
+          <div className="mb-2 flex items-center justify-between"><p className="text-[13px] font-medium text-ink-2">Appointment types</p>{canSettings && <Button size="sm" icon={Plus} onClick={() => setEdit({ name: "", brand: "mkb", service: "other", durationMin: 30, location: "video", locationNote: "", color: COLORS[1], priceCents: 0, bufferMin: 15, description: "", bookable: true, active: true, memberIds: [] })}>New type</Button>}</div>
           <ul className="divide-y divide-line rounded-xl border border-line">
             {types.map((t) => (
               <li key={t.id} className="flex flex-wrap items-center gap-3 px-3 py-2.5">
@@ -195,12 +214,16 @@ export function TypesDialog({ open, types, members, meId, canSettings, onClose, 
           <SelectField label="Business" value={edit.brand ?? "mkb"} onChange={(e) => setEdit({ ...edit, brand: e.target.value as ApptType["brand"] })} options={[["mkb", "MKB Financial Group"], ["monarch", "Monarch Tax Suite"]]} />
           <SelectField label="Service" value={edit.service ?? "other"} onChange={(e) => setEdit({ ...edit, service: e.target.value })} options={Object.entries(SERVICES)} />
           <TextField label="Length (minutes)" type="number" value={String(edit.durationMin ?? 30)} onChange={(e) => setEdit({ ...edit, durationMin: Number(e.target.value) })} />
-          <TextField label="Break after (minutes)" type="number" value={String(edit.bufferMin ?? 0)} onChange={(e) => setEdit({ ...edit, bufferMin: Number(e.target.value) })} />
+          <TextField label="Break before & after (minutes)" type="number" value={String(edit.bufferMin ?? 0)} onChange={(e) => setEdit({ ...edit, bufferMin: Number(e.target.value) })} />
           <SelectField label="Where" value={edit.location ?? "video"} onChange={(e) => setEdit({ ...edit, location: e.target.value as ApptType["location"] })} options={Object.entries(LOCATIONS)} />
           <TextField label="Price ($ — 0 for free)" type="number" value={String((edit.priceCents ?? 0) / 100)} onChange={(e) => setEdit({ ...edit, priceCents: Math.round(Number(e.target.value) * 100) })} />
           <div className="sm:col-span-2"><TextField label={edit.location === "in_person" ? "Address" : "Location details (optional)"} value={edit.locationNote ?? ""} onChange={(e) => setEdit({ ...edit, locationNote: e.target.value })} /></div>
           <div className="sm:col-span-2"><TextField label="Description (shown when booking)" value={edit.description ?? ""} onChange={(e) => setEdit({ ...edit, description: e.target.value })} /></div>
           <div className="sm:col-span-2"><p className="mb-1.5 text-[13px] font-medium text-ink-2">Color</p><div className="flex flex-wrap gap-2">{COLORS.map((c) => <button key={c} type="button" aria-label={`Color ${c}`} onClick={() => setEdit({ ...edit, color: c })} className={`h-7 w-7 rounded-full border-2 ${edit.color === c ? "border-ink" : "border-transparent"}`} style={{ background: c }} />)}</div></div>
+          {edit.bookable !== false && <div className="sm:col-span-2"><p className="mb-1.5 text-[13px] font-medium text-ink-2">Who can be booked for it</p><div className="flex flex-wrap gap-x-4 gap-y-1.5">
+            <label className="flex items-center gap-2 text-[14px] text-ink"><input type="checkbox" checked={!(edit.memberIds ?? []).length} onChange={() => setEdit({ ...edit, memberIds: [] })} className="h-4 w-4 accent-[var(--accent)]" />Anyone taking bookings</label>
+            {members.map((m) => <label key={m.id} className="flex items-center gap-2 text-[14px] text-ink"><input type="checkbox" checked={(edit.memberIds ?? []).includes(m.id)} onChange={(e) => setEdit({ ...edit, memberIds: e.target.checked ? [...(edit.memberIds ?? []), m.id] : (edit.memberIds ?? []).filter((x) => x !== m.id) })} className="h-4 w-4 accent-[var(--accent)]" />{m.name}</label>)}
+          </div><p className="mt-1 text-[12px] text-muted">Each person sets their hours in Settings → My booking hours.</p></div>}
           <label className="flex items-center gap-2 text-[14px] text-ink"><input type="checkbox" checked={edit.bookable !== false} onChange={(e) => setEdit({ ...edit, bookable: e.target.checked })} className="h-4 w-4 accent-[var(--accent)]" />Offer for online booking</label>
           <label className="flex items-center gap-2 text-[14px] text-ink"><input type="checkbox" checked={edit.active !== false} onChange={(e) => setEdit({ ...edit, active: e.target.checked })} className="h-4 w-4 accent-[var(--accent)]" />Active</label>
         </div>}

@@ -7,6 +7,7 @@
  *   <div data-mkb-widget="form" data-form="tax-calculator" data-after="/calculator"></div>
  *   <div data-mkb-widget="monarch-contact"></div>
  *   <div data-mkb-widget="wisp" data-next="/wisp-next-steps"></div>
+ *   <div data-mkb-widget="booking" data-brand="mkb" data-type="apt-consult"></div>
  *
  * Each tag becomes a small frame (/w/...) that sizes itself to its content.
  * Shared by the public pages and the editor's preview.
@@ -28,6 +29,11 @@ function widgetSrc(tag: string, prefix: string): { src: string; title: string } 
     if (!slug) return null;
     const after = go(safePath(attr(tag, "data-after")));
     return { src: `/w/form/${slug}${after ? `?after=${encodeURIComponent(after)}` : ""}`, title: "Contact form" };
+  }
+  if (kind === "booking") {
+    const brand = attr(tag, "data-brand").toLowerCase() === "monarch" ? "monarch" : "mkb";
+    const type = attr(tag, "data-type").replace(/[^A-Za-z0-9_-]/g, "");
+    return { src: `/w/book?embed=1&brand=${brand}${type ? `&type=${encodeURIComponent(type)}` : ""}`, title: "Book an appointment" };
   }
   if (kind === "monarch-contact") return { src: "/w/monarch-contact", title: "Contact form" };
   if (kind === "wisp") {

@@ -11,6 +11,7 @@ import { all, badRequest, HttpError, json, notFound, now, one, run, type AppEnv 
 import { randomId } from "./crypto";
 import { audit, requirePermission, requireStaff, type Actor } from "./identity";
 import { canDo } from "@/lib/team/policy";
+import { afterStaffCancel, afterStaffSave } from "./booking";
 
 type Staff = Extract<Actor, { kind: "staff" }>;
 const canAll = (a: Staff) => canDo(a.policy, a.member, "communication", "assign");
@@ -21,11 +22,11 @@ const BRANDS = ["mkb", "monarch"], LOCS = ["video", "phone", "in_person"], SVCS 
 const pick = <T extends string>(v: unknown, list: readonly string[], d: T) => (typeof v === "string" && list.includes(v) ? (v as T) : d);
 
 /* ================================================================ rows */
-type TypeRow = { id: string; name: string; brand: string; service: string; duration_min: number; location: string; location_note: string; color: string; price_cents: number; buffer_min: number; description: string; bookable: number; active: number; position: number };
-const toType = (r: TypeRow): ApptType => ({ id: r.id, name: r.name, brand: r.brand as ApptType["brand"], service: r.service, durationMin: r.duration_min, location: r.location as ApptType["location"], locationNote: r.location_note, color: r.color, priceCents: r.price_cents, bufferMin: r.buffer_min, description: r.description, bookable: !!r.bookable, active: !!r.active, position: r.position });
-type ApptRow = { id: string; kind: string; type_id: string | null; title: string; brand: string; service: string; member_id: string; starts_at: string; ends_at: string; location: string; location_note: string; contact_type: string | null; contact_id: string | null; contact_name: string; status: string; notes: string; source: string; created_by: string | null; rev: number };
+type TypeRow = { id: string; name: string; brand: string; service: string; duration_min: number; location: string; location_note: string; color: string; price_cents: number; buffer_min: number; description: string; bookable: number; active: number; position: number; member_ids: string };
+const toType = (r: TypeRow): ApptType => ({ id: r.id, name: r.name, brand: r.brand as ApptType["brand"], service: r.service, durationMin: r.duration_min, location: r.location as ApptType["location"], locationNote: r.location_note, color: r.color, priceCents: r.price_cents, bufferMin: r.buffer_min, description: r.description, bookable: !!r.bookable, active: !!r.active, position: r.position, memberIds: json<string[]>(r.member_ids ?? "[]", []) });
+type ApptRow = { id: string; kind: string; type_id: string | null; title: string; brand: string; service: string; member_id: string; starts_at: string; ends_at: string; location: string; location_note: string; contact_type: string | null; contact_id: string | null; contact_name: string; status: string; notes: string; source: string; created_by: string | null; rev: number; guest_email: string; guest_phone: string; meeting_url: string; price_cents: number; payment_status: string; hold_until: string | null };
 const contactOf = (t: string | null, id: string | null, name: string): Contact | null => (t && id ? { type: t as Contact["type"], id, name } : null);
-const toAppt = (r: ApptRow): Appt => ({ id: r.id, kind: r.kind as Appt["kind"], typeId: r.type_id ?? undefined, title: r.title, brand: r.brand as Appt["brand"], service: r.service, memberId: r.member_id, startsAt: r.starts_at, endsAt: r.ends_at, location: r.location as Appt["location"], locationNote: r.location_note, contact: contactOf(r.contact_type, r.contact_id, r.contact_name), status: r.status as Appt["status"], notes: r.notes, source: r.source, rev: r.rev });
+const toAppt = (r: ApptRow): Appt => ({ id: r.id, kind: r.kind as Appt["kind"], typeId: r.type_id ?? undefined, title: r.title, brand: r.brand as Appt["brand"], service: r.service, memberId: r.member_id, startsAt: r.starts_at, endsAt: r.ends_at, location: r.location as Appt["location"], locationNote: r.location_note, contact: contactOf(r.contact_type, r.contact_id, r.contact_name), status: r.status as Appt["status"], notes: r.notes, source: r.source, rev: r.rev, guestEmail: r.guest_email ?? "", guestPhone: r.guest_phone ?? "", meetingUrl: r.meeting_url ?? "", priceCents: r.price_cents ?? 0, paymentStatus: (r.payment_status ?? "none") as Appt["paymentStatus"] });
 type TaskRow = { id: string; title: string; notes: string; due_at: string | null; all_day: number; priority: string; status: string; done_at: string | null; assignee_id: string; brand: string; service: string; contact_type: string | null; contact_id: string | null; contact_name: string; checklist: string; repeat: string; created_by: string | null; rev: number };
 const toTask = (r: TaskRow): Task => ({ id: r.id, title: r.title, notes: r.notes, dueAt: r.due_at ?? undefined, allDay: !!r.all_day, priority: r.priority as Task["priority"], status: r.status as Task["status"], doneAt: r.done_at ?? undefined, assigneeId: r.assignee_id, brand: r.brand as Task["brand"], service: r.service, contact: contactOf(r.contact_type, r.contact_id, r.contact_name), checklist: json(r.checklist, []), repeat: r.repeat as Task["repeat"], rev: r.rev });
 
@@ -138,15 +139,18 @@ export async function saveAppointment(env: AppEnv, a: Actor, b: Record<string, u
     if (v.kind === "appointment") await timeline(env, v.contact, `Appointment scheduled for ${when(v.startsAt)}: “${v.title}”`, a);
   }
   await audit(env.DB, a, { action: "Record update", resource: `Calendar ${v.kind} ${id}`, meta: existing ? "Updated" : "Created" });
+  // Zoom link, confirmation email and invite (when "Email them" is ticked).
+  if (v.kind === "appointment" && v.status === "scheduled") await afterStaffSave(env, id!, { isNew: !existing, moved: !!existing && (existing.starts_at !== v.startsAt || existing.ends_at !== v.endsAt), notify: b.notify === true }).catch((e) => console.error("after save", e));
   return { appointment: toAppt((await one<ApptRow>(env.DB, "SELECT * FROM appointments WHERE id = ?", id))!), clashes: clash.map((c) => `${c.title} at ${when(c.starts_at)}`) };
 }
-export async function setAppointmentStatus(env: AppEnv, a: Actor, id: string, b: { status?: unknown }) {
+export async function setAppointmentStatus(env: AppEnv, a: Actor, id: string, b: { status?: unknown; notify?: unknown }) {
   requirePermission(a, "communication", "edit");
   requireStaff(a);
   const r = await apptRow(env, id);
   if (!mayEdit(a, r.member_id, r.created_by)) throw new HttpError(403, "You can only change appointments on your own calendar.", "forbidden");
-  const status = pick(b.status, ["scheduled", "completed", "cancelled", "no_show"], "scheduled");
+  const status = pick<Appt["status"]>(b.status, ["scheduled", "completed", "cancelled", "no_show"], "scheduled");
   await run(env.DB, "UPDATE appointments SET status = ?, updated_at = ?, rev = rev + 1 WHERE id = ?", status, now(), id);
+  if (status === "cancelled" && r.status === "scheduled") await afterStaffCancel(env, id, b.notify === true).catch((e) => console.error("after cancel", e));
   const word = { scheduled: "Back on the calendar", completed: "Completed", cancelled: "Cancelled", no_show: "Marked no-show" }[status];
   await timeline(env, contactOf(r.contact_type, r.contact_id, r.contact_name), `${word}: “${r.title}” (${when(r.starts_at)})`, a);
   return { appointment: toAppt((await apptRow(env, id))) };
@@ -251,10 +255,10 @@ export async function saveType(env: AppEnv, a: Actor, b: Record<string, unknown>
   const color = /^#[0-9a-f]{6}$/i.test(s(b.color, 7)) ? s(b.color, 7) : "#b87912";
   const t = now();
   const id = typeof b.id === "string" && b.id ? b.id : randomId("apt");
-  await run(env.DB, `INSERT INTO appointment_types (id, name, brand, service, duration_min, location, location_note, color, price_cents, buffer_min, description, bookable, active, position, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, coalesce((SELECT max(position) + 1 FROM appointment_types), 0), ?, ?)
-    ON CONFLICT(id) DO UPDATE SET name = excluded.name, brand = excluded.brand, service = excluded.service, duration_min = excluded.duration_min, location = excluded.location, location_note = excluded.location_note, color = excluded.color, price_cents = excluded.price_cents, buffer_min = excluded.buffer_min, description = excluded.description, bookable = excluded.bookable, active = excluded.active, updated_at = excluded.updated_at`,
-    id, name, pick(b.brand, BRANDS, "mkb"), pick(b.service, SVCS, "other"), dur, pick(b.location, LOCS, "video"), s(b.locationNote, 300), color, price, Math.max(0, Math.min(120, Math.round(Number(b.bufferMin) || 0))), s(b.description, 600), b.bookable === false ? 0 : 1, b.active === false ? 0 : 1, t, t);
+  await run(env.DB, `INSERT INTO appointment_types (id, name, brand, service, duration_min, location, location_note, color, price_cents, buffer_min, description, bookable, active, member_ids, position, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, coalesce((SELECT max(position) + 1 FROM appointment_types), 0), ?, ?)
+    ON CONFLICT(id) DO UPDATE SET name = excluded.name, brand = excluded.brand, service = excluded.service, duration_min = excluded.duration_min, location = excluded.location, location_note = excluded.location_note, color = excluded.color, price_cents = excluded.price_cents, buffer_min = excluded.buffer_min, description = excluded.description, bookable = excluded.bookable, active = excluded.active, member_ids = excluded.member_ids, updated_at = excluded.updated_at`,
+    id, name, pick(b.brand, BRANDS, "mkb"), pick(b.service, SVCS, "other"), dur, pick(b.location, LOCS, "video"), s(b.locationNote, 300), color, price, Math.max(0, Math.min(120, Math.round(Number(b.bufferMin) || 0))), s(b.description, 600), b.bookable === false ? 0 : 1, b.active === false ? 0 : 1, JSON.stringify((Array.isArray(b.memberIds) ? b.memberIds : []).filter((x): x is string => typeof x === "string").slice(0, 50)), t, t);
   await audit(env.DB, a, { action: "Record update", resource: `Appointment type ${name}` });
   return { types: (await all<TypeRow>(env.DB, "SELECT * FROM appointment_types ORDER BY active DESC, position, name")).map(toType) };
 }

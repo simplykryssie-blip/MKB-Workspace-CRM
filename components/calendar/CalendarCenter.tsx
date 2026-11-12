@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarClock, CalendarPlus, ChevronLeft, ChevronRight, ClipboardCheck, ListTodo, Lock, Plus, Settings2, UserRound } from "lucide-react";
+import { CalendarClock, CalendarPlus, ChevronLeft, ChevronRight, ClipboardCheck, Globe, ListTodo, Lock, Plus, Settings2, UserRound } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -13,6 +13,7 @@ import { useTeam } from "@/lib/store/team-store";
 import { BACKEND, call } from "@/lib/sync/remote";
 import { PRIORITIES, type Appt, type ApptType, type CalMember, type FollowUp, type Task } from "@/lib/calendar/config";
 import { ApptDialog, TaskDialog, TypesDialog, localDate, type ApptDraft } from "./CalendarDialogs";
+import { BookingSettingsDialog, HoursDialog } from "./BookingDialogs";
 
 type View = "day" | "week" | "month" | "tasks";
 type Data = { appointments: Appt[]; tasks: Task[]; followUps: FollowUp[]; types: ApptType[]; members: CalMember[]; selected: string[]; canAll: boolean; meId: string };
@@ -45,6 +46,8 @@ export function CalendarCenter() {
   const [appt, setAppt] = useState<ApptDraft | null>(null);
   const [task, setTask] = useState<Partial<Task> | null>(null);
   const [settings, setSettings] = useState(false);
+  const [hours, setHours] = useState(false);
+  const [booking, setBooking] = useState(false);
   const [from, to] = useMemo(() => range(view, cur), [view, cur]);
   const load = useCallback(() => {
     if (!BACKEND) return;
@@ -82,7 +85,8 @@ export function CalendarCenter() {
     <>
       <PageHeader title="Calendar" subtitle="Appointments, time blocks and tasks — MKB and Monarch together. Each staff member has their own calendar."
         actions={<div className="flex flex-wrap gap-2">
-          <Button icon={Settings2} onClick={() => setSettings(true)}>Settings</Button>
+          <Menu label="Settings" trigger={({ toggle }) => <Button icon={Settings2} onClick={toggle}>Settings</Button>}
+            items={[{ label: "My booking hours", icon: CalendarClock, onSelect: () => setHours(true) }, { label: "Online booking & Zoom", icon: Globe, onSelect: () => setBooking(true) }, { label: "Appointment types & colors", icon: Settings2, onSelect: () => setSettings(true) }]} />
           {canEdit && <Menu label="New" trigger={({ toggle }) => <Button variant="primary" icon={Plus} onClick={toggle}>New</Button>}
             items={[{ label: "Appointment", icon: CalendarPlus, onSelect: () => newAppt() }, { label: "Task", icon: ListTodo, onSelect: () => setTask({ priority: "normal", repeat: "none", checklist: [], assigneeId: d?.meId }) }, { label: "Block time", icon: Lock, onSelect: () => newAppt(undefined, "block") }]} />}
         </div>} />
@@ -115,6 +119,8 @@ export function CalendarCenter() {
       {d && <ApptDialog draft={appt} types={d.types} members={d.members} meId={d.meId} canAll={d.canAll} onClose={() => setAppt(null)} onSaved={() => { setAppt(null); load(); }} />}
       {d && <TaskDialog draft={task} members={d.members} meId={d.meId} canAll={d.canAll} onClose={() => setTask(null)} onSaved={() => { setTask(null); load(); }} />}
       {d && <TypesDialog open={settings} types={d.types} members={d.members} meId={d.meId} canSettings={team.can("communication", "settings")} onClose={() => setSettings(false)} onSaved={load} />}
+      <HoursDialog open={hours} onClose={() => setHours(false)} />
+      <BookingSettingsDialog open={booking} canSettings={team.can("communication", "settings")} onClose={() => setBooking(false)} />
     </>
   );
 }
