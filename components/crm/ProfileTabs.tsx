@@ -51,6 +51,7 @@ import { useToast } from "@/components/ui/Toast";
 import { SERVICES } from "@/lib/sample-data";
 import { STAGES, SAMPLE_NOW, staffById, meId } from "@/lib/sample/clients";
 import { useClients } from "@/lib/store/clients-store";
+import { dueOf } from "@/lib/docs";
 import { docStatus, enrollmentStatus, invoiceStatus, signatureStatus } from "@/lib/status";
 import { fileSize, fmtDate, fmtDateTime, fmtTime, relTime, usd } from "@/lib/format";
 import { formatPhone, formatZip, isoToDob, maskDOB, maskEIN, maskTaxId } from "@/lib/validation";
@@ -489,7 +490,7 @@ function folderize(docs: ClientDocument[]) {
       docs: [...ds].sort((x, y) => Number(isWaiting(y)) - Number(isWaiting(x)) || (y.uploadedAt ?? y.requestedAt).localeCompare(x.uploadedAt ?? x.requestedAt)),
       received: ds.filter((d) => !isWaiting(d)).length,
       waiting: ds.filter(isWaiting).length,
-      overdue: ds.filter((d) => isWaiting(d) && !!d.dueAt && d.dueAt < today).length,
+      overdue: ds.filter((d) => isWaiting(d) && dueOf(d) < today).length,
     }));
     return { service, years, received: list.filter((d) => !isWaiting(d)).length, waiting: list.filter(isWaiting).length };
   }).sort((x, y) => Object.keys(SERVICES).indexOf(x.service) - Object.keys(SERVICES).indexOf(y.service));
@@ -542,7 +543,7 @@ export function DocumentsTab({ c, act }: { c: Client; act: Act }) {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className={`truncate text-[14px] font-medium ${locked ? "text-muted" : "text-ink"}`}>{locked ? "Restricted document" : d.name}</span>
                     {d.sensitive && <Badge tone="danger" icon={ShieldAlert}>Restricted</Badge>}
-                    {outstanding && d.dueAt && <Badge tone={d.dueAt < new Date().toISOString() ? "danger" : "neutral"}>{d.dueAt < new Date().toISOString() ? "Overdue · was due" : "Due"} {fmtDate(d.dueAt)}</Badge>}
+                    {outstanding && <Badge tone={dueOf(d) < new Date().toISOString() ? "danger" : "neutral"}>{dueOf(d) < new Date().toISOString() ? "Overdue · was due" : "Due"} {fmtDate(dueOf(d))}</Badge>}
                   </div>
                   <div className="mt-0.5 text-[12px] text-muted">
                     {d.taxYear ? `TY ${d.taxYear} · ` : ""}{d.category} · {d.uploadedAt && !outstanding ? `Uploaded ${relTime(d.uploadedAt)} by ${d.uploadedBy}${d.sizeKb ? ` · ${fileSize(d.sizeKb)}` : ""}` : `Requested ${relTime(d.requestedAt)}`}

@@ -53,6 +53,7 @@
         "BACKEND_ENABLED": "true",
         "APP_ORIGIN": "https://preview.mkbfinancialgroup.com",
         "EMAIL_FROM": "MKB Financial Group <no-reply@mkbfinancialgroup.com>",
+        "INBOUND_REPLY_TO": "replies@replies.mkbfinancialgroup.com",
         "APP_ORIGINS": "https://mkb-crm-preview.krystal-21e.workers.dev"
       }
     },
@@ -77,6 +78,7 @@
         "BACKEND_ENABLED": "true",
         "APP_ORIGIN": "https://app.mkbfinancialgroup.com",
         "EMAIL_FROM": "MKB Financial Group <no-reply@mkbfinancialgroup.com>",
+        "INBOUND_REPLY_TO": "replies@replies.mkbfinancialgroup.com",
         "WEBSITE_HOSTS": "mkbfinancialgroup.com,www.mkbfinancialgroup.com",
         "MONARCH_HOSTS": "monarchtaxsuite.com,www.monarchtaxsuite.com",
         "PORTAL_HOSTS": "portal.mkbfinancialgroup.com",

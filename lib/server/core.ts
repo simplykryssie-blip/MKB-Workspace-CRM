@@ -14,6 +14,8 @@ export type AppEnv = Omit<CloudflareEnv, "APP_ENV" | "BACKEND_ENABLED"> & {
   /** Resend API key. Without it, emails are written to the outbox table instead of being sent. */
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
+  /** Receive-only reply address (Resend inbound); used as Reply-To once email replies are connected. */
+  INBOUND_REPLY_TO?: string;
   /** Public origin of the app, e.g. https://suite.mkbfinancial.example — used for links and request-origin checks. */
   APP_ORIGIN?: string;
   /** Other addresses the app also answers on (comma-separated origins), e.g. the workers.dev name. */

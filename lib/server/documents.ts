@@ -8,6 +8,7 @@ import { all, badRequest, HttpError, json, notFound, now, one, rateLimit, run, t
 import { randomId } from "./crypto";
 import { CLIENT_SQL, canOpen, type ClientRow } from "./clients";
 import { sendTemplate } from "./email";
+import { clientInboundEmails } from "./email-inbound";
 import { audit, requirePermission, requireStaff, type Actor } from "./identity";
 
 export async function remindDocuments(env: AppEnv, a: Actor, clientId: string, b: { docIds?: unknown }) {
@@ -39,5 +40,6 @@ export async function clientEmails(env: AppEnv, a: Actor, clientId: string) {
   if (!c || !(await canOpen(env, a, c))) throw notFound("Client not found.");
   if (!c.email) return { emails: [] };
   const rows = await all<{ id: string; template: string; subject: string; created_at: string; sent_at: string | null; error: string | null }>(env.DB, "SELECT id, template, subject, created_at, sent_at, error FROM email_outbox WHERE lower(to_email) = lower(?) ORDER BY created_at DESC LIMIT 200", c.email);
-  return { emails: rows.map((r) => ({ id: r.id, template: r.template, subject: r.subject, at: r.created_at, status: r.error ? "failed" : r.sent_at ? "sent" : "queued" })) };
+  const received = await clientInboundEmails(env, a, clientId).catch(() => []);
+  return { emails: rows.map((r) => ({ id: r.id, template: r.template, subject: r.subject, at: r.created_at, status: r.error ? "failed" : r.sent_at ? "sent" : "queued" })), received };
 }

@@ -17,7 +17,7 @@ import { fmtDateTime, relTime } from "@/lib/format";
 import type { Client } from "@/lib/types";
 
 type TextThread = { phone: string; name: string; contact: { type: string; id: string; href: string | null } | null; last: { body: string; direction: "in" | "out"; at: string; status: string }; unread: number };
-type Row = { key: string; name: string; clientId?: string; phone?: string; lastAt: string; lastText: string; lastMine: boolean; unread: number; channels: Set<"portal" | "text"> };
+type Row = { key: string; name: string; clientId?: string; phone?: string; lastAt: string; lastText: string; lastMine: boolean; unread: number; channels: Set<"portal" | "text" | "email"> };
 type Item = { id: string; channel: "portal" | "text" | "email"; mine: boolean; body: string; at: string; by?: string; note?: string };
 const phone10 = (p?: string) => (p ?? "").replace(/\D/g, "").slice(-10);
 const CH = { portal: { label: "Portal", icon: ShieldCheck }, text: { label: "Text", icon: MessageSquareText }, email: { label: "Email", icon: Mail } } as const;
@@ -33,6 +33,9 @@ export function MessagesCenter() {
   const team = useTeam();
   const canText = team.can("communication", "view");
   const [texts, setTexts] = useState<{ threads: TextThread[]; configured: boolean } | null>(null);
+  const [mail, setMail] = useState<{ clients: { clientId: string; last: string; subject: string; unread: number }[]; unmatched: { id: string; from: string; name: string | null; subject: string; body: string; at: string; unread: boolean }[] } | null>(null);
+  const loadMail = useCallback(() => { if (BACKEND && canText) call<NonNullable<typeof mail>>("GET", "/api/inbox/emails").then(setMail).catch(() => setMail(null)); }, [canText]);
+  useEffect(() => { loadMail(); const t = setInterval(loadMail, 30_000); return () => clearInterval(t); }, [loadMail]);
   const [sel, setSel] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "unread">("all");
   const [q, setQ] = useState("");
@@ -62,15 +65,29 @@ export function MessagesCenter() {
         others.push({ key: `p:${t.phone}`, name: t.name, phone: t.phone, lastAt: t.last.at, lastText: t.last.body, lastMine: t.last.direction === "out", unread: t.unread, channels: new Set(["text"]) });
       }
     }
+    for (const e of mail?.clients ?? []) {
+      const client = store.clients.find((c) => c.id === e.clientId);
+      if (!client) continue;
+      const cur = byClient.get(client.id) ?? { key: `c:${client.id}`, name: client.name, clientId: client.id, phone: phone10(client.phone), lastAt: "", lastText: "", lastMine: false, unread: 0, channels: new Set<"portal" | "text" | "email">() };
+      cur.channels.add("email"); cur.unread += e.unread;
+      if (e.last > cur.lastAt) { cur.lastAt = e.last; cur.lastText = `Email: ${e.subject}`; cur.lastMine = false; }
+      byClient.set(client.id, cur);
+    }
+    for (const e of mail?.unmatched ?? []) others.push({ key: `e:${e.id}`, name: e.name || e.from, lastAt: e.at, lastText: `Email: ${e.subject}`, lastMine: false, unread: e.unread ? 1 : 0, channels: new Set(["email"]) });
     return [...byClient.values(), ...others].sort((a, b) => b.lastAt.localeCompare(a.lastAt));
-  }, [store.clients, texts]);
+  }, [store.clients, texts, mail]);
   const unreadTotal = rows.reduce((s, r) => s + r.unread, 0);
   const shown = rows.filter((r) => filter === "all" || r.unread > 0).filter((r) => !q.trim() || r.name.toLowerCase().includes(q.trim().toLowerCase()));
   const selClient = sel?.startsWith("c:") ? store.clients.find((c) => c.id === sel.slice(2)) : undefined;
   const selPhone = sel?.startsWith("p:") ? sel.slice(2) : undefined;
-  const pick = (key: string) => { setSel(key); setComposing(false); window.history.replaceState(null, "", key.startsWith("c:") ? `/messages?c=${encodeURIComponent(key.slice(2))}` : `/messages?phone=${key.slice(2)}`); };
+  const selMail = sel?.startsWith("e:") ? mail?.unmatched.find((e) => e.id === sel.slice(2)) : undefined;
+  const pick = (key: string) => {
+    setSel(key); setComposing(false);
+    if (key.startsWith("e:")) { void call("POST", `/api/inbox/emails/${key.slice(2)}/read`).then(loadMail).catch(() => {}); window.history.replaceState(null, "", "/messages"); return; }
+    window.history.replaceState(null, "", key.startsWith("c:") ? `/messages?c=${encodeURIComponent(key.slice(2))}` : `/messages?phone=${key.slice(2)}`);
+  };
   const back = () => { setSel(null); setComposing(false); window.history.replaceState(null, "", "/messages"); };
-  const open = !!(selClient || selPhone || composing);
+  const open = !!(selClient || selPhone || selMail || composing);
 
   return (
     <div>
@@ -107,7 +124,7 @@ export function MessagesCenter() {
                         <span className="mt-0.5 flex items-center gap-1.5">
                           {[...r.channels].map((ch) => { const I = CH[ch].icon; return <I key={ch} size={12} className="shrink-0 text-faint" aria-label={CH[ch].label} />; })}
                           <span className="truncate text-[12.5px] text-muted">{r.lastMine ? "You: " : ""}{r.lastText}</span>
-                          {!r.clientId && <span className="shrink-0 rounded bg-surface-2 px-1 text-[10.5px] text-muted">not a client</span>}
+                          {!r.clientId && <span className="shrink-0 rounded bg-surface-2 px-1 text-[10.5px] text-muted">{r.key.startsWith("e:") ? "unknown sender" : "not a client"}</span>}
                           {r.unread > 0 && <span className="ml-auto shrink-0 rounded-full bg-accent px-1.5 text-[11px] font-semibold text-white">{r.unread}</span>}
                         </span>
                       </span>
@@ -121,7 +138,15 @@ export function MessagesCenter() {
 
         <div className={open ? "" : "hidden lg:block"}>
           {open && <button onClick={back} className="mb-3 inline-flex items-center gap-1 text-[13.5px] font-medium text-accent lg:hidden"><ArrowLeft size={15} /> All conversations</button>}
-          {selClient ? <ClientConversation key={selClient.id} c={selClient} canReadTexts={canText} canText={canText && !!texts?.configured} onTextChange={loadTexts} />
+          {selClient ? <ClientConversation key={selClient.id} c={selClient} canReadTexts={canText} canText={canText && !!texts?.configured} onTextChange={() => { loadTexts(); loadMail(); }} />
+            : selMail ? (
+              <Card className="p-5">
+                <p className="text-[15px] font-semibold text-ink">{selMail.subject || "(no subject)"}</p>
+                <p className="text-[12.5px] text-muted">From {selMail.name ? `${selMail.name} <${selMail.from}>` : selMail.from} · {fmtDateTime(selMail.at)}</p>
+                <p className="mt-3 whitespace-pre-wrap text-[14px] text-ink-2">{selMail.body}</p>
+                <p className="mt-4 rounded-xl bg-warning-soft/50 px-3 py-2 text-[12.5px] text-warning-ink">This address doesn&rsquo;t match a client. If it&rsquo;s a client using a different email, add this address to their profile so future replies land in their conversation.</p>
+              </Card>
+            )
             : selPhone ? <Conversation key={selPhone} brand="mkb" phone={selPhone} base="/messages" canSend={team.can("communication", "edit")} onChange={loadTexts} />
             : composing ? (
               <Card className="p-5">
@@ -148,13 +173,14 @@ function ClientConversation({ c, canReadTexts, canText, onTextChange }: { c: Cli
   const phone = phone10(c.phone);
   const [texts, setTexts] = useState<{ messages: { id: string; direction: "in" | "out"; body: string; status: string; at: string; by?: string }[]; optedOut: boolean } | null>(null);
   const [emails, setEmails] = useState<{ id: string; subject: string; at: string; status: string }[]>([]);
+  const [received, setReceived] = useState<{ id: string; subject: string; body: string; at: string }[]>([]);
   const [channel, setChannel] = useState<"portal" | "text">("portal");
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const end = useRef<HTMLDivElement>(null);
   const canSend = team.can("communication", "edit") || team.can("crm", "edit");
   const loadTexts = useCallback(() => { if (BACKEND && canReadTexts && phone.length === 10) call<NonNullable<typeof texts>>("GET", `/api/texts/thread?brand=mkb&phone=${phone}`).then((r) => { setTexts(r); onTextChange(); }).catch(() => setTexts(null)); }, [canReadTexts, phone, onTextChange]);
-  useEffect(() => { loadTexts(); if (BACKEND) call<{ emails: typeof emails }>("GET", `/api/clients/${c.id}/emails`).then((r) => setEmails(r.emails)).catch(() => setEmails([])); }, [c.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadTexts(); if (BACKEND) call<{ emails: typeof emails; received?: typeof received }>("GET", `/api/clients/${c.id}/emails`).then((r) => { setEmails(r.emails); setReceived(r.received ?? []); onTextChange(); }).catch(() => setEmails([])); }, [c.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const unread = (c.messages ?? []).some((m) => !m.read);
   useEffect(() => { if (unread) store.markMessagesRead(c.id); }, [unread, c.id, store]);
 
@@ -162,7 +188,8 @@ function ClientConversation({ c, canReadTexts, canText, onTextChange }: { c: Cli
     ...(c.messages ?? []).map((m): Item => ({ id: `p-${m.id}`, channel: "portal", mine: m.from === "staff", body: m.body, at: m.at, by: m.author })),
     ...(texts?.messages ?? []).map((m): Item => ({ id: `t-${m.id}`, channel: "text", mine: m.direction === "out", body: m.body, at: m.at, by: m.by, note: m.direction === "out" ? m.status : undefined })),
     ...emails.map((e): Item => ({ id: `e-${e.id}`, channel: "email", mine: true, body: e.subject, at: e.at, note: e.status === "sent" ? undefined : e.status })),
-  ].sort((a, b) => a.at.localeCompare(b.at)), [c.messages, texts, emails]);
+    ...received.map((e): Item => ({ id: `r-${e.id}`, channel: "email", mine: false, body: e.body, at: e.at, by: e.subject ? `Re: ${e.subject.replace(/^re:\s*/i, "")}` : undefined })),
+  ].sort((a, b) => a.at.localeCompare(b.at)), [c.messages, texts, emails, received]);
   useEffect(() => { end.current?.scrollIntoView({ block: "nearest" }); }, [items.length]);
 
   const textBlocked = channel === "text" && (!canText || phone.length !== 10 || texts?.optedOut);
@@ -187,7 +214,7 @@ function ClientConversation({ c, canReadTexts, canText, onTextChange }: { c: Cli
         {items.length === 0 && <p className="py-6 text-center text-[13.5px] text-muted">No messages yet. Start the conversation below.</p>}
         {items.map((m) => {
           const I = CH[m.channel].icon;
-          if (m.channel === "email") return (
+          if (m.channel === "email" && m.mine) return (
             <div key={m.id} className="flex justify-center"><span className="inline-flex max-w-[90%] items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1 text-[12px] text-muted"><Mail size={12} /> Email sent: <span className="truncate text-ink-2">{m.body}</span> · {fmtDateTime(m.at)}{m.note ? ` · ${m.note}` : ""}</span></div>
           );
           return (

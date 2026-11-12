@@ -91,11 +91,13 @@ export async function sendEmail(env: AppEnv, msg: { to: string; template: string
   const id = randomId("em");
   await run(env.DB, "INSERT INTO email_outbox (id, to_email, template, subject, body_dev, created_at) VALUES (?, ?, ?, ?, ?, ?)", id, msg.to, msg.template, msg.subject, isDev(env) ? msg.text : null, now());
   if (!env.RESEND_API_KEY) return { id, sent: false };
+  // Once email replies are connected, a client's reply comes back into Messages.
+  const replyTo = await import("./email-inbound").then((m) => m.replyToAddress(env)).catch(() => null);
   try {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" },
-      body: JSON.stringify({ from: env.EMAIL_FROM ?? "MKB Financial Group <no-reply@example.com>", to: [msg.to], subject: msg.subject, text: msg.text, ...(msg.html ? { html: msg.html } : {}), ...(msg.attachments?.length ? { attachments: msg.attachments.map((x) => ({ filename: x.filename, content: b64(x.content) })) } : {}) }),
+      body: JSON.stringify({ from: env.EMAIL_FROM ?? "MKB Financial Group <no-reply@example.com>", to: [msg.to], ...(replyTo ? { reply_to: [replyTo] } : {}), subject: msg.subject, text: msg.text, ...(msg.html ? { html: msg.html } : {}), ...(msg.attachments?.length ? { attachments: msg.attachments.map((x) => ({ filename: x.filename, content: b64(x.content) })) } : {}) }),
     });
     const out = (await res.json().catch(() => ({}))) as { id?: string; message?: string };
     await run(env.DB, "UPDATE email_outbox SET sent_at = ?, provider_id = ?, error = ? WHERE id = ?", res.ok ? now() : null, out.id ?? null, res.ok ? null : (out.message ?? `HTTP ${res.status}`).slice(0, 300), id);

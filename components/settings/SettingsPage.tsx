@@ -44,7 +44,7 @@ export function SettingsPage() {
           <button key={k} role="tab" aria-selected={tab === k} onClick={() => { setTab(k); history.replaceState(null, "", `#${k}`); }} className={`inline-flex h-10 items-center gap-2 rounded-xl border px-4 text-[14px] font-semibold ${tab === k ? "border-accent bg-accent-soft text-accent-ink" : "border-line bg-surface text-ink-2 hover:bg-surface-hover"}`}><Icon size={16} />{l}</button>
         ))}
       </div>
-      {tab === "import" && owner ? <ImportIdentifiers /> : tab === "letters" ? <LettersEditor /> : tab === "emails" ? <EmailsEditor /> : tab === "fees" ? <FeesEditor /> : <div className="space-y-5"><TaxRulesCard /><DesigneeEditor /></div>}
+      {tab === "import" && owner ? <ImportIdentifiers /> : tab === "letters" ? <LettersEditor /> : tab === "emails" ? <div className="space-y-5"><EmailRepliesCard /><EmailsEditor /></div> : tab === "fees" ? <FeesEditor /> : <div className="space-y-5"><TaxRulesCard /><DesigneeEditor /></div>}
     </div>
   );
 }
@@ -164,6 +164,46 @@ function LettersEditor() {
 /* ------------------------------------------------------------------ */
 
 type Tpl = { key: TemplateKey; wording: EmailWording; updatedAt?: string; custom: boolean };
+
+type ReplySettings = { webhookUrl: string; replyTo: string | null; secretSaved: { last4: string | null; at: string } | null; lastReceivedAt: string | null };
+/** Client email replies → Messages (Resend receiving on a reply-only address). */
+function EmailRepliesCard() {
+  const team = useTeam();
+  const toast = useToast();
+  const canEdit = team.can("communication", "settings");
+  const [v, setV] = useState<ReplySettings | null>(null);
+  const [secret, setSecret] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { if (BACKEND && canEdit) call<ReplySettings>("GET", "/api/settings/email-replies").then(setV).catch(() => {}); }, [canEdit]);
+  if (!BACKEND || !canEdit || !v) return null;
+  const save = async (body: Record<string, unknown>, msg: string) => {
+    setBusy(true);
+    try { setV(await call<ReplySettings>("PUT", "/api/settings/email-replies", body)); setSecret(""); toast(msg); } catch (e) { toast(e instanceof Error ? e.message : "Couldn't save", "info"); }
+    setBusy(false);
+  };
+  return (
+    <Card>
+      <CardHeader icon={Mail} title="Email replies into Messages" subtitle="When a client replies to an email from the CRM, the reply shows in Messages." action={<Badge tone={v.secretSaved ? "success" : "neutral"}>{v.secretSaved ? "Connected" : "Not connected"}</Badge>} />
+      <div className="space-y-3 px-5 pb-5 text-[13.5px] text-ink-2 sm:px-6">
+        {v.secretSaved ? (
+          <p>Replies go to <b>{v.replyTo}</b> and appear in Messages. {v.lastReceivedAt ? `Last reply received ${new Date(v.lastReceivedAt).toLocaleString()}.` : "No replies received yet."}</p>
+        ) : (
+          <ol className="list-decimal space-y-1 pl-5">
+            <li>In Resend, open <b>Webhooks → Add webhook</b>.</li>
+            <li>Endpoint URL: <code className="break-all rounded bg-surface-2 px-1">{v.webhookUrl}</code> — event: <b>email.received</b>.</li>
+            <li>Copy the webhook&rsquo;s <b>signing secret</b> (starts with whsec_) and paste it below.</li>
+          </ol>
+        )}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <label className="flex-1"><span className="mb-1 block text-[13px] font-medium">Signing secret</span><input type="password" autoComplete="off" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder={v.secretSaved ? `Saved (ends in ${v.secretSaved.last4}) — paste to replace` : "whsec_…"} className="h-10 w-full rounded-xl border border-line bg-surface px-3 text-[14px] text-ink" /></label>
+          <Button variant="primary" disabled={busy || !secret.trim()} onClick={() => void save({ secret }, "Email replies connected")}>Save</Button>
+          {v.secretSaved && <Button variant="ghost" disabled={busy} onClick={() => { if (window.confirm("Disconnect email replies? Client replies will go back to the address they were sent from.")) void save({ disconnect: true }, "Email replies disconnected"); }}>Disconnect</Button>}
+        </div>
+        <p className="text-[12px] text-muted">Stored encrypted and never shown again. Until this is connected, client replies go to your regular mailbox as they do now.</p>
+      </div>
+    </Card>
+  );
+}
 
 function EmailsEditor() {
   const team = useTeam();

@@ -15,22 +15,23 @@ import { useTeam } from "@/lib/store/team-store";
 import { BACKEND } from "@/lib/sync/remote";
 import { fmtDate } from "@/lib/format";
 import type { Client, ClientDocument, DocStatus, ServiceKey } from "@/lib/types";
+import { defaultDue, dueOf } from "@/lib/docs";
 
 type Row = { c: Client; d: ClientDocument };
 const nowIso = () => new Date().toISOString();
 const outstanding = (d: ClientDocument) => d.status === "requested" || d.status === "rejected";
 /** The client's service for this document is marked urgent (and still open). */
 const isUrgent = (r: Row) => r.c.enrollments.some((e) => e.urgent && e.service === r.d.service && e.status !== "complete" && e.status !== "cancelled");
-const isOverdue = (r: Row) => outstanding(r.d) && !!r.d.dueAt && r.d.dueAt < nowIso();
+const isOverdue = (r: Row) => outstanding(r.d) && dueOf(r.d) < nowIso();
 /**
  * Most important first: urgent services, then overdue requests, then the
  * soonest due date, then everything else (newest first).
  */
 function byImportance(a: Row, b: Row) {
-  const rank = (r: Row) => (isUrgent(r) ? 0 : isOverdue(r) ? 1 : outstanding(r.d) && r.d.dueAt ? 2 : 3);
+  const rank = (r: Row) => (isUrgent(r) ? 0 : isOverdue(r) ? 1 : outstanding(r.d) ? 2 : 3);
   const ra = rank(a), rb = rank(b);
   if (ra !== rb) return ra - rb;
-  if (outstanding(a.d) && outstanding(b.d) && a.d.dueAt && b.d.dueAt && a.d.dueAt !== b.d.dueAt) return a.d.dueAt.localeCompare(b.d.dueAt);
+  if (outstanding(a.d) && outstanding(b.d) && dueOf(a.d) !== dueOf(b.d)) return dueOf(a.d).localeCompare(dueOf(b.d));
   return (b.d.uploadedAt ?? b.d.requestedAt).localeCompare(a.d.uploadedAt ?? a.d.requestedAt);
 }
 type View = "review" | "requested" | "rejected" | "all";
@@ -108,7 +109,7 @@ export function DocumentsCenter() {
                       {isUrgent(r) && <Badge tone="danger">Urgent</Badge>}
                       {r.d.sensitive && <Badge tone="neutral" icon={Lock}>Sensitive</Badge>}
                       <Badge tone={st.tone}>{st.label}</Badge>
-                      {outstanding(r.d) && r.d.dueAt && <Badge tone={isOverdue(r) ? "danger" : "neutral"}>{isOverdue(r) ? "Overdue · was due" : "Due"} {fmtDate(r.d.dueAt)}</Badge>}
+                      {outstanding(r.d) && <Badge tone={isOverdue(r) ? "danger" : "neutral"}>{isOverdue(r) ? "Overdue · was due" : "Due"} {fmtDate(dueOf(r.d))}</Badge>}
                     </div>
                     <div className="mt-0.5 text-[12.5px] text-muted">
                       <Link href={`/clients/${r.c.id}#documents`} className="font-medium text-accent hover:underline">{r.c.name}</Link>
@@ -123,7 +124,8 @@ export function DocumentsCenter() {
                     {canEdit && outstanding(r.d) && (
                       <label className="inline-flex items-center gap-1 text-[12px] text-muted">
                         <span className="sr-only">Due date for {r.d.name}</span>
-                        <input type="date" value={r.d.dueAt ? r.d.dueAt.slice(0, 10) : ""} onChange={(e) => { store.setDocDue(r.c.id, r.d.id, e.target.value ? new Date(`${e.target.value}T17:00:00`).toISOString() : undefined); toast(e.target.value ? "Due date changed" : "Due date removed"); }} className="h-8 rounded-lg border border-line bg-surface px-2 text-[12.5px] text-ink" />
+                        {/* The box's default (what "Reset"/"Clear" go back to) is the 7-day due date; it shows the current one. */}
+                        <input key={dueOf(r.d)} type="date" defaultValue={defaultDue(r.d).slice(0, 10)} ref={(el) => { if (el && document.activeElement !== el) el.value = dueOf(r.d).slice(0, 10); }} onChange={(e) => { const v = e.target.value; const next = v ? new Date(`${v}T17:00:00`).toISOString() : undefined; store.setDocDue(r.c.id, r.d.id, next && next.slice(0, 10) !== defaultDue(r.d).slice(0, 10) ? next : undefined); toast(v && v !== defaultDue(r.d).slice(0, 10) ? "Due date changed" : "Due date reset to 7 days after the request"); }} className="h-8 rounded-lg border border-line bg-surface px-2 text-[12.5px] text-ink" />
                       </label>
                     )}
                     {canEdit && (r.d.status === "requested" || r.d.status === "rejected") && <Button size="sm" variant="ghost" icon={Send} onClick={() => void store.remindDocument(r.c.id, r.d.id).then((ok) => ok && toast(`Reminder emailed to ${r.c.contactName ?? r.c.name}`))}>Remind</Button>}
