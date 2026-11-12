@@ -491,8 +491,7 @@ export function DocumentsTab({ c, act }: { c: Client; act: Act }) {
     toast(`Downloaded "${d.name}" (sample placeholder) — logged`);
   };
   const remind = (d: ClientDocument) => {
-    store.remindDocument(c.id, d.id);
-    toast(`Reminder sent to ${c.contactName ?? c.name}`);
+    void store.remindDocument(c.id, d.id).then((ok) => ok && toast(`Reminder sent to ${c.contactName ?? c.name}`));
   };
   const setStatus = (d: ClientDocument, s: ClientDocument["status"]) => {
     store.setDocStatus(c.id, d.id, s);

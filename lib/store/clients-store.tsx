@@ -414,8 +414,15 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
     setDocExpiry(id: string, docId: string, expiresAt?: string) {
       up(id, (c) => ({ ...c, documents: c.documents.map((x) => (x.id === docId ? { ...x, expiresAt } : x)) }));
     },
-    remindDocument(id: string, docId: string) {
+    /** Live CRM: emails the client the document's name and a portal link (the server records it). */
+    remindDocument(id: string, docId: string): Promise<boolean> {
+      if (BACKEND) {
+        return call<{ sent: boolean }>("POST", `/api/clients/${id}/documents/remind`, { docIds: [docId] })
+          .then(() => { window.dispatchEvent(new CustomEvent("mkb:client-changed", { detail: id })); return true; })
+          .catch((e) => { notify(e instanceof RemoteError ? e.message : "Couldn't send the reminder."); return false; });
+      }
       up(id, (c) => log(c, "message", `Reminder sent for "${c.documents.find((x) => x.id === docId)?.name}"`, "system"));
+      return Promise.resolve(true);
     },
     logDocumentAccess(id: string, docId: string, action: "Viewed" | "Downloaded") {
       up(id, (c) => log(c, "upload", `${action} "${c.documents.find((x) => x.id === docId)?.name}" (audit)`));

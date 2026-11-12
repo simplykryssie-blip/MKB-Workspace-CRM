@@ -110,8 +110,6 @@ const BACKEND = process.env.NEXT_PUBLIC_BACKEND === "1";
 /** Sections that still run on sample data (closed when the backend is on). */
 const NOT_CONNECTED: [string, string][] = [
   ["/appointments", "Appointments"],
-  ["/documents", "Documents"],
-  ["/messages", "Messages"],
   ["/tasks", "Tasks"],
   ["/portal", "The client portal"],
 ];

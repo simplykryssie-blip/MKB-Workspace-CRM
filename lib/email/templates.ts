@@ -6,7 +6,7 @@
  * document contents in an email.
  */
 
-export type TemplateKey = "tax_intake_received" | "tax_document_reminder" | "tax_document_request" | "tax_extension_filed" | "invoice_sent" | "books_intake_received" | "books_intake_link" | "books_proposal" | "books_proposal_signed" | "tax_interview_link" | "portal_invite" | "portal_message" | "books_items" | "books_reminder" | "books_reports_ready" | "service_intake_link" | "service_intake_received" | "booking_confirmed" | "booking_reminder" | "booking_changed" | "booking_cancelled";
+export type TemplateKey = "tax_intake_received" | "tax_document_reminder" | "document_reminder" | "tax_document_request" | "tax_extension_filed" | "invoice_sent" | "books_intake_received" | "books_intake_link" | "books_proposal" | "books_proposal_signed" | "tax_interview_link" | "portal_invite" | "portal_message" | "books_items" | "books_reminder" | "books_reports_ready" | "service_intake_link" | "service_intake_received" | "booking_confirmed" | "booking_reminder" | "booking_changed" | "booking_cancelled";
 
 export type EmailWording = {
   subject: string;
@@ -52,6 +52,20 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
     steps: "",
     button: "Upload in your portal",
     closing: "Prefer paper? Drop them off at our office. Please don't email tax documents.",
+  },
+  document_reminder: {
+    key: "document_reminder",
+    name: "Document reminder (any service)",
+    when: "Sent when staff click Remind on an outstanding document in Documents.",
+    placeholders: ["firstName", "count"],
+    subject: "Reminder: {{count}} still needed from you",
+    heading: "Just a friendly reminder, {{firstName}}.",
+    intro: "We're ready to keep working as soon as we have:",
+    docsTitle: "Still needed",
+    docsNote: "Already sent these? You can ignore this message — it can take a business day for us to check them off.",
+    steps: "",
+    button: "Upload in your portal",
+    closing: "Please upload documents in your secure portal — don't email documents with personal or financial information.",
   },
   tax_extension_filed: {
     key: "tax_extension_filed",
