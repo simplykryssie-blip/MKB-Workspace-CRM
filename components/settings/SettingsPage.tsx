@@ -165,7 +165,7 @@ function LettersEditor() {
 
 type Tpl = { key: TemplateKey; wording: EmailWording; updatedAt?: string; custom: boolean };
 
-type ReplySettings = { webhookUrl: string; replyTo: string | null; secretSaved: { last4: string | null; at: string } | null; lastReceivedAt: string | null };
+type ReplySettings = { webhookUrl: string; publicReachable: boolean; replyTo: string | null; secretSaved: { last4: string | null; at: string } | null; lastReceivedAt: string | null };
 /** Client email replies → Messages (Resend receiving on a reply-only address). */
 function EmailRepliesCard() {
   const team = useTeam();
@@ -185,6 +185,7 @@ function EmailRepliesCard() {
     <Card>
       <CardHeader icon={Mail} title="Email replies into Messages" subtitle="When a client replies to an email from the CRM, the reply shows in Messages." action={<Badge tone={v.secretSaved ? "success" : "neutral"}>{v.secretSaved ? "Connected" : "Not connected"}</Badge>} />
       <div className="space-y-3 px-5 pb-5 text-[13.5px] text-ink-2 sm:px-6">
+        {!v.publicReachable && <p className="rounded-xl bg-warning-soft/60 px-3 py-2 text-[12.5px] text-warning-ink">This site sits behind your sign-in page, so Resend can&rsquo;t reach it. Set up email replies on production (it uses the public portal address).</p>}
         {v.secretSaved ? (
           <p>Replies go to <b>{v.replyTo}</b> and appear in Messages. {v.lastReceivedAt ? `Last reply received ${new Date(v.lastReceivedAt).toLocaleString()}.` : "No replies received yet."}</p>
         ) : (

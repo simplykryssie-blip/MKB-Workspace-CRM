@@ -35,7 +35,8 @@ export async function inboundSettings(env: AppEnv, a: Actor, origin: string) {
   requireStaff(a);
   const s = await one<{ last4: string | null; updated_at: string }>(env.DB, "SELECT last4, updated_at FROM integration_secrets WHERE key = ?", SECRET_KEY);
   const last = await one<{ received_at: string }>(env.DB, "SELECT received_at FROM email_inbox ORDER BY received_at DESC LIMIT 1");
-  return { webhookUrl: `${origin}/api/public/email/inbound`, replyTo: env.INBOUND_REPLY_TO ?? null, secretSaved: s ? { last4: s.last4, at: s.updated_at } : null, lastReceivedAt: last?.received_at ?? null };
+  // The staff address sits behind the sign-in page, so Resend must call the public portal address.
+  return { webhookUrl: `${env.PORTAL_ORIGIN ?? origin}/api/public/email/inbound`, publicReachable: !!env.PORTAL_ORIGIN, replyTo: env.INBOUND_REPLY_TO ?? null, secretSaved: s ? { last4: s.last4, at: s.updated_at } : null, lastReceivedAt: last?.received_at ?? null };
 }
 export async function saveInboundSettings(env: AppEnv, a: Actor, origin: string, b: { secret?: unknown; disconnect?: unknown }) {
   requirePermission(a, "communication", "settings");
