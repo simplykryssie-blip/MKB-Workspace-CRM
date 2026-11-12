@@ -246,7 +246,7 @@ Dear {{clientName}},
 Thank you for choosing MKB Financial Group LLC. This letter explains the expungement support services we will provide.
 
 ## Basic expungements only
-We handle basic expungements only. If we find that your record needs a complex expungement, we will tell you before any fee is charged for that part and refer you to a licensed attorney.
+We handle basic expungements only. We do not handle a record that needs an attorney (for example, a contested hearing or a case where the law requires an attorney to appear) or that needs filings beyond a standard expungement, such as appeals, pardons, sealing under other laws, or motions in other cases. If we find that your record needs any of these, we will tell you before any fee is charged for that part and refer you to a licensed attorney.
 
 ## What we will do
 - Help you gather your criminal history records and court documents.

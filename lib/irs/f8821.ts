@@ -4,6 +4,9 @@
 
 export type Designee = { name: string; address: string; city: string; state: string; zip: string; caf: string; ptin: string; phone: string; fax: string };
 export const EMPTY_DESIGNEE: Designee = { name: "", address: "", city: "", state: "", zip: "", caf: "", ptin: "", phone: "", fax: "" };
+/** MKB as its own e-file service bureau (staff only). Blank designee name/address/phone/fax on Form 8821 fall back to these. */
+export type Bureau = { name: string; ein: string; efin: string; etin: string; address: string; city: string; state: string; zip: string; phone: string; fax: string; email: string };
+export const EMPTY_BUREAU: Bureau = { name: "", ein: "", efin: "", etin: "", address: "", city: "", state: "", zip: "", phone: "", fax: "", email: "" };
 export const designeeReady = (d: Designee) => !!(d.name.trim() && d.address.trim() && d.city.trim() && d.state.trim() && d.zip.trim() && d.caf.trim());
 
 export type F8821Status = "needs_signature" | "signed" | "submitted" | "on_file" | "revoked";

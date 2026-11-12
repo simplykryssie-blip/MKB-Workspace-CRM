@@ -5,7 +5,7 @@
  * the client's Documents shows only the last four. Server-only.
  */
 import { PDFDocument, StandardFonts } from "pdf-lib";
-import { EMPTY_DESIGNEE, designeeReady, mattersFor, yearsFor, type Designee, type F8821, type F8821Status, type MatterRow } from "@/lib/irs/f8821";
+import { EMPTY_BUREAU, EMPTY_DESIGNEE, designeeReady, type Bureau, mattersFor, yearsFor, type Designee, type F8821, type F8821Status, type MatterRow } from "@/lib/irs/f8821";
 import { all, badRequest, forbidden, HttpError, json, notFound, now, one, rateLimit, run, type AppEnv } from "./core";
 import { decryptField, randomId } from "./crypto";
 import { CLIENT_SQL, aad, canOpen, vaultKey, type ClientRow } from "./clients";
@@ -13,13 +13,45 @@ import { audit, hasSensitivePerm, requirePermission, requireStaff, type Actor } 
 import { F8821_B64 } from "./irs-forms/f8821";
 
 /* ---------------------------------------------------------------- designee (Settings) */
-export async function loadDesignee(env: AppEnv): Promise<Designee> {
+async function storedDesignee(env: AppEnv): Promise<Designee> {
   const r = await one<{ data: string }>(env.DB, "SELECT data FROM service_settings WHERE key = 'designee'").catch(() => null);
   return { ...EMPTY_DESIGNEE, ...(r ? json<Partial<Designee>>(r.data, {}) : {}) };
 }
+/** The designee as Form 8821 uses it. */
+export async function loadDesignee(env: AppEnv): Promise<Designee> {
+  const d = await storedDesignee(env);
+  // Anything left blank here comes from the service bureau details (CAF and PTIN are personal, so they never do).
+  const b = await loadBureau(env);
+  for (const k of ["name", "address", "city", "state", "zip", "phone", "fax"] as const) if (!d[k].trim() && b[k].trim()) d[k] = b[k];
+  return d;
+}
+
+/* ---------------------------------------------------------------- service bureau (Settings) */
+export async function loadBureau(env: AppEnv): Promise<Bureau> {
+  const r = await one<{ data: string }>(env.DB, "SELECT data FROM service_settings WHERE key = 'bureau'").catch(() => null);
+  return { ...EMPTY_BUREAU, ...(r ? json<Partial<Bureau>>(r.data, {}) : {}) };
+}
+export async function getBureau(env: AppEnv, a: Actor) {
+  requirePermission(a, "tax", "view");
+  requireStaff(a);
+  return { bureau: await loadBureau(env) };
+}
+export async function saveBureau(env: AppEnv, a: Actor, b: { bureau?: Partial<Bureau> }) {
+  requirePermission(a, "settings", "settings");
+  requireStaff(a);
+  const x = b.bureau ?? {};
+  const s = (k: keyof Bureau, max: number) => String(x[k] ?? "").replace(/[\r\n]+/g, " ").trim().slice(0, max);
+  const digits = (k: keyof Bureau, n: number, label: string) => { const v = s(k, 20).replace(/\D/g, ""); if (v && v.length !== n) throw badRequest(`${label} should be ${n} digits.`); return v; };
+  const clean: Bureau = { name: s("name", 120), ein: digits("ein", 9, "EIN"), efin: digits("efin", 6, "EFIN"), etin: digits("etin", 5, "ETIN"), address: s("address", 160), city: s("city", 80), state: s("state", 2).toUpperCase(), zip: s("zip", 10), phone: s("phone", 20), fax: s("fax", 20), email: s("email", 120) };
+  await run(env.DB, "INSERT INTO service_settings (key, data, updated_at, updated_by) VALUES ('bureau', ?, ?, ?) ON CONFLICT(key) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at, updated_by = excluded.updated_by", JSON.stringify(clean), now(), a.member.id);
+  await audit(env.DB, a, { action: "Record update", resource: "Service bureau details", meta: "Service bureau details updated" });
+  return { bureau: clean };
+}
 export async function getDesignee(env: AppEnv, a: Actor) {
   requirePermission(a, "tax", "view");
-  return { designee: await loadDesignee(env) };
+  // What's typed in Settings, the bureau details blank fields fall back to, and the result the form uses.
+  const [designee, bureau, filled] = await Promise.all([storedDesignee(env), loadBureau(env), loadDesignee(env)]);
+  return { designee, bureau, filled, ready: designeeReady(filled) };
 }
 export async function saveDesignee(env: AppEnv, a: Actor, b: { designee?: Partial<Designee> }) {
   requirePermission(a, "settings", "settings");

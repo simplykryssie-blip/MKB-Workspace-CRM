@@ -18,7 +18,7 @@ import { EMAIL_TEMPLATES, WORDING_FIELDS, renderEmail, type EmailWording, type T
 import { fmtDate } from "@/lib/format";
 import { checkFees, expungeFee, feeWords, money, type ServiceFees } from "@/lib/fees/config";
 import { useServiceFees } from "@/lib/fees/use-fees";
-import { EMPTY_DESIGNEE, designeeReady, type Designee } from "@/lib/irs/f8821";
+import { EMPTY_BUREAU, EMPTY_DESIGNEE, designeeReady, type Bureau, type Designee } from "@/lib/irs/f8821";
 
 const SAMPLE = { clientName: "Jordan Sample", date: "November 8, 2026", taxYear: "2025", service: "Foundation", fee: "$399", firstName: "Jordan", count: "2 documents", businessName: "Sample Co. LLC", expires: "November 22, 2026", days: "14", staffName: "Krystal", plan: "Essential — $549/month" };
 const input = "w-full rounded-xl border border-line bg-surface px-3 text-[14px] text-ink disabled:opacity-60";
@@ -413,6 +413,52 @@ function FeeSection({ title, subtitle, summary, children }: { title: string; sub
   );
 }
 
+/** Blank designee name/address/phone/fax use the service bureau details (same rule as the server). */
+const withBureau = (d: Designee, b: Bureau): Designee => ({ ...d, ...Object.fromEntries((["name", "address", "city", "state", "zip", "phone", "fax"] as const).filter((k) => !d[k].trim() && b[k].trim()).map((k) => [k, b[k]])) });
+
+/** MKB as its own e-file service bureau. Fill in later; blank Form 8821 designee details come from here. */
+function BureauEditor({ onSaved }: { onSaved: (b: Bureau) => void }) {
+  const team = useTeam();
+  const toast = useToast();
+  const canEdit = team.can("settings", "settings");
+  const [b, setB] = useState<Bureau | null>(BACKEND ? null : EMPTY_BUREAU);
+  const [saved, setSaved] = useState<Bureau | null>(null);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { if (BACKEND) call<{ bureau: Bureau }>("GET", "/api/settings/bureau").then((r) => { setSaved((cur) => cur ?? r.bureau); setB((cur) => cur ?? r.bureau); }).catch(() => setB(EMPTY_BUREAU)); }, []);
+  if (!b) return <Card className="p-8 text-center text-muted">Loading…</Card>;
+  const save = async () => {
+    if (!BACKEND) return toast("Saving needs the live CRM (preview or production).", "info");
+    setSaving(true);
+    try { const r = await call<{ bureau: Bureau }>("PUT", "/api/settings/bureau", { bureau: b }); setB(r.bureau); setSaved(r.bureau); onSaved(r.bureau); toast("Service bureau saved"); } catch (e) { toast(e instanceof Error ? e.message : "Couldn't save", "info"); }
+    setSaving(false);
+  };
+  const F = (k: keyof Bureau, label: string, hint?: string, className = "") => (
+    <div className={className}><label htmlFor={`sb-${k}`} className="mb-1 block text-[13px] font-medium text-ink-2">{label}{hint && <span className="font-normal text-muted"> {hint}</span>}</label><input id={`sb-${k}`} disabled={!canEdit} value={b[k]} onChange={(e) => setB({ ...b, [k]: e.target.value })} className="h-10 w-full rounded-xl border border-line bg-surface px-3 text-[14px] text-ink disabled:opacity-60" /></div>
+  );
+  const filled = !!(b.name && b.efin);
+  return (
+    <Card>
+      <CardHeader icon={ShieldCheck} title="Your service bureau" subtitle="Your own e-file service bureau details. Staff only — never shown to clients." action={<Badge tone={filled ? "success" : "neutral"}>{filled ? "On file" : "Fill in later"}</Badge>} />
+      <div className="space-y-4 px-5 pb-5 sm:px-6">
+        <p className="text-[13px] text-muted">Fill these in whenever you have them (for example once the IRS assigns your EFIN). Your Form 8821 designee uses the name, address, phone and fax from here for anything left blank below.</p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {F("name", "Service bureau legal name", undefined, "sm:col-span-2")}
+          {F("ein", "EIN", "(9 digits)")}
+          {F("efin", "EFIN", "(6 digits, from the IRS)")}
+          {F("etin", "ETIN", "(5 digits, transmitters only — optional)")}
+          {F("email", "Email")}
+          {F("address", "Street address", undefined, "sm:col-span-2")}
+          {F("city", "City")}
+          <div className="grid grid-cols-2 gap-4">{F("state", "State")}{F("zip", "ZIP")}</div>
+          {F("phone", "Telephone")}
+          {F("fax", "Fax", "(optional)")}
+        </div>
+        {canEdit && <Button variant="primary" icon={Save} disabled={saving || JSON.stringify(b) === JSON.stringify(saved)} onClick={save}>{saving ? "Saving…" : "Save"}</Button>}
+      </div>
+    </Card>
+  );
+}
+
 function DesigneeEditor() {
   const team = useTeam();
   const toast = useToast();
@@ -420,8 +466,9 @@ function DesigneeEditor() {
   const [d, setD] = useState<Designee | null>(BACKEND ? null : EMPTY_DESIGNEE);
   const [saved, setSaved] = useState<Designee | null>(null);
   const [saving, setSaving] = useState(false);
+  const [bureau, setBureau] = useState<Bureau>(EMPTY_BUREAU);
   // Only the first answer fills the form, so a slow second load never wipes what's been typed.
-  useEffect(() => { if (BACKEND) call<{ designee: Designee }>("GET", "/api/settings/designee").then((r) => { setSaved((cur) => cur ?? r.designee); setD((cur) => cur ?? r.designee); }).catch((e) => toast(e instanceof Error ? e.message : "Couldn't load", "info")); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (BACKEND) call<{ designee: Designee; bureau?: Bureau }>("GET", "/api/settings/designee").then((r) => { if (r.bureau) setBureau(r.bureau); setSaved((cur) => cur ?? r.designee); setD((cur) => cur ?? r.designee); }).catch((e) => toast(e instanceof Error ? e.message : "Couldn't load", "info")); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   if (!d) return <Card className="p-8 text-center text-muted">Loading…</Card>;
   const save = async () => {
     if (!BACKEND) return toast("Saving needs the live CRM (preview or production).", "info");
@@ -430,13 +477,15 @@ function DesigneeEditor() {
     setSaving(false);
   };
   const F = ({ k, label, hint, className = "" }: { k: keyof Designee; label: string; hint?: string; className?: string }) => (
-    <div className={className}><label htmlFor={`dg-${k}`} className="mb-1 block text-[13px] font-medium text-ink-2">{label}{hint && <span className="font-normal text-muted"> {hint}</span>}</label><input id={`dg-${k}`} disabled={!canEdit} value={d[k]} onChange={(e) => setD({ ...d, [k]: e.target.value })} className={`${input} h-10`} /></div>
+    <div className={className}><label htmlFor={`dg-${k}`} className="mb-1 block text-[13px] font-medium text-ink-2">{label}{hint && <span className="font-normal text-muted"> {hint}</span>}</label><input id={`dg-${k}`} disabled={!canEdit} value={d[k]} placeholder={k in bureau ? (bureau as Record<string, string>)[k] : ""} onChange={(e) => setD({ ...d, [k]: e.target.value })} className={`${input} h-10`} /></div>
   );
   return (
+    <>
+    <BureauEditor onSaved={setBureau} />
     <Card>
-      <CardHeader icon={ShieldCheck} title="IRS designee (Form 8821)" subtitle="Who the IRS sends transcripts and notice copies to. Staff only — never shown to clients." action={<Badge tone={designeeReady(d) ? "success" : "warning"}>{designeeReady(d) ? "Ready" : "Incomplete"}</Badge>} />
+      <CardHeader icon={ShieldCheck} title="IRS designee (Form 8821)" subtitle="Who the IRS sends transcripts and notice copies to. Staff only — never shown to clients." action={<Badge tone={designeeReady(withBureau(d, bureau)) ? "success" : "warning"}>{designeeReady(withBureau(d, bureau)) ? "Ready" : "Incomplete"}</Badge>} />
       <div className="space-y-4 px-5 pb-5 sm:px-6">
-        <p className="text-[13px] text-muted">Enter your details exactly as the IRS has them on your CAF record. They fill line 2 of every Form 8821.</p>
+        <p className="text-[13px] text-muted">Enter your details exactly as the IRS has them on your CAF record. They fill line 2 of every Form 8821. Leave name, address, phone or fax blank to use your service bureau details (shown in gray).</p>
         <div className="grid gap-4 sm:grid-cols-2">
           {F({ k: "name", label: "Designee name" })}
           {F({ k: "caf", label: "CAF number" })}
@@ -450,6 +499,7 @@ function DesigneeEditor() {
         {canEdit && <Button variant="primary" icon={Save} disabled={saving || JSON.stringify(d) === JSON.stringify(saved)} onClick={save}>{saving ? "Saving…" : "Save"}</Button>}
       </div>
     </Card>
+    </>
   );
 }
 
