@@ -262,7 +262,7 @@ export async function getMedia(env: AppEnv, key: string) {
 }
 
 /* ---------------------------------------------------------------- public */
-export type PublicSite = { settings: SiteSettings; page: { slug: string; title: string; description: string; hideNav?: boolean }; sections: Section[]; nav: { slug: string; title: string }[] };
+export type PublicSite = { settings: SiteSettings; page: { slug: string; title: string; description: string; hideNav?: boolean }; sections: Section[]; nav: { slug: string; title: string }[]; legal?: { slug: string; title: string }[] };
 /** What visitors see: published settings and page, or null (not found / never published). */
 export async function publicPage(env: AppEnv, slug: string, site: SiteKey = "mkb"): Promise<PublicSite | null> {
   const [s, pages] = await Promise.all([
@@ -277,5 +277,7 @@ export async function publicPage(env: AppEnv, slug: string, site: SiteKey = "mkb
     page: { slug: p.slug, title: p.title, description: p.description, hideNav: !!p.hide_nav },
     sections: json(p.published, []),
     nav: pages.filter((x) => x.nav && x.slug).map((x) => ({ slug: x.slug, title: x.title })),
+    // Published policy pages, linked at the bottom of every page.
+    legal: pages.filter((x) => x.slug === "privacy" || x.slug === "text-terms").map((x) => ({ slug: x.slug, title: x.title })),
   };
 }

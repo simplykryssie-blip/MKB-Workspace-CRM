@@ -50,6 +50,6 @@ export async function serveSite(req: Request, site: SiteKey, slugParts?: string[
   if (isHtmlPage(s.sections)) return html(preparePage(s.sections[0].html ?? "", prefix));
   const name = s.settings.siteName;
   const title = s.page.slug ? `${s.page.title} | ${name}` : `${name}${s.settings.tagline ? ` | ${s.settings.tagline}` : ""}`;
-  const body = renderSectionsBody({ settings: s.settings, page: s.page, sections: s.sections, nav: s.nav, base: prefix, site });
+  const body = renderSectionsBody({ settings: s.settings, page: s.page, sections: s.sections, nav: s.nav, base: prefix, site, legal: s.legal });
   return html(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${s.page.description ? `<meta name="description" content="${esc(s.page.description)}">` : ""}<meta property="og:title" content="${esc(s.page.title)}"><meta property="og:site_name" content="${esc(name)}"><meta property="og:image" content="${OG[site]}">${ICONS[site]}<style>body{margin:0}</style></head><body>${body}${body.includes("data-mkb-frame") ? WIDGET_SCRIPT : ""}</body></html>`);
 }
