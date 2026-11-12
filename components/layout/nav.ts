@@ -50,7 +50,6 @@ export const NAV: { section?: string; items: NavItem[] }[] = [
       { label: "Forms", href: "/forms", icon: ClipboardList },
       { label: "Website", href: "/website", icon: Globe },
       { label: "Campaigns", href: "/campaigns", icon: Megaphone },
-      { label: "Text inbox", href: "/texts", icon: MessageSquareText, badgeKey: "textsUnread" },
       { label: "Calendar", href: "/calendar", icon: CalendarDays },
     ],
   },
@@ -75,7 +74,7 @@ export const NAV: { section?: string; items: NavItem[] }[] = [
     items: [
       { label: "Documents", href: "/documents", icon: FolderOpen },
       { label: "Billing", href: "/billing", icon: Receipt },
-      { label: "Messages", href: "/messages", icon: Mail, badge: process.env.NEXT_PUBLIC_BACKEND === "1" ? undefined : 3 },
+      { label: "Messages", href: "/messages", icon: Mail, ...(process.env.NEXT_PUBLIC_BACKEND === "1" ? { badgeKey: "textsUnread" as const } : { badge: 3 }) },
     ],
   },
   {

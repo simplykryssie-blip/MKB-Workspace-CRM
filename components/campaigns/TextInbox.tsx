@@ -71,7 +71,7 @@ export function TextInbox({ brand }: { brand: Brand }) {
   );
 }
 
-function Conversation({ brand, phone, base, canSend, onChange }: { brand: Brand; phone: string; base: string; canSend: boolean; onChange: () => void }) {
+export function Conversation({ brand, phone, base, canSend, onChange }: { brand: Brand; phone: string; base: string; canSend: boolean; onChange: () => void }) {
   const toast = useToast();
   const [c, setC] = useState<Convo | null>(null);
   const [body, setBody] = useState("");

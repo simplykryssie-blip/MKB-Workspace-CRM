@@ -1,9 +1,7 @@
-import type { Metadata } from "next";
-import { Suspense } from "react";
-import { TextInbox } from "@/components/campaigns/TextInbox";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Text inbox" };
-
-export default function Page() {
-  return <Suspense><TextInbox brand="mkb" /></Suspense>;
+/** The text inbox is part of Messages now (texts, portal messages and emails together). */
+export default async function Page({ searchParams }: { searchParams: Promise<{ phone?: string }> }) {
+  const { phone } = await searchParams;
+  redirect(phone ? `/messages?phone=${encodeURIComponent(phone)}` : "/messages");
 }
