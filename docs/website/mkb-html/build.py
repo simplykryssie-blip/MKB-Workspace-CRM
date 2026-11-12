@@ -311,6 +311,16 @@ h3{font-size:25px;line-height:1.2;color:#FBF7EE;margin-bottom:10px}
   .statebox{grid-template-columns:1fr;justify-items:start}
 }
 
+/* policy pages */
+.prose{max-width:820px;margin:0 auto;font-size:16px;line-height:1.75;color:var(--ink-2)}
+.prose h2{font-size:30px;margin:44px 0 12px;color:var(--ink)}
+.prose h2:first-child{margin-top:0}
+.prose p,.prose li{color:var(--ink-2)}
+.prose ul{padding-left:22px;margin:0 0 16px}.prose li{margin:0 0 8px}
+.prose a{color:#8A5F1D;font-weight:600;text-decoration:underline}
+.prose .box{border-radius:10px;background:#FFFDF8;border:1px solid #E4DCCB;padding:18px 20px;margin:18px 0}
+.prose .box p:last-child{margin-bottom:0}
+
 /* funnel pages: no menu */
 .slim .bar{justify-content:center}
 
@@ -404,7 +414,7 @@ def header(slim=False):
 
 def footer(slim=False):
   if slim:
-    return f'<footer class="site-footer" style="padding:40px 0"><div class="wrap"><hr class="metallic-gold-divider"><div class="legal"><span>© 2026 MKB Financial Group. All rights reserved.</span><span>{PHONE} · {EMAIL}</span></div></div></footer>'
+    return f'<footer class="site-footer" style="padding:40px 0"><div class="wrap"><hr class="metallic-gold-divider"><div class="legal"><span>© 2026 MKB Financial Group. All rights reserved. · <a href="/privacy" style="color:inherit;text-decoration:underline">Privacy Policy</a> · <a href="/text-terms" style="color:inherit;text-decoration:underline">Text Message Terms</a></span><span>{PHONE} · {EMAIL}</span></div></div></footer>'
   return f'''<footer class="site-footer"><div class="wrap">
 <div class="foot">
  <div><a class="logo" href="/"><img src="{M}mkb-logo-gold.webp" alt="MKB Financial Group — Strategy, Growth, Legacy" width="900" height="485"></a><p class="blurb">Professional financial services for entrepreneurs building something real.</p></div>
@@ -414,7 +424,7 @@ def footer(slim=False):
   <div class="social"><a href="{FB}" target="_blank" rel="noopener noreferrer" aria-label="Facebook"><svg viewBox="0 0 24 24"><path d="M14 8h3V4h-3a4 4 0 0 0-4 4v3H7v4h3v6h4v-6h3l1-4h-4V8z"/></svg></a><a href="{IG}" target="_blank" rel="noopener noreferrer" aria-label="Instagram"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><path d="M17.5 6.5h.01"/></svg></a></div>
  </div>
 </div>
-<hr class="metallic-gold-divider" style="margin-top:56px"><div class="legal" style="margin-top:0"><span>© 2026 MKB Financial Group. All rights reserved.</span><span class="metallic-gold-text" style="letter-spacing:.28em;font-weight:600;font-size:11.5px">STRATEGY • GROWTH • LEGACY</span></div>
+<hr class="metallic-gold-divider" style="margin-top:56px"><div class="legal" style="margin-top:0"><span>© 2026 MKB Financial Group. All rights reserved. · <a href="/privacy" style="color:inherit;text-decoration:underline">Privacy Policy</a> · <a href="/text-terms" style="color:inherit;text-decoration:underline">Text Message Terms</a></span><span class="metallic-gold-text" style="letter-spacing:.28em;font-weight:600;font-size:11.5px">STRATEGY • GROWTH • LEGACY</span></div>
 </div></footer>'''
 
 def page(title, desc, main, slim=False):
@@ -754,6 +764,98 @@ pages["get-started"] = page("Get Started | MKB Financial Group", "Start tax prep
 <div class="tabs" role="tablist">''' + "".join(f'<button type="button" role="tab" id="tab-{k}" data-path="{k}" aria-selected="{"true" if i == 0 else "false"}">{t}</button>' for i, (k, t, _, _, _) in enumerate(START)) + '''</div>
 <div class="formbox">''' + "".join(f'<div class="pane" id="{k}" role="tabpanel"{"" if i == 0 else " hidden"}><div data-mkb-widget="form" data-form="{slug}"></div></div>' for i, (k, _, _, slug, _) in enumerate(START)) + f'''</div></div></section>
 {START_JS}''')
+
+
+EFFECTIVE = "November 12, 2026"
+def policy(slug, title, desc, eyebrow, h1, lead, body):
+  pages[slug] = page(f"{title} | MKB Financial Group", desc,
+    f'''<section class="hero plain short"><div class="glow"></div><div class="wrap"><div class="copy" style="max-width:820px">
+<span class="eyebrow gold">{eyebrow}</span><h1>{h1}</h1><p class="lead">{lead}</p><p class="place" style="margin-top:22px">EFFECTIVE {EFFECTIVE.upper()}</p></div></div></section>
+<section class="sec light on-light"><div class="wrap"><div class="prose">{body}</div></div></section>''')
+
+policy("privacy", "Privacy Policy", "How MKB Financial Group collects, uses, protects and shares your information, including text messaging.", "Privacy Policy", f"Your information, {gold('handled with care.')}",
+  "How MKB Financial Group collects, uses, protects and shares personal information — on our website, in our client portal, and by email and text.", f'''
+<h2>Who we are</h2>
+<p>MKB Financial Group (“MKB,” “we,” “us”) provides business financial management (bookkeeping and payroll), business solutions, tax services and record relief administrative assistance to clients in Louisiana, Texas and virtually. You can reach us at <a href="tel:8333793320">{PHONE}</a> or <a href="mailto:{EMAIL}">{EMAIL}</a>.</p>
+
+<h2>Information we collect</h2>
+<ul>
+<li><b>Information you give us on our website:</b> your name, email, phone number, business name and details, the services you&rsquo;re interested in, and anything you write in a form.</li>
+<li><b>Information you give us to provide our services:</b> through your secure client portal or a private intake link, such as tax, payroll, bookkeeping, business and identity information and documents. Sensitive numbers (for example Social Security numbers, EINs and bank account numbers) are encrypted when stored.</li>
+<li><b>Communication preferences:</b> whether you agreed to receive marketing emails or text messages, and when and how you agreed or opted out.</li>
+<li><b>Basic technical information:</b> such as your browser type and pages visited, and whether a marketing email was opened or a link in it was clicked.</li>
+</ul>
+
+<h2>How we use information</h2>
+<ul>
+<li>To respond to your requests and provide, manage and bill for the services you engage us for.</li>
+<li>To send service messages, such as intake links, document requests, reminders, receipts and replies to your questions.</li>
+<li>To send marketing emails and text messages — only as described below, and you can opt out at any time.</li>
+<li>To protect our clients and our business, and to meet legal, tax and regulatory obligations.</li>
+</ul>
+
+<h2>Text messaging</h2>
+<div class="box">
+<p><b>No mobile information will be shared with third parties or affiliates for marketing or promotional purposes.</b> Information sharing with subcontractors in support services, such as customer service, is permitted. All other categories in this policy exclude text messaging originator opt-in data and consent; this information will not be shared with any third parties.</p>
+</div>
+<p>We send marketing text messages only to people who agreed to receive them, for example by checking the optional text consent box on our website forms or by texting START to our number. Message frequency varies. Message and data rates may apply. Reply <b>HELP</b> for help or <b>STOP</b> to opt out at any time. See our <a href="/text-terms">Text Message Terms</a>.</p>
+
+<h2>How we share information</h2>
+<p>We do not sell your personal information. We share it only:</p>
+<ul>
+<li>With service providers who help us operate — for example secure hosting, email and text message delivery, payment processing, and tax and accounting software — and only as needed to provide their services to us.</li>
+<li>With government agencies, courts or others when you ask us to file or request something on your behalf, or when required by law.</li>
+<li>With your permission, for example with an attorney or another professional you ask us to work with.</li>
+</ul>
+<p>Tax return information is kept confidential and is used or disclosed only as federal law allows, or with your written consent.</p>
+
+<h2>How we protect information</h2>
+<p>We use encryption, access controls, sign-in verification and activity logs to protect your information. Sensitive documents are shared through your secure client portal — we never ask you to email Social Security numbers, bank account numbers or tax documents. No system is perfectly secure, so please contact us right away if you believe your information has been misused.</p>
+
+<h2>Your choices</h2>
+<ul>
+<li><b>Email:</b> use the unsubscribe link in any marketing email.</li>
+<li><b>Text messages:</b> reply STOP to any message. Reply START to resubscribe.</li>
+<li><b>Your information:</b> contact us to review, correct or ask us to delete your information. Some records must be kept for a period of time by law.</li>
+</ul>
+
+<h2>Keeping information</h2>
+<p>We keep information as long as needed to provide our services and to meet legal, tax and professional record-keeping requirements, then securely delete it.</p>
+
+<h2>Children</h2>
+<p>Our website and services are not directed to children under 13, and we do not knowingly collect their information online.</p>
+
+<h2>Changes to this policy</h2>
+<p>We may update this policy. The effective date at the top shows when it last changed.</p>
+
+<h2>Contact us</h2>
+<p>MKB Financial Group · <a href="tel:8333793320">{PHONE}</a> · <a href="mailto:{EMAIL}">{EMAIL}</a></p>
+''')
+
+policy("text-terms", "Text Message Terms", "Terms for MKB Financial Group text messages: what we send, how often, HELP and STOP.", "Text Message Terms", f"Text messages from {gold('MKB Financial Group.')}",
+  "What to expect when you agree to get text messages from us — and how to get help or stop them at any time.", f'''
+<div class="box">
+<p><b>MKB Financial Group text messages.</b> Message frequency varies (typically 2–4 messages per month). Message and data rates may apply. Reply <b>HELP</b> for help. Reply <b>STOP</b> to cancel at any time.</p>
+</div>
+
+<h2>What we send</h2>
+<p>Tax season and deadline reminders, tips for business owners, offers for our services, and replies to questions you send us by text.</p>
+
+<h2>How you sign up</h2>
+<p>By checking the optional text consent box on one of our website forms (for example at <a href="/get-started">mkbfinancialgroup.com/get-started</a>), or by texting <b>START</b> to our number. Agreeing to receive text messages is not a condition of buying any service.</p>
+
+<h2>How to stop</h2>
+<p>Reply <b>STOP</b> to any message (STOPALL, UNSUBSCRIBE, CANCEL, END and QUIT also work). You&rsquo;ll get one message confirming you&rsquo;re unsubscribed, and no more messages after that. To start again, reply <b>START</b>.</p>
+
+<h2>How to get help</h2>
+<p>Reply <b>HELP</b> to any message, call <a href="tel:8333793320">{PHONE}</a>, or email <a href="mailto:{EMAIL}">{EMAIL}</a>.</p>
+
+<h2>Costs and delivery</h2>
+<p>Message and data rates may apply according to your mobile plan. Carriers are not liable for delayed or undelivered messages.</p>
+
+<h2>Privacy</h2>
+<p>No mobile information will be shared with third parties or affiliates for marketing or promotional purposes. Text messaging opt-in data and consent will not be shared with any third parties. Read our full <a href="/privacy">Privacy Policy</a>.</p>
+''')
 
 pages["tax-calculator"] = page("Free Tax Calculator | MKB Financial Group", "Free tax estimator from MKB Financial Group — see what you might owe or get back.",
   hero("Free tax estimator", f"Refund or balance due? {gold('Get an estimate in minutes.')}", "Use our free tax calculator to see roughly what you might owe or get back this year. Tell us where to reach you and the calculator opens right away.", btn("Open the free calculator", "#start"), place=False)
