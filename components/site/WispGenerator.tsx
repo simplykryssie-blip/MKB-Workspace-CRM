@@ -17,6 +17,7 @@ export function WispGenerator({ preview, nextHref }: { preview?: boolean; nextHr
   const [p, setP] = useState({ businessName: "", ownerName: "", email: "", phone: "", city: "", state: "", qualifiedIndividual: "", people: "", locations: "", software: "" });
   const [ans, setAns] = useState<Record<string, Answer>>({});
   const [consent, setConsent] = useState(false);
+  const [marketing, setMarketing] = useState(false);
   const [hp, setHp] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -39,7 +40,7 @@ export function WispGenerator({ preview, nextHref }: { preview?: boolean; nextHr
     if (preview) { setErr("Preview — nothing is sent from here."); return; }
     setBusy(true); setErr(null);
     try {
-      const r = await fetch("/api/public/monarch-wisp", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ practice: p, safeguards: ans, consent, website: hp }) });
+      const r = await fetch("/api/public/monarch-wisp", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ practice: p, safeguards: ans, consent, marketing, website: hp }) });
       const d = (await r.json().catch(() => ({}))) as Result & { error?: string };
       if (!r.ok) { setErr(d.error ?? "Something went wrong. Please try again."); return; }
       setRes(d);
@@ -96,6 +97,7 @@ export function WispGenerator({ preview, nextHref }: { preview?: boolean; nextHr
           ))}
         </div>
       )}
+      {last && <label className="check"><input type="checkbox" checked={marketing} onChange={(e) => setMarketing(e.target.checked)} /> <span>Yes — send me tips, deadline reminders and offers from Monarch Tax Suite by email and text. Message frequency varies; message and data rates may apply. Reply STOP to opt out of texts. (Optional)</span></label>}
       {last && <label className="check"><input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} /> <span>Email me my plan. I agree that Monarch Tax Suite may contact me by phone, text or email about it. Message and data rates may apply; I can opt out anytime.</span></label>}
       {err && <p className="err" role="alert">{err}</p>}
       <div className="wisp-actions">

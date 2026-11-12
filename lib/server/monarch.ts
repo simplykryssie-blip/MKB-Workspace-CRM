@@ -5,6 +5,7 @@
  * Server-only.
  */
 import { all, badRequest, HttpError, json, notFound, now, one, run, str, type AppEnv } from "./core";
+import { recordConsent } from "./campaigns";
 import { randomId } from "./crypto";
 import { audit, requirePermission, type Actor } from "./identity";
 import {
@@ -406,6 +407,11 @@ export async function websiteInquiry(env: AppEnv, ip: string, b: Record<string, 
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw badRequest("Please enter a valid email address.");
   if (phone.replace(/\D/g, "").length < 10) throw badRequest("Please enter a phone number.");
   if (!b.consent) throw badRequest("Please check the box so we can contact you.");
+  // Optional marketing opt-in: subscribed to Monarch marketing email and texts (with where and when).
+  if (b.marketing === true) {
+    await recordConsent(env, "monarch", "email", email, "subscribed", "Monarch website: contact form", null);
+    await recordConsent(env, "monarch", "sms", phone.replace(/\D/g, "").slice(-10), "subscribed", "Monarch website: contact form", null);
+  }
   const message = str(b.message, 2000);
   const locations = str(b.locations, 20);
   const t = now();

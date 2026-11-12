@@ -5,6 +5,7 @@
  * Rate-limited, with a hidden spam trap. Server-only.
  */
 import { badRequest, HttpError, now, rateLimit, str, type AppEnv } from "./core";
+import { recordConsent } from "./campaigns";
 import { randomId } from "./crypto";
 import { buildWispPdf } from "./intake-pdf";
 import { notify } from "./notifications";
@@ -40,6 +41,12 @@ export async function generateWisp(env: AppEnv, ip: string, b: Record<string, un
   const t = now();
   const areas = [...new Set(SAFEGUARDS.map((s) => s.area))].map((area) => ({ area, inPlace: SAFEGUARDS.filter((s) => s.area === area && safeguards[s.key] === "yes").map((s) => s.inPlace) }));
   const actions = r.gaps.map((s) => ({ area: s.area, text: s.action, unsure: safeguards[s.key] === "unsure" }));
+  // Optional marketing opt-in (only once the plan is accepted): Monarch marketing email and texts.
+  if (b.marketing === true) {
+    await recordConsent(env, "monarch", "email", practice.email, "subscribed", "Monarch website: WISP generator", null);
+    const ph = practice.phone.replace(/\D/g, "").slice(-10);
+    if (ph.length === 10) await recordConsent(env, "monarch", "sms", ph, "subscribed", "Monarch website: WISP generator", null);
+  }
   const pdf = await buildWispPdf({ practice, createdAt: t, areas, actions, score: r.score, disclaimer: WISP_DISCLAIMER });
 
   // Save the practice as a Monarch lead with the plan attached.

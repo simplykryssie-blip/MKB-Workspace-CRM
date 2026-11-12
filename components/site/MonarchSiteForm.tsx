@@ -8,7 +8,7 @@ import { useState } from "react";
  * In the editor preview nothing is sent.
  */
 export function MonarchSiteForm({ preview }: { preview?: boolean }) {
-  const [f, setF] = useState({ name: "", office: "", email: "", phone: "", city: "", state: "", locations: "1", message: "", consent: false, website: "" });
+  const [f, setF] = useState({ name: "", office: "", email: "", phone: "", city: "", state: "", locations: "1", message: "", marketing: false, consent: false, website: "" });
   const [state, setState] = useState<"idle" | "sending" | "done">("idle");
   const [err, setErr] = useState<string | null>(null);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setF((x) => ({ ...x, [k]: e.target.type === "checkbox" ? (e.target as HTMLInputElement).checked : e.target.value }));
@@ -40,6 +40,7 @@ export function MonarchSiteForm({ preview }: { preview?: boolean }) {
       <label><span>How many locations?</span><select value={f.locations} onChange={set("locations")}><option>1</option><option>2–3</option><option>4–10</option><option>More than 10</option></select></label>
       <label><span>Anything else we should know?</span><textarea rows={4} value={f.message} onChange={set("message")} /></label>
       <label className="hp" aria-hidden="true"><span>Website</span><input tabIndex={-1} autoComplete="off" value={f.website} onChange={set("website")} /></label>
+      <label className="check"><input type="checkbox" checked={f.marketing} onChange={set("marketing")} /> <span>Yes — send me tips, deadline reminders and offers from Monarch Tax Suite by email and text. Message frequency varies; message and data rates may apply. Reply STOP to opt out of texts. (Optional)</span></label>
       <label className="check"><input type="checkbox" checked={f.consent} onChange={set("consent")} required /> <span>I agree that Monarch Tax Suite may contact me by phone, text or email about my request. Message and data rates may apply. I can opt out at any time.</span></label>
       {err && <p className="err" role="alert">{err}</p>}
       <button type="submit" className="btn gold" disabled={state === "sending"}>{state === "sending" ? "Sending…" : "Send"}</button>
