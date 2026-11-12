@@ -1,6 +1,7 @@
 "use client";
 
 import { MarketingConsentCard } from "@/components/campaigns/MarketingConsent";
+import { ContactCalendar } from "@/components/calendar/ContactCalendar";
 import { LeadIntakesCard, useLeadIntakes } from "./LeadIntakes";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -238,6 +239,7 @@ export function LeadDetail({ id }: { id: string }) {
       <div className="mt-5 grid grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
         <div className="space-y-5">
           <LeadIntakesCard lead={l} intakes={intakes} />
+          <ContactCalendar contact={{ type: "lead", id: l.id, name: l.name }} compact />
           <MarketingConsentCard email={l.email} phone={l.phone} />
           {/* Follow-ups */}
           <Card>

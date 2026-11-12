@@ -4,6 +4,13 @@ import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // Appointments and Tasks are now one Calendar.
+  async redirects() {
+    return [
+      { source: "/appointments", destination: "/calendar", permanent: false },
+      { source: "/tasks", destination: "/calendar?view=tasks", permanent: false },
+    ];
+  },
   async headers() {
     const common = [
       { key: "X-Content-Type-Options", value: "nosniff" },

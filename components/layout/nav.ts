@@ -2,7 +2,6 @@ import {
   BarChart3,
   Briefcase,
   CalendarDays,
-  CheckSquare,
   ClipboardList,
   FileText,
   FolderOpen,
@@ -52,6 +51,7 @@ export const NAV: { section?: string; items: NavItem[] }[] = [
       { label: "Website", href: "/website", icon: Globe },
       { label: "Campaigns", href: "/campaigns", icon: Megaphone },
       { label: "Text inbox", href: "/texts", icon: MessageSquareText, badgeKey: "textsUnread" },
+      { label: "Calendar", href: "/calendar", icon: CalendarDays },
     ],
   },
   {
@@ -73,11 +73,9 @@ export const NAV: { section?: string; items: NavItem[] }[] = [
   {
     section: "Workspace",
     items: [
-      { label: "Appointments", href: "/appointments", icon: CalendarDays },
       { label: "Documents", href: "/documents", icon: FolderOpen },
       { label: "Billing", href: "/billing", icon: Receipt },
       { label: "Messages", href: "/messages", icon: Mail, badge: process.env.NEXT_PUBLIC_BACKEND === "1" ? undefined : 3 },
-      { label: "Tasks", href: "/tasks", icon: CheckSquare },
     ],
   },
   {
@@ -100,6 +98,7 @@ export const MONARCH_NAV: { section?: string; items: NavItem[] }[] = [
       { label: "Bank reports", href: "/monarch/bank-reports", icon: Landmark },
       { label: "Campaigns", href: "/monarch/campaigns", icon: Megaphone },
       { label: "Text inbox", href: "/monarch/texts", icon: MessageSquareText, badgeKey: "monarchTextsUnread" },
+      { label: "Calendar", href: "/monarch/calendar", icon: CalendarDays },
     ],
   },
   {

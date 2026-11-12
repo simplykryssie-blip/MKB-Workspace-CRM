@@ -1,5 +1,6 @@
 "use client";
 
+import { TodayCard } from "@/components/calendar/TodayCard";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { BellRing, CalendarDays, FileText, Globe, UserPlus, Users } from "lucide-react";
@@ -64,6 +65,7 @@ export function LiveDashboard() {
         ))}
       </div>
 
+      <TodayCard />
       <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:gap-6 xl:grid-cols-2">
         <section className="rounded-2xl border border-line bg-surface p-5 shadow-soft">
           <div className="mb-3 flex items-center justify-between">

@@ -44,6 +44,7 @@ import { clientStatus, portalStatus } from "@/lib/status";
 import { fmtDate, fmtDateTime, usd } from "@/lib/format";
 import { formatPhone } from "@/lib/validation";
 import { missingTaxInfo } from "./ProfileTabs";
+import { ContactCalendar, ScheduleFor } from "@/components/calendar/ContactCalendar";
 import type { ClientDocument, ServiceKey } from "@/lib/types";
 import {
   DocPreviewDialog,
@@ -89,6 +90,7 @@ export function ClientProfile({ id }: { id: string }) {
   const toast = useToast();
   const [tab, setTab] = useState<TabKey>("overview");
   const [dialog, setDialog] = useState<{ kind: DialogKind; arg?: unknown } | null>(null);
+  const [calKey, setCalKey] = useState(0);
 
   // Keep the tab in the URL hash so links like /clients/c-1001#documents work.
   useEffect(() => {
@@ -144,7 +146,16 @@ export function ClientProfile({ id }: { id: string }) {
   const ps = portalStatus[c.portal];
   const bal = balanceDue(c);
   const openReq = openRequirements(c) + (missingTaxInfo(c).length ? 1 : 0);
-  const next = c.appointments.find((a) => a.status === "scheduled" && a.at >= SAMPLE_NOW.toISOString());
+  const sampleNext = c.appointments.find((a) => a.status === "scheduled" && a.at >= SAMPLE_NOW.toISOString());
+  // Live: the next appointment comes from the Calendar.
+  const [liveNext, setLiveNext] = useState<{ at: string } | null | undefined>(undefined);
+  useEffect(() => {
+    if (!BACKEND) return;
+    call<{ appointments: { kind: string; status: string; startsAt: string }[] }>("GET", `/api/calendar/contact?type=client&id=${encodeURIComponent(c.id)}`)
+      .then((r) => { const n = r.appointments.filter((a) => a.kind === "appointment" && a.status === "scheduled" && a.startsAt >= new Date().toISOString()).sort((x, y) => x.startsAt.localeCompare(y.startsAt))[0]; setLiveNext(n ? { at: n.startsAt } : null); })
+      .catch(() => setLiveNext(null));
+  }, [c.id, calKey]);
+  const next = BACKEND ? liveNext ?? undefined : sampleNext;
   const unread = c.messages.filter((m) => m.from === "client" && !m.read).length;
   const services = [...new Set(c.enrollments.map((e) => e.service))];
 
@@ -297,7 +308,7 @@ export function ClientProfile({ id }: { id: string }) {
         {tab === "services" && <ServicesTab c={c} act={act} />}
         {tab === "documents" && <DocumentsTab c={c} act={act} />}
         {tab === "messages" && <MessagesTab c={c} />}
-        {tab === "appointments" && <AppointmentsTab c={c} act={act} />}
+        {tab === "appointments" && (BACKEND ? <ContactCalendar key={calKey} contact={{ type: "client", id: c.id, name: c.name }} /> : <AppointmentsTab c={c} act={act} />)}
         {tab === "invoices" && <InvoicesTab c={c} act={act} />}
         {tab === "signatures" && <SignaturesTab c={c} act={act} />}
         {tab === "notes" && <NotesTab c={c} />}
@@ -310,7 +321,7 @@ export function ClientProfile({ id }: { id: string }) {
       <RequestDocDialog client={c} open={dialog?.kind === "request"} onClose={close} />
       <UploadDocDialog client={c} open={dialog?.kind === "upload"} onClose={close} replace={dialog?.kind === "upload" ? (dialog.arg as ClientDocument | undefined) : undefined} />
       <DocPreviewDialog client={c} doc={dialog?.kind === "preview" ? (dialog.arg as ClientDocument) : null} onClose={close} />
-      <ScheduleDialog client={c} open={dialog?.kind === "schedule"} onClose={close} />
+      {BACKEND ? <ScheduleFor contact={{ type: "client", id: c.id, name: c.name }} open={dialog?.kind === "schedule"} onClose={() => { close(); setCalKey((k) => k + 1); }} /> : <ScheduleDialog client={c} open={dialog?.kind === "schedule"} onClose={close} />}
       <InvoiceDialog client={c} open={dialog?.kind === "invoice"} onClose={close} />
       <PaymentDialog client={c} open={dialog?.kind === "payment"} onClose={close} invoiceId={dialog?.kind === "payment" ? (dialog.arg as string | undefined) : undefined} />
       <SignatureDialog client={c} open={dialog?.kind === "signature"} onClose={close} />
