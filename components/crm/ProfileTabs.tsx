@@ -36,6 +36,9 @@ import {
   Video,
   XCircle,
   type LucideIcon,
+  ChevronDown,
+  ChevronRight,
+  FolderOpen,
 } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Avatar } from "@/components/ui/Avatar";
@@ -470,6 +473,28 @@ export function ServicesTab({ c, act }: { c: Client; act: Act }) {
 /* Documents                                                           */
 /* ------------------------------------------------------------------ */
 
+/** The year a document belongs to: its tax year, its bookkeeping month, or when it was uploaded/requested. */
+const docYear = (d: ClientDocument) => d.taxYear ?? (d.period ? Number(d.period.slice(0, 4)) : Number((d.uploadedAt ?? d.requestedAt).slice(0, 4)));
+const isWaiting = (d: ClientDocument) => d.status === "requested" || d.status === "rejected";
+/** Folders: one per service, then one per year (newest first), each with received / waiting counts. */
+function folderize(docs: ClientDocument[]) {
+  const today = new Date().toISOString();
+  const bySvc = new Map<ServiceKey, ClientDocument[]>();
+  for (const d of docs) bySvc.set(d.service, [...(bySvc.get(d.service) ?? []), d]);
+  return [...bySvc.entries()].map(([service, list]) => {
+    const byYear = new Map<number, ClientDocument[]>();
+    for (const d of list) byYear.set(docYear(d), [...(byYear.get(docYear(d)) ?? []), d]);
+    const years = [...byYear.entries()].sort((x, y) => y[0] - x[0]).map(([year, ds]) => ({
+      year,
+      docs: [...ds].sort((x, y) => Number(isWaiting(y)) - Number(isWaiting(x)) || (y.uploadedAt ?? y.requestedAt).localeCompare(x.uploadedAt ?? x.requestedAt)),
+      received: ds.filter((d) => !isWaiting(d)).length,
+      waiting: ds.filter(isWaiting).length,
+      overdue: ds.filter((d) => isWaiting(d) && !!d.dueAt && d.dueAt < today).length,
+    }));
+    return { service, years, received: list.filter((d) => !isWaiting(d)).length, waiting: list.filter(isWaiting).length };
+  }).sort((x, y) => Object.keys(SERVICES).indexOf(x.service) - Object.keys(SERVICES).indexOf(y.service));
+}
+
 export function DocumentsTab({ c, act }: { c: Client; act: Act }) {
   const store = useClients();
   const toast = useToast();
@@ -504,37 +529,7 @@ export function DocumentsTab({ c, act }: { c: Client; act: Act }) {
     store.setDocStatus(c.id, d.id, s);
     toast(s === "reviewed" ? `Marked "${d.name}" reviewed` : `Asked client to re-upload "${d.name}"`);
   };
-  return (
-    <Card>
-      <CardHeader
-        title="Documents"
-        subtitle={`${c.documents.filter((d) => d.status === "requested" || d.status === "rejected").length} outstanding · ${c.documents.filter((d) => d.status === "received" || d.status === "reviewed").length} on file`}
-        action={
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" icon={FilePlus2} onClick={() => act.open("request")}>Request document</Button>
-            <Button size="sm" variant="primary" icon={FileUp} onClick={() => act.open("upload")}>Upload</Button>
-          </div>
-        }
-      />
-      <div className="flex flex-wrap items-center gap-2 px-5 pb-3 sm:px-6">
-        <Chip on={svc === "all"} onClick={() => setSvc("all")}>All services</Chip>
-        {services.map((s) => (
-          <Chip key={s} on={svc === s} onClick={() => setSvc(s)} dot={svcColor(s)}>{SERVICES[s].short}</Chip>
-        ))}
-        <span className="mx-1 hidden h-5 w-px bg-line sm:block" />
-        {(["all", "requested", "on_file"] as const).map((k) => (
-          <Chip key={k} on={state === k} onClick={() => setState(k)}>{k === "all" ? "Any status" : k === "requested" ? "Outstanding" : "On file"}</Chip>
-        ))}
-        <label className="ml-auto inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-line-strong px-2.5 py-1 text-[12px] text-muted" title="Preview how this tab looks for a staff member without the sensitive-documents permission">
-          <input type="checkbox" checked={!canSensitive} onChange={() => setCanSensitive((v) => !v)} className="accent-[var(--accent)]" />
-          Preview as staff without sensitive-doc access
-        </label>
-      </div>
-      {docs.length === 0 ? (
-        <p className="border-t border-line px-6 py-8 text-center text-[13.5px] text-muted">No documents in this view.</p>
-      ) : (
-        <ul className="divide-y divide-line border-t border-line">
-          {docs.map((d) => {
+  const renderDoc = (d: ClientDocument) => {
             const st = docStatus[d.status];
             const locked = d.sensitive && !canSensitive;
             const outstanding = d.status === "requested" || d.status === "rejected";
@@ -578,8 +573,61 @@ export function DocumentsTab({ c, act }: { c: Client; act: Act }) {
                 </div>
               </li>
             );
-          })}
-        </ul>
+  };
+  return (
+    <Card>
+      <CardHeader
+        title="Documents"
+        subtitle={`${c.documents.filter((d) => d.status === "requested" || d.status === "rejected").length} outstanding · ${c.documents.filter((d) => d.status === "received" || d.status === "reviewed").length} on file`}
+        action={
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" icon={FilePlus2} onClick={() => act.open("request")}>Request document</Button>
+            <Button size="sm" variant="primary" icon={FileUp} onClick={() => act.open("upload")}>Upload</Button>
+          </div>
+        }
+      />
+      <div className="flex flex-wrap items-center gap-2 px-5 pb-3 sm:px-6">
+        <Chip on={svc === "all"} onClick={() => setSvc("all")}>All services</Chip>
+        {services.map((s) => (
+          <Chip key={s} on={svc === s} onClick={() => setSvc(s)} dot={svcColor(s)}>{SERVICES[s].short}</Chip>
+        ))}
+        <span className="mx-1 hidden h-5 w-px bg-line sm:block" />
+        {(["all", "requested", "on_file"] as const).map((k) => (
+          <Chip key={k} on={state === k} onClick={() => setState(k)}>{k === "all" ? "Any status" : k === "requested" ? "Outstanding" : "On file"}</Chip>
+        ))}
+        <label className="ml-auto inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-line-strong px-2.5 py-1 text-[12px] text-muted" title="Preview how this tab looks for a staff member without the sensitive-documents permission">
+          <input type="checkbox" checked={!canSensitive} onChange={() => setCanSensitive((v) => !v)} className="accent-[var(--accent)]" />
+          Preview as staff without sensitive-doc access
+        </label>
+      </div>
+      {docs.length === 0 ? (
+        <p className="border-t border-line px-6 py-8 text-center text-[13.5px] text-muted">No documents in this view.</p>
+      ) : (
+        <div className="border-t border-line">
+          {folderize(docs).map((f) => (
+            <details key={f.service} open className="group border-b border-line last:border-0">
+              <summary className="flex cursor-pointer list-none items-center gap-2 px-5 py-3 hover:bg-surface-2 sm:px-6">
+                <FolderOpen size={17} style={{ color: svcColor(f.service) }} />
+                <span className="text-[14.5px] font-semibold text-ink">{SERVICES[f.service].label}</span>
+                <span className="text-[12.5px] text-muted">{f.received} received · {f.waiting} waiting</span>
+                <ChevronDown size={16} className="ml-auto text-muted transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="pb-2">
+                {f.years.map((y, yi) => (
+                  <details key={y.year} open={yi === 0} className="group/yr ml-4 border-l-2 pl-2 sm:ml-6" style={{ borderColor: svcColor(f.service) }}>
+                    <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 hover:bg-surface-2">
+                      <ChevronRight size={14} className="text-muted transition-transform group-open/yr:rotate-90" />
+                      <span className="text-[13.5px] font-semibold text-ink-2">{y.year}</span>
+                      <span className="text-[12px] text-muted">{y.received} received{y.waiting ? ` · ${y.waiting} waiting` : ""}</span>
+                      {y.waiting > 0 && y.overdue > 0 && <Badge tone="danger">{y.overdue} overdue</Badge>}
+                    </summary>
+                    <ul className="divide-y divide-line">{y.docs.map(renderDoc)}</ul>
+                  </details>
+                ))}
+              </div>
+            </details>
+          ))}
+        </div>
       )}
       <p className="flex items-center gap-1.5 border-t border-line px-5 py-3 text-[12px] text-muted sm:px-6">
         <Lock size={12} className="shrink-0" /> Restricted files (IDs, tax returns, court records) need the sensitive-documents permission. Every view and download is recorded in the audit log.
