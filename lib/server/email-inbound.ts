@@ -55,6 +55,14 @@ export async function saveInboundSettings(env: AppEnv, a: Actor, origin: string,
 }
 
 /* ---------------------------------------------------------------- webhook */
+const bare = (a: string) => (a.match(/<([^>]+)>/)?.[1] ?? a).trim().toLowerCase();
+/** True when the email was sent to this firm's reply address (To, Cc or the delivery "for" address). */
+export function addressedToUs(env: Pick<AppEnv, "INBOUND_REPLY_TO">, d: { to?: unknown; received_for?: unknown; cc?: unknown }) {
+  const mine = (env.INBOUND_REPLY_TO ?? "").trim().toLowerCase();
+  if (!mine) return false;
+  const list = [d.to, d.received_for, d.cc].flatMap((x) => (Array.isArray(x) ? x : typeof x === "string" ? [x] : [])).map((x) => bare(String(x)));
+  return list.includes(mine);
+}
 const b64 = (buf: ArrayBuffer) => btoa(String.fromCharCode(...new Uint8Array(buf)));
 /** Svix signature: base64 HMAC-SHA256 of "id.timestamp.body" with the secret after "whsec_". */
 async function verified(secret: string, id: string, ts: string, raw: string, header: string) {
@@ -83,8 +91,11 @@ export async function inboundEmail(env: AppEnv, req: Request) {
   if (!sec) throw new HttpError(503, "Email replies aren't connected.");
   const secret = await decryptField(key(env), sec, `secret:${SECRET_KEY}`);
   if (!(await verified(secret, req.headers.get("svix-id") ?? "", req.headers.get("svix-timestamp") ?? "", raw, req.headers.get("svix-signature") ?? ""))) throw new HttpError(400, "Bad signature.");
-  const ev = json<{ type?: string; data?: { email_id?: string; from?: string; subject?: string; created_at?: string } }>(raw, {});
+  const ev = json<{ type?: string; data?: { email_id?: string; from?: string; to?: string[]; received_for?: string[]; subject?: string; created_at?: string } }>(raw, {});
   if (ev.type !== "email.received" || !ev.data?.email_id) return { ignored: true };
+  // Several firms can share one reply domain (and one Resend team, which sends every received
+  // email to every webhook): keep only replies addressed to this firm's own reply address.
+  if (!addressedToUs(env, ev.data)) return { ignored: true, reason: "not addressed to this firm" };
   const providerId = String(ev.data.email_id).slice(0, 100);
   if (await one(env.DB, "SELECT 1 FROM email_inbox WHERE provider_id = ?", providerId)) return { duplicate: true };
   // The webhook carries metadata only — fetch the message itself.
