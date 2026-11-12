@@ -12,9 +12,10 @@
  * Nothing is filed with any agency from here: staff record what they did, and an
  * approval needs a confirmation the staff member verified with the agency.
  */
-import { createContext, useContext, useMemo, useReducer, useRef } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { BACKEND, RemoteError, call, debouncer, notify, pendingClientCreates } from "@/lib/sync/remote";
 import { BIZ_ENTITIES, BIZ_REQUESTS, COMPLIANCE_ITEMS, COMPLIANCE_RULES, STATE_CHECKLISTS, bizEnrollmentState } from "@/lib/sample/biz-seed";
-import { SAMPLE_NOW, staffById, meId } from "@/lib/sample/clients";
+import { SAMPLE_NOW, staffById, staffList, meId } from "@/lib/sample/clients";
 import { nowIso, useClients } from "@/lib/store/clients-store";
 import {
   DEFAULT_CATALOG,
@@ -64,10 +65,11 @@ const init = (): State => ({
   rules: structuredClone(COMPLIANCE_RULES),
   checklists: structuredClone(STATE_CHECKLISTS),
   reminderDefaults: [...DEFAULT_REMINDERS],
-  entities: structuredClone(BIZ_ENTITIES),
-  requests: structuredClone(BIZ_REQUESTS),
-  compliance: structuredClone(COMPLIANCE_ITEMS),
-  nextNumber: 1045,
+  // The live CRM starts empty and loads what the person may open from the server.
+  entities: BACKEND ? [] : structuredClone(BIZ_ENTITIES),
+  requests: BACKEND ? [] : structuredClone(BIZ_REQUESTS),
+  compliance: BACKEND ? [] : structuredClone(COMPLIANCE_ITEMS),
+  nextNumber: BACKEND ? 1001 : 1045,
 });
 type Action = { type: "reset" } | { type: "fn"; fn: (s: State) => State };
 const reducer = (s: State, a: Action): State => (a.type === "reset" ? init() : a.fn(s));
@@ -254,7 +256,8 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     createRequest(input: NewRequestInput): string {
       const st = get();
       const svc = st.catalog.find((s) => s.id === input.serviceId)!;
-      const id = `BSR-${st.nextNumber}`;
+      const next = Math.max(st.nextNumber, ...st.requests.map((x) => Number(x.number.replace(/\D/g, "")) + 1).filter(Number.isFinite));
+      const id = `BSR-${next}`;
       const at = nowIso();
       let entityId = input.entityId;
       if (!entityId && input.clientId && input.businessName.trim())
@@ -280,7 +283,8 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
         preferredDate: input.preferredDate,
         dueAt: input.dueAt ?? input.preferredDate,
         assignedTo: input.assignedTo,
-        reviewerId: input.assignedTo === meId() ? "s-jp" : meId(),
+        // Reviewer: the person creating it, or (when they're also the assignee) another active team member if there is one.
+        reviewerId: input.assignedTo !== meId() ? meId() : (staffList().find((x) => x.id !== input.assignedTo)?.id ?? meId()),
         status: "Intake",
         source: input.source,
         createdAt: at,
@@ -297,7 +301,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
         r.enrollmentId = clients().enroll(input.clientId, { service: "biz", title: `${svc.name} — ${r.businessName}`, staffId: input.assignedTo, fee: quoteTotal(r.quote), dueAt: r.dueAt });
         (input.files ?? []).forEach((f) => clients().uploadDocument(input.clientId!, { name: f.name, service: "biz", category: "Client-provided document", sensitive: false, sizeKb: f.sizeKb, file: (f as { file?: File }).file, entityId, bizRequestId: id, by: input.source === "portal" ? "client" : "staff" }));
       }
-      set((s) => ({ ...s, requests: [r, ...s.requests], nextNumber: s.nextNumber + 1 }));
+      set((s) => ({ ...s, requests: [r, ...s.requests], nextNumber: next + 1 }));
       return id;
     },
     /** Prospect → existing client (or a new client record). Never creates a duplicate. */
@@ -422,6 +426,11 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     },
 
     /* ---------------- Status transitions ---------------- */
+    /** The client accepted the engagement letter (the server records the time and who recorded it). */
+    acceptEngagement(id: string, e: { name: string; version: number; termsVersion: number; method: "in_office" | "paper" | "online" }) {
+      upReq(id, (x) => (x.engagement ? x : { ...x, engagement: { letterKey: "biz", version: e.version, termsVersion: e.termsVersion, acceptedName: e.name, acceptedAt: nowIso(), method: e.method, recordedBy: meId() } }));
+      logClient(R(id), `engagement letter accepted (${e.name})`);
+    },
     markReady: (id: string) => moveTo(id, "Ready for Processing", "intake complete", R(id).assignedTo),
     /** Non-agency work: approved once the reviewer approved every deliverable. Agency work needs a verified confirmation instead. */
     internalApprove(id: string) {
@@ -676,7 +685,7 @@ function guessCategory(name: string): DocCategory {
   return "Completed deliverable";
 }
 
-type Ctx = ReturnType<typeof makeActions> & State;
+type Ctx = ReturnType<typeof makeActions> & State & { ready: boolean };
 const Ctx = createContext<Ctx | null>(null);
 
 export function BizProvider({ children }: { children: React.ReactNode }) {
@@ -687,7 +696,8 @@ export function BizProvider({ children }: { children: React.ReactNode }) {
   const cref = useRef(clients);
   cref.current = clients;
   const actions = useMemo(() => makeActions(dispatch, () => ref.current, () => cref.current), []);
-  const value = useMemo(() => ({ ...actions, ...state }), [actions, state]);
+  const { ready } = useBizSync(state, dispatch);
+  const value = useMemo(() => ({ ...actions, ...state, ready }), [actions, state, ready]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
@@ -698,3 +708,112 @@ export function useBiz() {
 }
 
 export { STATUS_META };
+
+/* ------------------------------------------------------------------ */
+/* Backend sync (only when NEXT_PUBLIC_BACKEND=1)                      */
+/* ------------------------------------------------------------------ */
+
+type Coll = "entities" | "requests" | "compliance";
+const PATH: Record<Coll, string> = { entities: "entities", requests: "requests", compliance: "items" };
+/** Saved in this order so a request's or deadline's business exists on the server first. */
+const ORDER: Coll[] = ["entities", "requests", "compliance"];
+type ConfigSnap = Pick<State, "catalog" | "rules" | "checklists" | "reminderDefaults">;
+const configOf = (s: State): ConfigSnap => ({ catalog: s.catalog, rules: s.rules, checklists: s.checklists, reminderDefaults: s.reminderDefaults });
+const sameConfig = (a: ConfigSnap, b: ConfigSnap) => a.catalog === b.catalog && a.rules === b.rules && a.checklists === b.checklists && a.reminderDefaults === b.reminderDefaults;
+
+/**
+ * Loads the requests, businesses and deadlines this person may open, then saves
+ * each changed record with the revision it started from. The server checks the
+ * permission each change needs; a refused change reloads the latest version.
+ */
+function useBizSync(state: State, dispatch: React.Dispatch<Action>) {
+  const [ready, setReady] = useState(!BACKEND);
+  const synced = useRef(new Map<string, unknown>());
+  const revs = useRef(new Map<string, number>());
+  const cfg = useRef<{ snap: ConfigSnap | null; updatedAt: string | null }>({ snap: null, updatedAt: null });
+  const busy = useRef(false);
+  const again = useRef(false);
+  const later = useRef(debouncer(500)).current;
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  const reload = useCallback(async () => {
+    try {
+      type R = { rev?: number; id: string };
+      const r = await call<{ requests: (ServiceRequest & R)[]; entities: (BizEntity & R)[]; items: (ComplianceItem & R)[]; config: (ConfigSnap & { updatedAt: string }) | null }>("GET", "/api/biz");
+      const strip = <T extends R>(list: T[], c: Coll) => list.map((x) => { const { rev, ...rest } = x; revs.current.set(`${c}:${x.id}`, rev ?? 1); return rest as unknown as T; });
+      const requests = strip(r.requests, "requests"), entities = strip(r.entities, "entities"), compliance = strip(r.items, "compliance");
+      dispatch({ type: "fn", fn: (s) => {
+        const next: State = { ...s, requests, entities, compliance, ...(r.config ? { catalog: r.config.catalog as CatalogService[], rules: r.config.rules as ComplianceRule[], checklists: r.config.checklists as StateChecklist[], reminderDefaults: r.config.reminderDefaults } : {}) };
+        requests.forEach((x) => synced.current.set(`requests:${x.id}`, x));
+        entities.forEach((x) => synced.current.set(`entities:${x.id}`, x));
+        compliance.forEach((x) => synced.current.set(`compliance:${x.id}`, x));
+        cfg.current = { snap: configOf(next), updatedAt: r.config?.updatedAt ?? null };
+        return next;
+      } });
+    } catch (e) {
+      if (!(e instanceof RemoteError && (e.status === 401 || e.status === 403))) notify("Couldn't load Business Services.");
+    }
+  }, []);
+  useEffect(() => {
+    if (!BACKEND) return;
+    (async () => {
+      try {
+        const me = await call<{ perms?: Record<string, string[]> }>("GET", "/api/auth/session");
+        if ((me.perms?.biz ?? []).includes("view")) await reload();
+      } catch { /* signed out */ }
+      setReady(true);
+    })();
+  }, []);
+
+  const flush = useCallback(async () => {
+    if (busy.current) { again.current = true; return; }
+    busy.current = true;
+    let failed = false;
+    try {
+      const s = stateRef.current;
+      for (const c of ORDER) {
+        for (const rec of s[c] as { id: string; clientId?: string }[]) {
+          const key = `${c}:${rec.id}`;
+          if (synced.current.get(key) === rec) continue;
+          try {
+            if (!revs.current.has(key)) {
+              if (rec.clientId) await pendingClientCreates.get(rec.clientId); // a brand-new client must exist first
+              const res = await call<{ record: { rev: number } }>("POST", `/api/biz/records/${PATH[c]}`, { record: rec });
+              revs.current.set(key, res.record.rev ?? 1);
+            } else {
+              const res = await call<{ record: { rev: number } }>("PUT", `/api/biz/records/${PATH[c]}/${encodeURIComponent(rec.id)}`, { record: { ...rec, rev: revs.current.get(key) } });
+              revs.current.set(key, res.record.rev ?? 1);
+            }
+            synced.current.set(key, rec);
+          } catch (e) {
+            if (e instanceof RemoteError && e.status === 401) return;
+            notify(e instanceof RemoteError ? e.message : "Couldn't save — check your connection.");
+            failed = true;
+          }
+        }
+      }
+      const snap = configOf(s);
+      if (cfg.current.snap && !sameConfig(cfg.current.snap, snap)) {
+        try {
+          const res = await call<{ config: { updatedAt: string } }>("PUT", "/api/biz/config", { config: snap, updatedAt: cfg.current.updatedAt });
+          cfg.current = { snap, updatedAt: res.config.updatedAt };
+        } catch (e) {
+          notify(e instanceof RemoteError ? e.message : "Couldn't save the settings.");
+          failed = true;
+        }
+      }
+      if (failed) await reload();
+    } finally {
+      busy.current = false;
+    }
+    if (again.current) { again.current = false; later("flush", () => void flush()); }
+  }, []);
+
+  useEffect(() => {
+    if (!BACKEND || !ready) return;
+    later("flush", () => void flush());
+  }, [state, ready]);
+
+  return { ready };
+}

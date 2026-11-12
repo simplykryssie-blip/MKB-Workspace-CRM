@@ -50,6 +50,8 @@ import { isClosed, nextStep, openInfo, payState, paymentCleared, requestDocs, re
 import { AGENCY_KIND, AGENT_TYPE, DELIVERABLE_META, DOC_CATEGORIES, EIN_STATUS, ENTITY_TYPES, NATURE, STATE_FILING, stateName, stateOptions, type DocCategory, type EinStatus, type EntityType, type FormationDetails, type InfoRequest, type ServiceRequest } from "@/lib/biz/config";
 import { fileSize, fmtDate, fmtDateTime, relTime, usd } from "@/lib/format";
 import type { Client } from "@/lib/types";
+import { EngagementCard } from "./BizEngagement";
+import { BACKEND } from "@/lib/sync/remote";
 import { FeeBreakdown, NotLegalAdvice, OwnerBadge, PayBadge, RequestStepper, StatusBadge, entityHref, money, portalHref } from "./BizBits";
 import { AdjustDialog, AgencyDialog, AskAgainDialog, ChargeDialog, CompletionDialog, ConsultDialog, DeliverableDialog, DocUploadDialog, InfoRequestDialog, QuoteDialog, ReasonDialog, RespondDialog } from "./BizDialogs";
 
@@ -227,6 +229,7 @@ function OverviewTab({ r, c, agency, go, open }: { r: ServiceRequest; c?: Client
       secondary = info.length ? { label: "Review responses", run: () => go("client") } : { label: "Request more information", run: () => open("info") };
       break;
     case "Ready for Processing":
+      if (BACKEND && r.clientId && !r.engagement) { primary = { label: "Record engagement letter acceptance", icon: CheckCircle2, run: () => document.getElementById("biz-engagement")?.querySelector("button")?.click() }; break; }
       primary = paymentCleared(r, c) ? { label: `Start work (${staffById(r.assignedTo).name})`, icon: Play, run: () => { biz.startWork(r.id); toast("In Progress"); } } : { label: "Record payment", icon: CreditCard, run: () => open("payment") };
       secondary = paymentCleared(r, c) ? null : proceed;
       break;
@@ -292,6 +295,8 @@ function OverviewTab({ r, c, agency, go, open }: { r: ServiceRequest; c?: Client
           )}
         </div>
       </Card>
+
+      {r.clientId && <div id="biz-engagement"><EngagementCard r={r} /></div>}
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <Card>

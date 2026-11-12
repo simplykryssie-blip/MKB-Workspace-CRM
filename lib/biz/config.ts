@@ -292,6 +292,8 @@ export type ServiceRequest = {
   approvedBy?: string;
   followUpAt?: string;
   cancelReason?: string;
+  /** The client accepted the engagement letter (versions + who, when and how). Recorded once, by the server. */
+  engagement?: { letterKey: "biz"; version: number; termsVersion: number; acceptedName: string; acceptedAt: string; method: "in_office" | "paper" | "online"; recordedBy?: string };
 };
 
 /* ------------------------------------------------------------------ */

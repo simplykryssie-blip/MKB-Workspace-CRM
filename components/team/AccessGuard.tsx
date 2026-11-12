@@ -109,8 +109,6 @@ export function NoAccess({ title, detail, request }: { title: string; detail: st
 const BACKEND = process.env.NEXT_PUBLIC_BACKEND === "1";
 /** Sections that still run on sample data (closed when the backend is on). */
 const NOT_CONNECTED: [string, string][] = [
-  ["/services/business-services", "Business Services"],
-  ["/services/record-expungement", "Record Expungement"],
   ["/appointments", "Appointments"],
   ["/documents", "Documents"],
   ["/messages", "Messages"],

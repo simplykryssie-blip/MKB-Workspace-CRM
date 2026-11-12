@@ -78,7 +78,7 @@ export function CasePage({ id }: { id: string }) {
           </div>
           <div className="flex flex-wrap items-start gap-2 lg:justify-end">
             <RoleSwitcher />
-            {c.draft && <Button size="sm" variant="primary" icon={ShieldCheck} disabled={!exp.can.edit || !c.remedyId} title={!c.remedyId ? "Choose the workflow on Case & charges first" : undefined} onClick={() => { exp.reviewIntake(m.id, "s-jp"); toast("Client entry reviewed — case opened"); }}>Review client entry & open case</Button>}
+            {c.draft && <Button size="sm" variant="primary" icon={ShieldCheck} disabled={!exp.can.edit || !c.remedyId} title={!c.remedyId ? "Choose the workflow on Case & charges first" : undefined} onClick={() => { exp.reviewIntake(m.id, meId()); toast("Client entry reviewed — case opened"); }}>Review client entry & open case</Button>}
             <label className="block"><span className="sr-only">Assigned staff</span><select aria-label="Assigned staff" disabled={!exp.can.edit} value={c.assignedTo} onChange={(e) => { exp.assignCase(c.id, e.target.value); toast(`Assigned to ${staffById(e.target.value).name}`); }} className="h-8 rounded-xl border border-line bg-surface px-2 text-[13px] text-ink">{staffList().map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
             <Menu label="Case actions" trigger={({ toggle }) => <Button size="sm" icon={MoreHorizontal} onClick={toggle} aria-label="Case actions">More</Button>} items={[
               c.status === "On Hold" ? { label: "Resume", icon: Play, onSelect: () => { exp.resume(c.id); toast("Resumed"); } } : { label: "Put on hold…", icon: Pause, onSelect: () => setDlg("hold"), disabled: closed || !exp.can.edit },
@@ -292,7 +292,7 @@ function ScreeningTab({ c, j }: { c: ExpCase; j?: Jurisdiction }) {
   const toast = useToast();
   const [s, setS] = useState(c.screening);
   const [open, setOpen] = useState(false);
-  const [r, setR] = useState({ outcome: c.screening.outcome as ScreeningOutcome, byId: "s-jp", legal: false, reviewerName: "", sources: "", explanation: "" });
+  const [r, setR] = useState({ outcome: c.screening.outcome as ScreeningOutcome, byId: meId(), legal: false, reviewerName: "", sources: "", explanation: "" });
   const [blockers, setBlockers] = useState<string[]>([]);
   useEffect(() => setS(c.screening), [c.screening]);
   const dirty = JSON.stringify(s) !== JSON.stringify(c.screening);
@@ -357,7 +357,7 @@ function ScreeningTab({ c, j }: { c: ExpCase; j?: Jurisdiction }) {
         </div>
       </Card>
       <Card>
-        <CardHeader icon={Scale} title="Reviews" subtitle="Each review records the reviewer, date, sources checked and an explanation" action={<div className="flex flex-wrap items-center gap-2"><OutcomeBadge o={c.screening.outcome} /><Button size="sm" variant="primary" icon={Plus} onClick={() => { setR({ outcome: c.screening.outcome, byId: "s-jp", legal: false, reviewerName: "", sources: "", explanation: "" }); setBlockers([]); setOpen(true); }}>Record review</Button></div>} />
+        <CardHeader icon={Scale} title="Reviews" subtitle="Each review records the reviewer, date, sources checked and an explanation" action={<div className="flex flex-wrap items-center gap-2"><OutcomeBadge o={c.screening.outcome} /><Button size="sm" variant="primary" icon={Plus} onClick={() => { setR({ outcome: c.screening.outcome, byId: meId(), legal: false, reviewerName: "", sources: "", explanation: "" }); setBlockers([]); setOpen(true); }}>Record review</Button></div>} />
         <ul className="divide-y divide-line border-t border-line">
           {c.screening.reviews.length === 0 && <li className="px-6 py-6 text-center text-[13px] text-muted">No reviews yet.</li>}
           {[...c.screening.reviews].reverse().map((v) => (

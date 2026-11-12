@@ -10,7 +10,8 @@ import { SAMPLE_FORMS, SAMPLE_SUBMISSIONS } from "@/lib/sample/forms-seed";
 import { TAX_RETURNS } from "@/lib/sample/tax";
 import { DEFAULT_FEE_SCHEDULE } from "@/lib/tax/config";
 import { BOOKS_WORKSPACES } from "@/lib/sample/books";
-import { BIZ_REQUESTS } from "@/lib/sample/biz-seed";
+import { expEnrollmentId } from "@/lib/expunge/derive";
+import { BIZ_ENTITIES, BIZ_REQUESTS, COMPLIANCE_ITEMS } from "@/lib/sample/biz-seed";
 import { EXP_CASES, EXP_MATTERS } from "@/lib/sample/exp-seed";
 import { HttpError, isDev, now, one, type AppEnv } from "./core";
 import { encryptField, hashPassword, randomId } from "./crypto";
@@ -101,6 +102,16 @@ export async function seedDev(env: AppEnv) {
   for (const w of BOOKS_WORKSPACES)
     add("INSERT INTO books_workspaces (id, client_id, enrollment_id, business_name, entity_type, bookkeeper_id, reviewer_id, service, extras, qbo, accounts, months, tasks, notes, activity, started_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       w.id, w.clientId, w.enrollmentId ?? null, w.businessName, w.entityType, w.bookkeeperId, w.reviewerId, JSON.stringify(w.service), JSON.stringify(w.extras), JSON.stringify(w.qbo), JSON.stringify(w.accounts), JSON.stringify(w.months), JSON.stringify(w.tasks), JSON.stringify(w.notes), JSON.stringify(w.activity), w.startedAt, t, t);
+
+  // Business Services: sample businesses, requests and compliance deadlines.
+  const rec = (kind: string, id: string, clientId: string | null | undefined, data: unknown) => add("INSERT INTO service_records (id, kind, client_id, data, encrypted, created_at, created_by, updated_at) VALUES (?, ?, ?, ?, 0, ?, 's-mk', ?)", id, kind, clientId ?? null, JSON.stringify(data), t, t);
+  for (const e of BIZ_ENTITIES) rec("biz_entity", e.id, e.clientId, e);
+  for (const r of BIZ_REQUESTS) rec("biz_request", r.id, r.clientId, r);
+  for (const i of COMPLIANCE_ITEMS) rec("biz_item", i.id, BIZ_ENTITIES.find((e) => e.id === i.entityId)?.clientId, i);
+
+  // Record Expungement: sample matters and cases, stored encrypted like real ones.
+  for (const m of EXP_MATTERS) add("INSERT INTO service_records (id, kind, client_id, data, encrypted, created_at, created_by, updated_at) VALUES (?, 'exp_matter', ?, ?, 1, ?, 's-mk', ?)", m.id, m.clientId, JSON.stringify(await encryptField(env.ENCRYPTION_KEY, JSON.stringify({ ...m, enrollmentId: expEnrollmentId(m) }), `service_record:${m.id}`)), t, t);
+  for (const c of EXP_CASES) add("INSERT INTO service_records (id, kind, client_id, data, encrypted, created_at, created_by, updated_at) VALUES (?, 'exp_case', ?, ?, 1, ?, 's-mk', ?)", c.id, c.clientId, JSON.stringify(await encryptField(env.ENCRYPTION_KEY, JSON.stringify(c), `service_record:${c.id}`)), t, t);
 
   // D1 batches run as one transaction.
   for (let i = 0; i < S.length; i += 90) await db.batch(S.slice(i, i + 90));

@@ -7,6 +7,7 @@ import { CheckCircle2, CircleDot, ClipboardList, CreditCard, Eye, FilePlus2, Fil
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
+import { ServiceEngagementCard } from "@/components/engagement/ServiceEngagement";
 import { Checkbox, SelectField, TextArea, TextField } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
 import { Breadcrumbs } from "@/components/ui/PageHeader";
@@ -14,7 +15,7 @@ import { useToast } from "@/components/ui/Toast";
 import { PaymentDialog } from "@/components/crm/dialogs";
 import { FeeBreakdown } from "@/components/biz/BizBits";
 import { FilePicker } from "@/components/biz/BizDialogs";
-import { STAFF, staffById, staffList } from "@/lib/sample/clients";
+import { STAFF, meId, staffById, staffList } from "@/lib/sample/clients";
 import { useClients } from "@/lib/store/clients-store";
 import { matterCases, useExp } from "@/lib/store/exp-store";
 import { ACKNOWLEDGMENTS, ASSIGNMENT_ROLES, COMPLEXITY, FEE_KIND, INTAKE_META, chargeCount, type Complexity, type ExpMatter, type FeeKind, type InfoRequest, type Tri } from "@/lib/expunge/config";
@@ -77,7 +78,7 @@ export function MatterPage({ id }: { id: string }) {
             <RoleSwitcher />
             <Button size="sm" icon={Eye} href={portalHref(c.id)}>Client portal view</Button>
             {(m.intake.status === "inquiry") && <Button size="sm" variant="primary" icon={Send} disabled={!exp.can.edit} onClick={() => { exp.sendIntake(m.id); toast("Intake sent to the client"); }}>Send intake</Button>}
-            {m.intake.status === "submitted" && <Button size="sm" variant="primary" icon={ShieldCheck} disabled={!exp.can.criminalHistory} onClick={() => { const n = exp.reviewIntake(m.id, "s-jp"); toast(n ? `Intake reviewed — ${n} case(s) still need a workflow chosen` : "Intake reviewed — cases opened"); }}>Mark intake reviewed</Button>}
+            {m.intake.status === "submitted" && <Button size="sm" variant="primary" icon={ShieldCheck} disabled={!exp.can.criminalHistory} onClick={() => { const n = exp.reviewIntake(m.id, meId()); toast(n ? `Intake reviewed — ${n} case(s) still need a workflow chosen` : "Intake reviewed — cases opened"); }}>Mark intake reviewed</Button>}
           </div>
         </div>
       </section>
@@ -159,6 +160,7 @@ function IntakeTab({ m, c }: { m: ExpMatter; c: Client }) {
   const setAd = (p: Partial<typeof ad>) => setV({ ...v, additional: { ...ad, ...p } });
   return (
     <div className="space-y-5">
+      <ServiceEngagementCard e={m.engagement} letterName="Record expungement letter" letterUrl={`/api/exp/matters/${encodeURIComponent(m.id)}/letter`} when="The client accepts the letter before MKB prepares any documents" canRecord={exp.can.edit} onAccept={(a) => exp.acceptEngagement(m.id, a)} />
       <Card>
         <CardHeader icon={UserRound} title="A. Client information" subtitle="Legal name, aliases and contact. Contact details come from the central client record." action={<Button size="sm" variant="primary" disabled={!dirty || !exp.can.edit} onClick={() => { exp.saveIntake(m.id, v, "staff"); toast("Intake saved"); }}>Save intake</Button>} />
         <div className="space-y-4 px-5 pb-5 sm:px-6">
@@ -366,7 +368,7 @@ function BillingTab({ m, c }: { m: ExpMatter; c: Client }) {
         )}
       </Modal>
       <PaymentDialog client={c} open={pay} invoiceId={inv.find((i) => i.status !== "paid")?.id} onClose={() => setPay(false)} />
-      <Modal open={!!adj} onClose={() => setAdj(null)} title="Refund or adjustment" footer={<><Button onClick={() => setAdj(null)}>Cancel</Button><Button variant="primary" disabled={!adj || !(Number(adj.amount) > 0) || !adj.note.trim()} onClick={() => { clientStore.adjustInvoice(c.id, adj!.id, { kind: adj!.kind, amount: Number(adj!.amount), note: adj!.note.trim(), byId: "s-mk" }); toast("Adjustment recorded"); setAdj(null); }}>Record</Button></>}>
+      <Modal open={!!adj} onClose={() => setAdj(null)} title="Refund or adjustment" footer={<><Button onClick={() => setAdj(null)}>Cancel</Button><Button variant="primary" disabled={!adj || !(Number(adj.amount) > 0) || !adj.note.trim()} onClick={() => { clientStore.adjustInvoice(c.id, adj!.id, { kind: adj!.kind, amount: Number(adj!.amount), note: adj!.note.trim(), byId: meId() }); toast("Adjustment recorded"); setAdj(null); }}>Record</Button></>}>
         {adj && (
           <div className="space-y-4">
             <SelectField id="aj-inv" label="Invoice" value={adj.id} onChange={(e) => setAdj({ ...adj, id: e.target.value })} options={inv.map((i) => [i.id, `${i.number} — ${usd(i.amount, 2)}`] as [string, string])} />

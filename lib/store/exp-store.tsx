@@ -12,7 +12,8 @@
  * with the matter and case. Each case keeps its own records, screening,
  * documents, filing history and outcome.
  */
-import { createContext, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { BACKEND, RemoteError, call, debouncer, notify, pendingClientCreates } from "@/lib/sync/remote";
 import { EXP_CASES, EXP_JURISDICTIONS, EXP_MATTERS, EXP_PRICES, EXP_SERVICES } from "@/lib/sample/exp-seed";
 import { SAMPLE_NOW, staffById, meId } from "@/lib/sample/clients";
 import { nowIso, useClients } from "@/lib/store/clients-store";
@@ -50,9 +51,10 @@ const init = (): State => ({
   jurisdictions: structuredClone(EXP_JURISDICTIONS),
   services: structuredClone(EXP_SERVICES),
   prices: structuredClone(EXP_PRICES),
-  matters: structuredClone(EXP_MATTERS).map((m) => ({ ...m, enrollmentId: expEnrollmentId(m) })),
-  cases: structuredClone(EXP_CASES),
-  nextMatter: 2048,
+  // The live CRM starts empty and loads what the person may open from the server.
+  matters: BACKEND ? [] : structuredClone(EXP_MATTERS).map((m) => ({ ...m, enrollmentId: expEnrollmentId(m) })),
+  cases: BACKEND ? [] : structuredClone(EXP_CASES),
+  nextMatter: BACKEND ? 1001 : 2048,
 });
 type Action = { type: "reset" } | { type: "fn"; fn: (s: State) => State };
 const reducer = (s: State, a: Action): State => (a.type === "reset" ? init() : a.fn(s));
@@ -98,9 +100,10 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     },
 
     /* ---------------- Matters + intake ---------------- */
-    createInquiry(clientId: string, source: ExpMatter["source"], note?: string, staffId = "s-jp"): string {
+    createInquiry(clientId: string, source: ExpMatter["source"], note?: string, staffId = BACKEND ? meId() : "s-jp"): string {
       const s = get();
-      const id = `EXP-${s.nextMatter}`;
+      const nextNo = Math.max(s.nextMatter, ...s.matters.map((x) => Number(x.number.replace(/\D/g, "")) + 1).filter(Number.isFinite));
+      const id = `EXP-${nextNo}`;
       const c = clients().clients.find((x) => x.id === clientId)!;
       const [first, ...rest] = (c.type === "individual" ? c.name : c.contactName ?? c.name).split(" ");
       const enrollmentId = clients().enroll(clientId, { service: "expunge", title: "Record expungement — no cases", staffId, fee: 0 });
@@ -110,7 +113,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
         assignments: Object.fromEntries(ASSIGNMENT_ROLES.map((r) => [r, staffId])) as Record<AssignmentRole, string>,
         info: [], notes: note ? [{ id: uid("n"), authorId: staffId, body: note, at: nowIso() }] : [], access: [],
       };
-      set((x) => ({ ...x, matters: [m, ...x.matters], nextMatter: x.nextMatter + 1 }));
+      set((x) => ({ ...x, matters: [m, ...x.matters], nextMatter: nextNo + 1 }));
       return id;
     },
     sendIntake(matterId: string) {
@@ -204,7 +207,14 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       });
     },
     removeDraftCase(caseId: string) {
+      if (BACKEND && !get().cases.find((c) => c.id === caseId)?.draft) return;
       set((s) => ({ ...s, cases: s.cases.filter((c) => !(c.id === caseId && c.draft)) }));
+      if (BACKEND) void call("DELETE", `/api/exp/records/cases/${encodeURIComponent(caseId)}`).catch((e) => notify(e instanceof RemoteError ? e.message : "Couldn't remove the case."));
+    },
+    /** The client accepted the engagement letter (the server records the time and who recorded it). */
+    acceptEngagement(matterId: string, e: { name: string; version: number; termsVersion: number; method: "in_office" | "paper" | "online" }) {
+      upM(matterId, (x) => (x.engagement ? x : { ...x, engagement: { letterKey: "exp", version: e.version, termsVersion: e.termsVersion, acceptedName: e.name, acceptedAt: nowIso(), method: e.method, recordedBy: meId() } }));
+      logClient(M(matterId).clientId, `${M(matterId).number}: engagement letter accepted (${e.name})`);
     },
     addCaseNote(caseId: string, body: string, authorId = meId()) {
       upC(caseId, (c) => ({ ...c, internalNotes: [{ id: uid("n"), authorId, body, at: nowIso() }, ...c.internalNotes] }));
@@ -255,6 +265,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     startPrep(caseId: string) {
       const c = C(caseId);
       if (c.screening.outcome !== "Administrative Processing Approved") return false;
+      if (BACKEND && !M(c.matterId).engagement) { notify("Record the client's engagement letter acceptance on the matter first."); return false; }
       const j = get().jurisdictions.find((x) => x.id === c.jurisdictionId);
       upC(caseId, (x) => ({ ...x, prep: { ...x.prep, status: "in_progress", forms: x.prep.forms.length ? x.prep.forms : (j?.forms ?? []).filter((f) => f.remedyId === x.remedyId).map((f) => ({ id: uid("f"), name: f.name, source: f.lastVerifiedAt ? f.source : `${f.source} (form not verified)`, status: "needed" as const })) } }));
       moveTo(caseId, "Preparing", "document preparation started", c.prep.preparerId);
@@ -401,13 +412,17 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
   return a;
 }
 
-type Ctx = ReturnType<typeof makeActions> & State & { role: ExpRole; setRole: (r: ExpRole) => void; can: (typeof EXP_ROLES)[ExpRole] };
+type Can = { label: string; criminalHistory: boolean; edit: boolean; screening: boolean; billing: boolean; admin: boolean; revealSsn: boolean };
+type Ctx = ReturnType<typeof makeActions> & State & { role: ExpRole; setRole: (r: ExpRole) => void; can: Can; ready: boolean };
+const NO_ACCESS: Can = { label: "No access", criminalHistory: false, edit: false, screening: false, billing: false, admin: false, revealSsn: false };
 const Ctx = createContext<Ctx | null>(null);
 
 export function ExpProvider({ children }: { children: React.ReactNode }) {
   const clients = useClients();
   const [state, dispatch] = useReducer(reducer, undefined, init);
   const [role, setRole] = useState<ExpRole>("owner");
+  // Live CRM: what this person may do comes from their own role (the server enforces it again).
+  const [live, setLive] = useState<Can | null>(null);
   const ref = useRef(state);
   ref.current = state;
   const cref = useRef(clients);
@@ -431,7 +446,8 @@ export function ExpProvider({ children }: { children: React.ReactNode }) {
     });
   }, [state.matters, state.cases]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const value = useMemo(() => ({ ...actions, ...state, role, setRole, can: EXP_ROLES[role] }), [actions, state, role]);
+  const { ready } = useExpSync(state, dispatch, setLive);
+  const value = useMemo(() => ({ ...actions, ...state, role, setRole, can: BACKEND ? live ?? NO_ACCESS : EXP_ROLES[role], ready }), [actions, state, role, live, ready]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
@@ -439,4 +455,113 @@ export function useExp() {
   const v = useContext(Ctx);
   if (!v) throw new Error("useExp must be used inside <ExpProvider>");
   return v;
+}
+
+/* ------------------------------------------------------------------ */
+/* Backend sync (only when NEXT_PUBLIC_BACKEND=1)                      */
+/* ------------------------------------------------------------------ */
+
+type Coll = "matters" | "cases";
+const ORDER: Coll[] = ["matters", "cases"]; // a case's matter must exist first
+type ConfigSnap = Pick<State, "jurisdictions" | "services" | "prices">;
+const configOf = (s: State): ConfigSnap => ({ jurisdictions: s.jurisdictions, services: s.services, prices: s.prices });
+const sameConfig = (a: ConfigSnap, b: ConfigSnap) => a.jurisdictions === b.jurisdictions && a.services === b.services && a.prices === b.prices;
+
+/**
+ * Loads the matters and cases this person may open (decrypted on the server,
+ * every load audited), then saves each changed record with the revision it
+ * started from. A refused change reloads the latest version.
+ */
+function useExpSync(state: State, dispatch: React.Dispatch<Action>, setLive: (c: Can) => void) {
+  const [ready, setReady] = useState(!BACKEND);
+  const synced = useRef(new Map<string, unknown>());
+  const revs = useRef(new Map<string, number>());
+  const cfg = useRef<{ snap: ConfigSnap | null; updatedAt: string | null }>({ snap: null, updatedAt: null });
+  const busy = useRef(false);
+  const again = useRef(false);
+  const later = useRef(debouncer(500)).current;
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  const reload = useCallback(async () => {
+    try {
+      type R = { rev?: number; id: string };
+      const r = await call<{ matters: (ExpMatter & R)[]; cases: (ExpCase & R)[]; config: (ConfigSnap & { updatedAt: string }) | null }>("GET", "/api/exp");
+      const strip = <T extends R>(list: T[], c: Coll) => list.map((x) => { const { rev, ...rest } = x; revs.current.set(`${c}:${x.id}`, rev ?? 1); return rest as unknown as T; });
+      const matters = strip(r.matters, "matters").map((m) => ({ ...m, enrollmentId: m.enrollmentId ?? expEnrollmentId(m) }));
+      const cases = strip(r.cases, "cases");
+      dispatch({ type: "fn", fn: (s) => {
+        const next: State = { ...s, matters, cases, ...(r.config ? { jurisdictions: r.config.jurisdictions, services: r.config.services, prices: r.config.prices } : {}) };
+        matters.forEach((x) => synced.current.set(`matters:${x.id}`, x));
+        cases.forEach((x) => synced.current.set(`cases:${x.id}`, x));
+        cfg.current = { snap: configOf(next), updatedAt: r.config?.updatedAt ?? null };
+        return next;
+      } });
+    } catch (e) {
+      if (!(e instanceof RemoteError && (e.status === 401 || e.status === 403))) notify("Couldn't load Record Expungement.");
+    }
+  }, []);
+  useEffect(() => {
+    if (!BACKEND) return;
+    (async () => {
+      try {
+        const me = await call<{ perms?: Record<string, string[]>; sensitive?: string[] }>("GET", "/api/auth/session");
+        const ex = me.perms?.exp ?? [];
+        setLive({ label: "Your role", criminalHistory: ex.includes("view"), edit: ex.includes("edit"), screening: ex.includes("approve"), billing: (me.perms?.billing ?? []).includes("create"), admin: ex.includes("settings"), revealSsn: (me.sensitive ?? []).includes("exp.revealSsn") });
+        if (ex.includes("view")) await reload();
+      } catch { /* signed out */ }
+      setReady(true);
+    })();
+  }, []);
+
+  const flush = useCallback(async () => {
+    if (busy.current) { again.current = true; return; }
+    busy.current = true;
+    let failed = false;
+    try {
+      const s = stateRef.current;
+      for (const c of ORDER) {
+        for (const rec of s[c] as { id: string; clientId: string }[]) {
+          const key = `${c}:${rec.id}`;
+          if (synced.current.get(key) === rec) continue;
+          try {
+            if (!revs.current.has(key)) {
+              await pendingClientCreates.get(rec.clientId); // a brand-new client must exist first
+              const res = await call<{ record: { rev: number } }>("POST", `/api/exp/records/${c}`, { record: rec });
+              revs.current.set(key, res.record.rev ?? 1);
+            } else {
+              const res = await call<{ record: { rev: number } }>("PUT", `/api/exp/records/${c}/${encodeURIComponent(rec.id)}`, { record: { ...rec, rev: revs.current.get(key) } });
+              revs.current.set(key, res.record.rev ?? 1);
+            }
+            synced.current.set(key, rec);
+          } catch (e) {
+            if (e instanceof RemoteError && e.status === 401) return;
+            notify(e instanceof RemoteError ? e.message : "Couldn't save — check your connection.");
+            failed = true;
+          }
+        }
+      }
+      const snap = configOf(s);
+      if (cfg.current.snap && !sameConfig(cfg.current.snap, snap)) {
+        try {
+          const res = await call<{ config: { updatedAt: string } }>("PUT", "/api/exp/config", { config: snap, updatedAt: cfg.current.updatedAt });
+          cfg.current = { snap, updatedAt: res.config.updatedAt };
+        } catch (e) {
+          notify(e instanceof RemoteError ? e.message : "Couldn't save the settings.");
+          failed = true;
+        }
+      }
+      if (failed) await reload();
+    } finally {
+      busy.current = false;
+    }
+    if (again.current) { again.current = false; later("flush", () => void flush()); }
+  }, []);
+
+  useEffect(() => {
+    if (!BACKEND || !ready) return;
+    later("flush", () => void flush());
+  }, [state, ready]);
+
+  return { ready };
 }

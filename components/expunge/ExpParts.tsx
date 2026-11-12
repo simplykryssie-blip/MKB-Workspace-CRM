@@ -51,6 +51,7 @@ export function SecurityNote() {
 /** Preview the module as different staff roles (permissions are enforced server-side in Phase 3). */
 export function RoleSwitcher() {
   const exp = useExp();
+  if (BACKEND) return null; // the live CRM uses the signed-in person's own role
   return (
     <label className="inline-flex max-w-full items-center gap-2 rounded-xl border border-dashed border-line-strong px-2.5 py-1.5 text-[12.5px] text-ink-2">
       <Eye size={14} className="text-muted" /> Viewing as
