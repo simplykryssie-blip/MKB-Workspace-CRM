@@ -75,7 +75,7 @@ export function MessagesCenter() {
   return (
     <div>
       <PageHeader title="Messages" subtitle={unreadTotal ? `${unreadTotal} unread · portal messages, texts and emails in one place` : "Portal messages, texts and emails with clients — all in one place."} actions={<Button variant="primary" icon={PenSquare} onClick={() => { setSel(null); setComposing(true); }}>New message</Button>} />
-      {texts && !texts.configured && <p className="mb-4 rounded-xl bg-warning-soft/60 px-4 py-2.5 text-[13px] text-warning-ink">Texting isn&rsquo;t connected yet, so only portal messages and emails show. Connect Twilio in Campaigns → Settings to add texts.</p>}
+      {texts && !texts.configured && <p className="mb-4 rounded-xl bg-warning-soft/60 px-4 py-2.5 text-[13px] text-warning-ink">Texting isn&rsquo;t connected yet — past texts still show here, but new texts can&rsquo;t be sent until Twilio is connected in Campaigns → Settings.</p>}
       <div className="grid gap-5 lg:grid-cols-[340px_minmax(0,1fr)]">
         <div className={open ? "hidden lg:block" : ""}>
           <Card>
@@ -121,7 +121,7 @@ export function MessagesCenter() {
 
         <div className={open ? "" : "hidden lg:block"}>
           {open && <button onClick={back} className="mb-3 inline-flex items-center gap-1 text-[13.5px] font-medium text-accent lg:hidden"><ArrowLeft size={15} /> All conversations</button>}
-          {selClient ? <ClientConversation key={selClient.id} c={selClient} canText={canText && !!texts?.configured} onTextChange={loadTexts} />
+          {selClient ? <ClientConversation key={selClient.id} c={selClient} canReadTexts={canText} canText={canText && !!texts?.configured} onTextChange={loadTexts} />
             : selPhone ? <Conversation key={selPhone} brand="mkb" phone={selPhone} base="/messages" canSend={team.can("communication", "edit")} onChange={loadTexts} />
             : composing ? (
               <Card className="p-5">
@@ -141,7 +141,7 @@ export function MessagesCenter() {
 }
 
 /** One client's portal messages, texts and emails in a single timeline; reply by portal or text. */
-function ClientConversation({ c, canText, onTextChange }: { c: Client; canText: boolean; onTextChange: () => void }) {
+function ClientConversation({ c, canReadTexts, canText, onTextChange }: { c: Client; canReadTexts: boolean; canText: boolean; onTextChange: () => void }) {
   const store = useClients();
   const team = useTeam();
   const toast = useToast();
@@ -153,7 +153,7 @@ function ClientConversation({ c, canText, onTextChange }: { c: Client; canText: 
   const [busy, setBusy] = useState(false);
   const end = useRef<HTMLDivElement>(null);
   const canSend = team.can("communication", "edit") || team.can("crm", "edit");
-  const loadTexts = useCallback(() => { if (BACKEND && canText && phone.length === 10) call<NonNullable<typeof texts>>("GET", `/api/texts/thread?brand=mkb&phone=${phone}`).then((r) => { setTexts(r); onTextChange(); }).catch(() => setTexts(null)); }, [canText, phone, onTextChange]);
+  const loadTexts = useCallback(() => { if (BACKEND && canReadTexts && phone.length === 10) call<NonNullable<typeof texts>>("GET", `/api/texts/thread?brand=mkb&phone=${phone}`).then((r) => { setTexts(r); onTextChange(); }).catch(() => setTexts(null)); }, [canReadTexts, phone, onTextChange]);
   useEffect(() => { loadTexts(); if (BACKEND) call<{ emails: typeof emails }>("GET", `/api/clients/${c.id}/emails`).then((r) => setEmails(r.emails)).catch(() => setEmails([])); }, [c.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const unread = (c.messages ?? []).some((m) => !m.read);
   useEffect(() => { if (unread) store.markMessagesRead(c.id); }, [unread, c.id, store]);
