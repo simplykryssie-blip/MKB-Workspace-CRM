@@ -116,6 +116,12 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       set((x) => ({ ...x, matters: [m, ...x.matters], nextMatter: nextNo + 1 }));
       return id;
     },
+    /** Opened from the client's Record Relief intake: remember it and copy their details (marked submitted). */
+    exists: (kind: "matter" | "case", id: string) => (kind === "matter" ? get().matters : get().cases).some((x) => x.id === id),
+    linkIntake(matterId: string, intakeId: string, details: Partial<Intake>) {
+      upM(matterId, (m) => ({ ...m, intakeId, intake: { ...m.intake, ...details, additional: { ...m.intake.additional, ...(details.additional ?? {}) }, status: "submitted", submittedAt: nowIso() } }));
+      logClient(M(matterId).clientId, `${M(matterId).number}: opened from the client's Record Relief intake`);
+    },
     sendIntake(matterId: string) {
       const m = M(matterId);
       upM(matterId, (x) => ({ ...x, intake: { ...x.intake, status: "sent", idDoc: x.intake.idDoc === "not_requested" ? "requested" : x.intake.idDoc } }));

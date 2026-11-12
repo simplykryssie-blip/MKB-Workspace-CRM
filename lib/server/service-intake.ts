@@ -47,6 +47,14 @@ async function staffRow(env: AppEnv, a: Actor, id: string) {
   return { r, c };
 }
 
+/** A submitted intake's answers, for starting the staff work record from it. */
+export async function getServiceIntake(env: AppEnv, a: Actor, id: string) {
+  requireStaff(a);
+  const { r } = await staffRow(env, a, id);
+  if (r.status !== "submitted") throw badRequest("This intake hasn't been submitted yet.");
+  return { intake: { id: r.id, kind: r.kind, clientId: r.client_id, answers: json<Answers>(r.answers, {}), submittedAt: r.submitted_at ?? undefined } };
+}
+
 /** The client's service intakes (newest first) with each one's link status — for the client and lead pages. */
 export async function intakesForClientAll(env: AppEnv, clientId: string) {
   const rows = await all<Row>(env.DB, "SELECT * FROM service_intakes WHERE client_id = ? ORDER BY created_at DESC", clientId);

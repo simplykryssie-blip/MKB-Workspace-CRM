@@ -202,6 +202,7 @@ const SERVICE_FOR_KIND: Record<ComplianceKind, string> = { annual_report: "annua
 /* ------------------------------------------------------------------ */
 
 export type NewRequestInput = {
+  intakeId?: string;
   clientId?: string;
   prospect?: { name: string; email: string; phone: string };
   entityId?: string;
@@ -271,6 +272,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       const r: ServiceRequest = {
         id,
         number: id,
+        intakeId: input.intakeId,
         clientId: input.clientId,
         prospect: input.clientId ? undefined : input.prospect,
         entityId,

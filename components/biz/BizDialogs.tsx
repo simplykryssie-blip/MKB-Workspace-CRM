@@ -86,7 +86,7 @@ const Err = ({ show, msg }: { show: boolean; msg?: string | null }) => <p classN
 /* Service request intake                                              */
 /* ================================================================== */
 
-export function NewRequestDialog({ open, onClose, onCreated, preset }: { open: boolean; onClose: () => void; onCreated?: (id: string) => void; preset?: { clientId?: string; entityId?: string; serviceId?: string } }) {
+export function NewRequestDialog({ open, onClose, onCreated, preset }: { open: boolean; onClose: () => void; onCreated?: (id: string) => void; preset?: { clientId?: string; entityId?: string; serviceId?: string; businessName?: string; structure?: EntityType; state?: string; description?: string; intakeId?: string } }) {
   const biz = useBiz();
   const { clients } = useClients();
   const toast = useToast();
@@ -113,23 +113,24 @@ export function NewRequestDialog({ open, onClose, onCreated, preset }: { open: b
     setClientId(preset?.clientId ?? "");
     setProspect({ name: "", email: "", phone: "" });
     setEntityId(preset?.entityId ?? "new");
-    setBusinessName("");
-    setStructure("LLC");
-    setState("GA");
+    setBusinessName(preset?.businessName ?? "");
+    setStructure(preset?.structure ?? "LLC");
+    setState(preset?.state ?? "GA");
     setServiceId(preset?.serviceId ?? "");
-    setDescription("");
+    setDescription(preset?.description ?? "");
     setPreferredDate("");
     setAssignedTo(meId());
     setPrice("");
     setFiles([]);
     setNote("");
     setTried(false);
-  }, [open, preset?.clientId, preset?.entityId, preset?.serviceId]);
+  }, [open, preset?.clientId, preset?.entityId, preset?.serviceId, preset?.intakeId]);
 
   const ents = biz.entities.filter((e) => e.clientId === clientId);
   const ent = ents.find((e) => e.id === entityId);
   useEffect(() => {
     if (ent) {
+      if (preset?.intakeId && preset.businessName) return; // keep what the client entered on their intake
       setBusinessName(ent.legalName);
       setStructure(ent.entityType);
       setState(ent.state);
@@ -157,6 +158,7 @@ export function NewRequestDialog({ open, onClose, onCreated, preset }: { open: b
     setTried(true);
     if (!valid) return;
     const input: NewRequestInput = {
+      intakeId: preset?.intakeId,
       clientId: who === "client" ? clientId : undefined,
       prospect: who === "prospect" ? { name: prospect.name.trim(), email: prospect.email.trim().toLowerCase(), phone: prospect.phone } : undefined,
       entityId: who === "client" && entityId !== "new" ? entityId : undefined,

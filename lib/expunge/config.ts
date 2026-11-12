@@ -345,6 +345,8 @@ export type ExpMatter = {
   info: InfoRequest[];
   notes: { id: string; authorId: string; body: string; at: string }[];
   access: AccessEvent[];
+  /** The submitted Record Relief intake this matter was opened from. */
+  intakeId?: string;
   /** The client accepted the engagement letter (versions + who, when and how). Recorded once, by the server. */
   engagement?: { letterKey: "exp"; version: number; termsVersion: number; acceptedName: string; acceptedAt: string; method: "in_office" | "paper" | "online"; recordedBy?: string };
 };

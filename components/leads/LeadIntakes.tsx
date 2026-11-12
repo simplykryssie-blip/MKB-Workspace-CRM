@@ -181,7 +181,7 @@ export function LeadIntakesCard({ lead, intakes: h }: { lead: Lead; intakes: Ret
 }
 
 /** Payroll, Business Solutions and Record Relief intakes: status, and the signed PDF once submitted. Shared with the client page. */
-export function ServiceIntakeRows({ items, clientId }: { items: SvcItem[]; clientId?: string }) {
+export function ServiceIntakeRows({ items, clientId, action }: { items: SvcItem[]; clientId?: string; action?: (x: SvcItem) => React.ReactNode }) {
   return (
     <ul className="divide-y divide-line border-t border-line">
       {items.map((x) => {
@@ -190,6 +190,7 @@ export function ServiceIntakeRows({ items, clientId }: { items: SvcItem[]; clien
           <li key={x.id} className="flex flex-wrap items-center gap-3 px-5 py-3 sm:px-6">
             <span className="min-w-0 flex-1"><span className="block truncate text-[14px] font-medium text-ink">{x.label} intake</span><span className="block text-[12px] text-muted">{done ? `Submitted ${x.submittedAt ? relTime(x.submittedAt) : ""} — review the signed PDF` : x.link ? `Sent to ${x.link.email}${x.link.openedAt ? " · opened" : " · not opened yet"}` : "Not sent"}</span></span>
             {done && x.pdfFileId && clientId && <Button size="sm" href={`/api/clients/${clientId}/files/${x.pdfFileId}`} newTab>View answers (PDF)</Button>}
+            {done && action?.(x)}
             {done ? <Badge tone="info">Submitted — review</Badge> : x.link?.state === "active" ? <Badge tone="warning">{x.link.openedAt ? "Filling in" : "Link sent"}</Badge> : x.link?.state === "expired" ? <Badge tone="warning">Link expired</Badge> : x.link?.state === "cancelled" ? <Badge tone="neutral">Link cancelled</Badge> : <Badge tone="warning">Not sent</Badge>}
           </li>
         );
