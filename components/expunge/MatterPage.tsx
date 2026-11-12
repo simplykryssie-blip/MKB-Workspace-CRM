@@ -88,7 +88,12 @@ export function MatterPage({ id }: { id: string }) {
         </div>
       </div>
       <div className="mt-5">
-        {tab === "cases" && <CasesTab m={m} />}
+        {tab === "cases" && (
+          <div className="space-y-5">
+            <ServiceEngagementCard e={m.engagement} letterName="Record expungement letter" letterUrl={`/api/exp/matters/${encodeURIComponent(m.id)}/letter`} when="The client accepts the letter before MKB prepares any documents" canRecord={exp.can.edit} onAccept={(a) => exp.acceptEngagement(m.id, a)} />
+            <CasesTab m={m} />
+          </div>
+        )}
         {tab === "intake" && <IntakeTab m={m} c={c} />}
         {tab === "requests" && <RequestsTab m={m} c={c} />}
         {tab === "billing" && <BillingTab m={m} c={c} />}
@@ -160,7 +165,6 @@ function IntakeTab({ m, c }: { m: ExpMatter; c: Client }) {
   const setAd = (p: Partial<typeof ad>) => setV({ ...v, additional: { ...ad, ...p } });
   return (
     <div className="space-y-5">
-      <ServiceEngagementCard e={m.engagement} letterName="Record expungement letter" letterUrl={`/api/exp/matters/${encodeURIComponent(m.id)}/letter`} when="The client accepts the letter before MKB prepares any documents" canRecord={exp.can.edit} onAccept={(a) => exp.acceptEngagement(m.id, a)} />
       <Card>
         <CardHeader icon={UserRound} title="A. Client information" subtitle="Legal name, aliases and contact. Contact details come from the central client record." action={<Button size="sm" variant="primary" disabled={!dirty || !exp.can.edit} onClick={() => { exp.saveIntake(m.id, v, "staff"); toast("Intake saved"); }}>Save intake</Button>} />
         <div className="space-y-4 px-5 pb-5 sm:px-6">
