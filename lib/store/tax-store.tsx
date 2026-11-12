@@ -647,6 +647,16 @@ function useTaxSync(state: State, dispatch: React.Dispatch<Action>) {
       later("__fees", () => call("PUT", "/api/tax/fees", { fees }).then(() => { feesSynced.current = fees; }).catch((e) => { notify(e instanceof Error ? e.message : "Couldn't save the fee schedule."); reload(); }));
     }
   }, [state.returns, state.fees, ready]);
+  // Closing or refreshing the tab while a change is still saving would lose it — ask first.
+  useEffect(() => {
+    if (!BACKEND) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      const pending = inflight.current.size > 0 || stateRef.current.returns.some((r) => synced.current.has(r.id) && synced.current.get(r.id) !== r);
+      if (pending) { e.preventDefault(); e.returnValue = ""; }
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, []);
 
   // Lets screens wait until a return's latest changes have reached the server.
   useEffect(() => {
