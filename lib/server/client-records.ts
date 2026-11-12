@@ -27,7 +27,7 @@ async function loadParts(db: Db, ids: string[]) {
   if (!ids.length) return { enr: [], notes: [], act: [], team: [], inv: new Map(), files: new Set<string>() };
   const q = ids.map(() => "?").join(",");
   const [enr, notes, act, team] = await Promise.all([
-    all<{ id: string; client_id: string; service: ServiceKey; title: string; stage: string; progress: number; status: Enrollment["status"]; staff_id: string; started_at: string; due_at: string | null; fee: number }>(db, `SELECT * FROM client_enrollments WHERE client_id IN (${q}) ORDER BY started_at`, ...ids),
+    all<{ id: string; client_id: string; service: ServiceKey; title: string; stage: string; progress: number; status: Enrollment["status"]; staff_id: string; started_at: string; due_at: string | null; fee: number; urgent: number }>(db, `SELECT * FROM client_enrollments WHERE client_id IN (${q}) ORDER BY started_at`, ...ids),
     all<{ id: string; client_id: string; author_id: string; body: string; service: ServiceKey | null; pinned: number; at: string }>(db, `SELECT * FROM client_notes WHERE deleted_at IS NULL AND client_id IN (${q}) ORDER BY at DESC`, ...ids),
     all<{ id: string; client_id: string; kind: ActivityItem["kind"]; text: string; actor: ActivityItem["actor"]; at: string }>(db, `SELECT * FROM client_activity WHERE client_id IN (${q}) ORDER BY at DESC LIMIT 5000`, ...ids),
     all<{ client_id: string; member_id: string }>(db, `SELECT client_id, member_id FROM record_assignments WHERE source = 'client_team' AND client_id IN (${q})`, ...ids),
@@ -52,7 +52,7 @@ function assemble(r: FullRow, parts: Awaited<ReturnType<typeof loadParts>>, l4: 
     business: business ? { ...business, einLast4: l4.ein ?? undefined, responsibleParty: business.responsibleParty ? { ...business.responsibleParty, taxIdLast4: l4.rp_tax_id ?? undefined } : undefined } : undefined,
     staffIds: parts.team.filter((t) => t.client_id === r.id).map((t) => t.member_id),
     status: r.status as Client["status"], portal: r.portal as Client["portal"], tags: json(r.tags, []), source: r.source, leadId: r.lead_id ?? undefined, since: r.since, lastActivityAt: r.last_activity_at,
-    enrollments: parts.enr.filter((e) => e.client_id === r.id).map((e) => ({ id: e.id, service: e.service, title: e.title, stage: e.stage, progress: e.progress, status: e.status, staffId: e.staff_id, startedAt: e.started_at, dueAt: e.due_at ?? undefined, fee: e.fee })),
+    enrollments: parts.enr.filter((e) => e.client_id === r.id).map((e) => ({ id: e.id, service: e.service, title: e.title, stage: e.stage, progress: e.progress, status: e.status, staffId: e.staff_id, startedAt: e.started_at, dueAt: e.due_at ?? undefined, fee: e.fee, ...(e.urgent ? { urgent: true } : {}) })),
     documents: (md.documents ?? []).map((d) => (parts.files.has(`${r.id}/${d.id}`) && !d.hasFile ? { ...d, hasFile: true } : d)), messages: md.messages ?? [], appointments: md.appointments ?? [], invoices: parts.inv.get(r.id) ?? [], signatures: md.signatures ?? [],
     notes: parts.notes.filter((n) => n.client_id === r.id).map((n): Note => ({ id: n.id, authorId: n.author_id, body: n.body, at: n.at, service: n.service ?? undefined, pinned: !!n.pinned || undefined })),
     activity: parts.act.filter((x) => x.client_id === r.id).map((x) => ({ id: x.id, kind: x.kind, text: x.text, at: x.at, actor: x.actor })),
@@ -117,7 +117,7 @@ function cleanCore(c: Partial<Client>) {
 }
 const cleanEnrollment = (e: Enrollment): Enrollment => {
   if (!SERVICES.includes(e.service) || !ENROLL_STATUS.includes(e.status)) throw badRequest("Invalid service enrollment.");
-  return { id: s(e.id, 60), service: e.service, title: s(e.title, 200), stage: s(e.stage, 100), progress: Math.max(0, Math.min(100, Math.round(Number(e.progress) || 0))), status: e.status, staffId: s(e.staffId, 60), startedAt: s(e.startedAt, 40), dueAt: sOpt(e.dueAt, 40), fee: Math.max(0, Number(e.fee) || 0) };
+  return { id: s(e.id, 60), service: e.service, title: s(e.title, 200), stage: s(e.stage, 100), progress: Math.max(0, Math.min(100, Math.round(Number(e.progress) || 0))), status: e.status, staffId: s(e.staffId, 60), startedAt: s(e.startedAt, 40), dueAt: sOpt(e.dueAt, 40), fee: Math.max(0, Number(e.fee) || 0), ...(e.urgent ? { urgent: true } : {}) };
 };
 function moduleData(c: Partial<Client>) {
   // Invoices live in the billing tables, so they're left out of the client record.
@@ -157,7 +157,7 @@ function partStatements(env: AppEnv, a: Extract<Actor, { kind: "staff" }>, c: Cl
   const db = env.DB;
   const out: D1PreparedStatement[] = [];
   for (const e of (c.enrollments ?? []).map(cleanEnrollment))
-    out.push(db.prepare("INSERT INTO client_enrollments (id, client_id, service, title, stage, progress, status, staff_id, started_at, due_at, fee) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(e.id, c.id, e.service, e.title, e.stage, e.progress, e.status, e.staffId, e.startedAt, e.dueAt ?? null, e.fee));
+    out.push(db.prepare("INSERT INTO client_enrollments (id, client_id, service, title, stage, progress, status, staff_id, started_at, due_at, fee, urgent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(e.id, c.id, e.service, e.title, e.stage, e.progress, e.status, e.staffId, e.startedAt, e.dueAt ?? null, e.fee, e.urgent ? 1 : 0));
   for (const sv of new Set((c.enrollments ?? []).map((e) => e.service))) out.push(db.prepare("INSERT OR IGNORE INTO client_services (client_id, service) VALUES (?, ?)").bind(c.id, sv));
   for (const sid of new Set(c.staffIds ?? [])) out.push(db.prepare("INSERT OR IGNORE INTO record_assignments (client_id, member_id, source, record_id) SELECT ?, id, 'client_team', '' FROM members WHERE id = ?").bind(c.id, s(sid, 60)));
   for (const n of c.notes ?? []) out.push(db.prepare("INSERT INTO client_notes (id, client_id, author_id, body, service, pinned, at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(s(n.id, 60), c.id, a.member.id, s(n.body, 10_000), n.service ?? null, n.pinned ? 1 : 0, s(n.at, 40) || now()));
@@ -226,7 +226,7 @@ export async function saveClient(env: AppEnv, a: Actor, id: string, next: Client
     changed.push("services");
     stmts.push(db.prepare("DELETE FROM client_enrollments WHERE client_id = ?").bind(id));
     stmts.push(db.prepare("DELETE FROM client_services WHERE client_id = ?").bind(id));
-    for (const e of nextEnr) stmts.push(db.prepare("INSERT INTO client_enrollments (id, client_id, service, title, stage, progress, status, staff_id, started_at, due_at, fee) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(e.id, id, e.service, e.title, e.stage, e.progress, e.status, e.staffId, e.startedAt, e.dueAt ?? null, e.fee));
+    for (const e of nextEnr) stmts.push(db.prepare("INSERT INTO client_enrollments (id, client_id, service, title, stage, progress, status, staff_id, started_at, due_at, fee, urgent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(e.id, id, e.service, e.title, e.stage, e.progress, e.status, e.staffId, e.startedAt, e.dueAt ?? null, e.fee, e.urgent ? 1 : 0));
     for (const sv of new Set(nextEnr.map((e) => e.service))) stmts.push(db.prepare("INSERT INTO client_services (client_id, service) VALUES (?, ?)").bind(id, sv));
   }
   // Notes: new ones are added (authored by the signed-in person), pins updated, removed ones hidden.

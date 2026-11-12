@@ -188,7 +188,7 @@ export async function publicSubmitTaxInterview(env: AppEnv, token: string, ip: s
   const request = (i: ChecklistItem): ChecklistItem => {
     if (i.docId || i.waivedReason || i.archived || !i.required) return i;
     const docId = randomId("d");
-    documents.unshift({ id: docId, name: i.name, service: "tax", category: i.category, sensitive: i.sensitive, taxYear: r.taxYear, status: "requested", requestedAt: t });
+    documents.unshift({ id: docId, name: i.name, service: "tax", category: i.category, sensitive: i.sensitive, taxYear: r.taxYear, status: "requested", requestedAt: t, dueAt: new Date(Date.parse(t) + 7 * 86400000).toISOString() });
     requested.push(i.name);
     return { ...i, docId };
   };

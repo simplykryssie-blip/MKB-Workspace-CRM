@@ -198,7 +198,7 @@ export async function publicSubmitServiceIntake(env: AppEnv, token: string, ip: 
     const cur = await one<{ module_data: string | null }>(env.DB, "SELECT module_data FROM clients WHERE id = ?", c.id);
     const md = json<Record<string, { name?: string; service?: string }[]>>(cur?.module_data, {});
     const have = new Set((md.documents ?? []).filter((d) => d.service === meta.service).map((d) => d.name));
-    const add = docSpecs.filter((d) => !have.has(d.name)).map((d) => ({ id: randomId("d"), name: d.name, service: meta.service, category: `${meta.label} intake`, status: "requested", sensitive: !!d.sensitive, requestedAt: t }));
+    const add = docSpecs.filter((d) => !have.has(d.name)).map((d) => ({ id: randomId("d"), name: d.name, service: meta.service, category: `${meta.label} intake`, status: "requested", sensitive: !!d.sensitive, requestedAt: t, dueAt: new Date(Date.parse(t) + 7 * 86400000).toISOString() }));
     md.documents = [...add, ...(md.documents ?? [])];
     await run(env.DB, "UPDATE clients SET module_data = ?, rev = rev + 1, updated_at = ? WHERE id = ?", JSON.stringify(md), t, c.id);
   }

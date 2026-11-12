@@ -368,11 +368,11 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
     },
 
     // Documents ------------------------------------------------------------
-    requestDocument(id: string, d: { name: string; service: ServiceKey; category: string; sensitive: boolean; taxYear?: number; workspaceId?: string; period?: string; entityId?: string; bizRequestId?: string; expMatterId?: string; expCaseId?: string }): string {
+    requestDocument(id: string, d: { name: string; service: ServiceKey; category: string; sensitive: boolean; taxYear?: number; workspaceId?: string; period?: string; entityId?: string; bizRequestId?: string; expMatterId?: string; expCaseId?: string; dueAt?: string }): string {
       const docId = uid("d");
       up(id, (c) =>
         log(
-          { ...c, documents: [{ id: docId, ...d, status: "requested", requestedAt: nowIso() }, ...c.documents] },
+          { ...c, documents: [{ id: docId, ...d, status: "requested", requestedAt: nowIso(), dueAt: d.dueAt ?? new Date(Date.now() + 7 * 86400000).toISOString() }, ...c.documents] },
           "upload",
           `Requested "${d.name}"${d.taxYear ? ` (TY ${d.taxYear})` : ""} from client`,
         ),
@@ -410,6 +410,13 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
     /** Business services: a deliverable was delivered to the client portal. */
     markDocDelivered(id: string, docId: string) {
       up(id, (c) => log({ ...c, documents: c.documents.map((x) => (x.id === docId ? { ...x, deliveredAt: nowIso(), status: "reviewed" as const } : x)) }, "upload", `Delivered "${c.documents.find((x) => x.id === docId)?.name}" to the client portal`));
+    },
+    setDocDue(id: string, docId: string, dueAt?: string) {
+      up(id, (c) => log({ ...c, documents: c.documents.map((x) => (x.id === docId ? { ...x, dueAt } : x)) }, "upload", `Due date for "${c.documents.find((x) => x.id === docId)?.name}" ${dueAt ? `set to ${new Date(dueAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : "removed"}`));
+    },
+    /** Urgent services' document requests sort to the top of Documents. */
+    setServiceUrgent(id: string, enrollmentId: string, urgent: boolean) {
+      up(id, (c) => log({ ...c, enrollments: c.enrollments.map((e) => (e.id === enrollmentId ? { ...e, urgent: urgent || undefined } : e)) }, "status", `${c.enrollments.find((e) => e.id === enrollmentId)?.title} ${urgent ? "marked urgent" : "no longer urgent"}`));
     },
     setDocExpiry(id: string, docId: string, expiresAt?: string) {
       up(id, (c) => ({ ...c, documents: c.documents.map((x) => (x.id === docId ? { ...x, expiresAt } : x)) }));

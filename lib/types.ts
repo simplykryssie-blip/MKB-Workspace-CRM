@@ -36,6 +36,8 @@ export type Enrollment = {
   startedAt: string;
   dueAt?: string;
   fee: number;
+  /** Marked urgent: this service's document requests sort to the top of Documents. */
+  urgent?: boolean;
 };
 
 export type DocStatus = "requested" | "received" | "reviewed" | "rejected";
@@ -50,6 +52,8 @@ export type ClientDocument = {
   sensitive: boolean;
   uploadedAt?: string;
   requestedAt: string;
+  /** When MKB needs it by (requests default to 7 days out). */
+  dueAt?: string;
   sizeKb?: number;
   uploadedBy?: "client" | "staff";
   /** Tax documents are tagged by tax year so years never mix. */

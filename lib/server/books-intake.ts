@@ -169,7 +169,7 @@ async function completeSubmit(env: AppEnv, who: Submitter, r: Row, c: ClientRow,
     const md = json<Record<string, { name?: string; service?: string; status?: string }[]>>(cur?.module_data, {});
     const have = new Set((md.documents ?? []).filter((d) => d.service === "books").map((d) => d.name));
     const sensitive = new Set(docsFor(BOOKS_SECTIONS, answers).filter((d) => d.sensitive).map((d) => d.name));
-    const add = docs.filter((n) => !have.has(n)).map((n) => ({ id: randomId("d"), name: n, service: "books", category: "Bookkeeping intake", status: "requested", sensitive: sensitive.has(n), requestedAt: t }));
+    const add = docs.filter((n) => !have.has(n)).map((n) => ({ id: randomId("d"), name: n, service: "books", category: "Bookkeeping intake", status: "requested", sensitive: sensitive.has(n), requestedAt: t, dueAt: new Date(Date.parse(t) + 7 * 86400000).toISOString() }));
     md.documents = [...add, ...(md.documents ?? [])];
     await run(env.DB, "UPDATE clients SET module_data = ?, rev = rev + 1, updated_at = ? WHERE id = ?", JSON.stringify(md), t, c.id);
   }

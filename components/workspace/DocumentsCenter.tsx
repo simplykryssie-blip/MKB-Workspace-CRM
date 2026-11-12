@@ -17,6 +17,22 @@ import { fmtDate } from "@/lib/format";
 import type { Client, ClientDocument, DocStatus, ServiceKey } from "@/lib/types";
 
 type Row = { c: Client; d: ClientDocument };
+const nowIso = () => new Date().toISOString();
+const outstanding = (d: ClientDocument) => d.status === "requested" || d.status === "rejected";
+/** The client's service for this document is marked urgent (and still open). */
+const isUrgent = (r: Row) => r.c.enrollments.some((e) => e.urgent && e.service === r.d.service && e.status !== "complete" && e.status !== "cancelled");
+const isOverdue = (r: Row) => outstanding(r.d) && !!r.d.dueAt && r.d.dueAt < nowIso();
+/**
+ * Most important first: urgent services, then overdue requests, then the
+ * soonest due date, then everything else (newest first).
+ */
+function byImportance(a: Row, b: Row) {
+  const rank = (r: Row) => (isUrgent(r) ? 0 : isOverdue(r) ? 1 : outstanding(r.d) && r.d.dueAt ? 2 : 3);
+  const ra = rank(a), rb = rank(b);
+  if (ra !== rb) return ra - rb;
+  if (outstanding(a.d) && outstanding(b.d) && a.d.dueAt && b.d.dueAt && a.d.dueAt !== b.d.dueAt) return a.d.dueAt.localeCompare(b.d.dueAt);
+  return (b.d.uploadedAt ?? b.d.requestedAt).localeCompare(a.d.uploadedAt ?? a.d.requestedAt);
+}
 type View = "review" | "requested" | "rejected" | "all";
 const VIEWS: { key: View; label: string; test: (d: ClientDocument) => boolean }[] = [
   { key: "review", label: "To review", test: (d) => d.status === "received" },
@@ -45,7 +61,7 @@ export function DocumentsCenter() {
     .filter((r) => VIEWS.find((v) => v.key === view)!.test(r.d))
     .filter((r) => svc === "all" || r.d.service === svc)
     .filter((r) => !q.trim() || `${r.c.name} ${r.c.contactName ?? ""} ${r.d.name} ${r.d.category}`.toLowerCase().includes(q.trim().toLowerCase()))
-    .sort((a, b) => (b.d.uploadedAt ?? b.d.requestedAt).localeCompare(a.d.uploadedAt ?? a.d.requestedAt));
+    .sort(byImportance);
 
   const open = (r: Row) => {
     if (BACKEND && r.d.hasFile) { store.logDocumentAccess(r.c.id, r.d.id, "Viewed"); window.open(`/api/clients/${r.c.id}/files/${r.d.id}?inline=1`, "_blank", "noopener"); }
@@ -54,7 +70,7 @@ export function DocumentsCenter() {
 
   return (
     <div>
-      <PageHeader title="Documents" subtitle="Every client document in one place — review what came in and chase what's still missing." />
+      <PageHeader title="Documents" subtitle="Every client document in one place. Urgent services come first, then overdue requests, then the soonest due." />
       <div className="mb-4 flex flex-wrap gap-2" role="tablist" aria-label="Document views">
         {VIEWS.map((v) => (
           <button key={v.key} role="tab" aria-selected={view === v.key} onClick={() => setView(v.key)} className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-[13px] font-medium ${view === v.key ? "border-accent bg-accent-soft text-accent" : "border-line bg-surface text-ink-2 hover:bg-surface-2"}`}>
@@ -89,8 +105,10 @@ export function DocumentsCenter() {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="truncate text-[14px] font-medium text-ink">{r.d.name}</span>
+                      {isUrgent(r) && <Badge tone="danger">Urgent</Badge>}
                       {r.d.sensitive && <Badge tone="neutral" icon={Lock}>Sensitive</Badge>}
                       <Badge tone={st.tone}>{st.label}</Badge>
+                      {outstanding(r.d) && r.d.dueAt && <Badge tone={isOverdue(r) ? "danger" : "neutral"}>{isOverdue(r) ? "Overdue · was due" : "Due"} {fmtDate(r.d.dueAt)}</Badge>}
                     </div>
                     <div className="mt-0.5 text-[12.5px] text-muted">
                       <Link href={`/clients/${r.c.id}#documents`} className="font-medium text-accent hover:underline">{r.c.name}</Link>
@@ -102,6 +120,12 @@ export function DocumentsCenter() {
                     {r.d.hasFile && <Button size="sm" variant="ghost" icon={Download} onClick={() => open(r)}>Open</Button>}
                     {canEdit && r.d.status === "received" && <Button size="sm" variant="ghost" icon={CheckCircle2} onClick={() => setStatus(r, "reviewed", "Marked reviewed")}>Reviewed</Button>}
                     {canEdit && r.d.status === "received" && <Button size="sm" variant="ghost" icon={XCircle} onClick={() => setStatus(r, "rejected", "Sent back — the client will be asked to upload it again")}>Send back</Button>}
+                    {canEdit && outstanding(r.d) && (
+                      <label className="inline-flex items-center gap-1 text-[12px] text-muted">
+                        <span className="sr-only">Due date for {r.d.name}</span>
+                        <input type="date" value={r.d.dueAt ? r.d.dueAt.slice(0, 10) : ""} onChange={(e) => { store.setDocDue(r.c.id, r.d.id, e.target.value ? new Date(`${e.target.value}T17:00:00`).toISOString() : undefined); toast(e.target.value ? "Due date changed" : "Due date removed"); }} className="h-8 rounded-lg border border-line bg-surface px-2 text-[12.5px] text-ink" />
+                      </label>
+                    )}
                     {canEdit && (r.d.status === "requested" || r.d.status === "rejected") && <Button size="sm" variant="ghost" icon={Send} onClick={() => void store.remindDocument(r.c.id, r.d.id).then((ok) => ok && toast(`Reminder emailed to ${r.c.contactName ?? r.c.name}`))}>Remind</Button>}
                   </div>
                 </li>

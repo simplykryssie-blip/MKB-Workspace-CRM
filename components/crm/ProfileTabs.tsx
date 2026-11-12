@@ -349,6 +349,13 @@ function EnrollmentRow({ c, e, compact }: { c: Client; e: Enrollment; compact?: 
           <div className="flex flex-wrap items-center gap-2">
             <ServiceTag service={e.service} />
             <Badge tone={st.tone}>{st.label}</Badge>
+            {e.urgent && <Badge tone="danger">Urgent</Badge>}
+            {!compact && e.status !== "complete" && e.status !== "cancelled" && (
+              <label className="ml-auto inline-flex cursor-pointer items-center gap-1.5 text-[12.5px] font-medium text-ink-2" title="Urgent services' documents go to the top of Documents">
+                <input type="checkbox" checked={!!e.urgent} onChange={() => { store.setServiceUrgent(c.id, e.id, !e.urgent); toast(e.urgent ? "No longer urgent" : "Marked urgent — its documents go to the top of Documents"); }} className="h-4 w-4 accent-[var(--danger,#dc2626)]" />
+                Urgent
+              </label>
+            )}
           </div>
           <div className="mt-1.5 text-[14.5px] font-semibold text-ink">{e.title}</div>
           <div className="mt-0.5 text-[12.5px] text-muted">
@@ -540,6 +547,7 @@ export function DocumentsTab({ c, act }: { c: Client; act: Act }) {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className={`truncate text-[14px] font-medium ${locked ? "text-muted" : "text-ink"}`}>{locked ? "Restricted document" : d.name}</span>
                     {d.sensitive && <Badge tone="danger" icon={ShieldAlert}>Restricted</Badge>}
+                    {outstanding && d.dueAt && <Badge tone={d.dueAt < new Date().toISOString() ? "danger" : "neutral"}>{d.dueAt < new Date().toISOString() ? "Overdue · was due" : "Due"} {fmtDate(d.dueAt)}</Badge>}
                   </div>
                   <div className="mt-0.5 text-[12px] text-muted">
                     {d.taxYear ? `TY ${d.taxYear} · ` : ""}{d.category} · {d.uploadedAt && !outstanding ? `Uploaded ${relTime(d.uploadedAt)} by ${d.uploadedBy}${d.sizeKb ? ` · ${fileSize(d.sizeKb)}` : ""}` : `Requested ${relTime(d.requestedAt)}`}
