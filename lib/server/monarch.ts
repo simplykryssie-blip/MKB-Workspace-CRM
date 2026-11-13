@@ -266,7 +266,7 @@ export async function matchRowsToOffice(env: AppEnv, officeId: string, efins: st
 
 export async function createOffice(env: AppEnv, a: Actor, b: Record<string, unknown>) {
   need(a, "create");
-  const id = /^[A-Za-z0-9_-]{6,60}$/.test(String(b.id)) ? String(b.id) : randomId("of");
+  const id = typeof b.id === "string" && /^[A-Za-z0-9_-]{6,60}$/.test(b.id) ? b.id : randomId("of");
   const name = str(b.name, 160);
   if (!name) throw badRequest("Enter the office name.");
   const email = str(b.email, 200).toLowerCase();
