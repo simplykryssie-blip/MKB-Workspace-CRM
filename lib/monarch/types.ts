@@ -27,8 +27,8 @@ export type ItemState = { status: ItemStatus; at?: string; by?: string; note?: s
 export type Location = { id: string; name: string; address: string; manager: string; efin: string; ownEfin: boolean; seats: number };
 export type Preparer = { id: string; name: string; ptin: string; locationId: string };
 
-export type Package = { id: string; name: string; kind: "package" | "seat" | "location" | "other"; priceCents: number; billing: "season" | "once" | "monthly"; locations: number; seats: number; askPtins: boolean; features: string[]; active: boolean };
-export type Software = { id: string; name: string; sbFeeCents: number; downloadUrl: string; welcomeSubject: string; welcomeBody: string; active: boolean };
+export type Package = { id: string; name: string; kind: "package" | "seat" | "location" | "other"; priceCents: number; billing: "season" | "once" | "monthly"; locations: number; seats: number; askPtins: boolean; features: string[]; /** Stripe payment link on the website (buy.stripe.com/…); a purchase through it adds the office. */ stripeLink: string; /** Sets the office's software / bank when bought. */ softwareId?: string; bankId?: string; active: boolean };
+export type Software = { id: string; name: string; sbFeeCents: number; downloadUrl: string; /** The software company's onboarding application for a new office. */ applicationUrl: string; welcomeSubject: string; welcomeBody: string; active: boolean };
 export type Bank = { id: string; name: string; addonFeeCents: number; applicationUrl: string; layouts: Partial<Record<ReportType, Layout>>; active: boolean };
 export type Reseller = { id: string; name: string; contact: string; email: string; phone: string; rateBp: number; notes: string; active: boolean };
 
@@ -63,6 +63,8 @@ export type Office = {
   preparers: Preparer[];
   agreement?: { name: string; at: string; fileId: string };
   link: { state: LinkState; sentAt?: string; lastUsed?: string; expiresAt?: string };
+  /** When the automatic welcome email went out. */
+  welcomeSentAt?: string;
   files: OfficeFile[];
   bank: BankStatus;
   createdAt: string;
@@ -80,6 +82,8 @@ export type MonarchSettings = {
   linkDays: number;
   /** Turn the link off once the office is Active. */
   closeOnActive: boolean;
+  /** Email the welcome (setup link + software and bank applications) as soon as a package is paid. */
+  autoWelcome: boolean;
   phone: string;
   email: string;
   agreement: { text: string; version: number };
@@ -119,7 +123,7 @@ This agreement covers the current filing season and renews when the Office renew
 
 Edit this text in Monarch → Setup before sending your first upload link.`;
 
-export const DEFAULT_SETTINGS: MonarchSettings = { linkDays: 30, closeOnActive: true, phone: "", email: "", agreement: { text: DEFAULT_AGREEMENT, version: 1 } };
+export const DEFAULT_SETTINGS: MonarchSettings = { linkDays: 30, closeOnActive: true, autoWelcome: true, phone: "", email: "", agreement: { text: DEFAULT_AGREEMENT, version: 1 } };
 
 /** The onboarding checklist for one office (depends on its package and bank). */
 export function checklistFor(o: Pick<Office, "bankId" | "softwareId">, pkg: Package | undefined, bank: Bank | undefined, software: Software | undefined): ItemDef[] {

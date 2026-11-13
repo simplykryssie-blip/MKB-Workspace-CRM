@@ -9,6 +9,7 @@ import { randomId, randomToken, sha256 } from "./crypto";
 import { publicAssetOrigin } from "./email";
 import { notify } from "./notifications";
 import { sendMonarch } from "./monarch-email";
+import { sendWelcomePackage } from "./monarch-link";
 import { advance, loadAll, loadSettings, need, note, officeRow, staffId, toPackage, type SaleRowLite } from "./monarch";
 import { usd } from "@/lib/monarch/types";
 import type { Actor } from "./identity";
@@ -41,6 +42,12 @@ async function afterPaid(env: AppEnv, r: SaleRowLite) {
     }
   }
   await advance(env, r.office_id, { paid: true });
+  // A new package: the welcome (setup link + software and bank applications) goes out right away.
+  if (pkg?.kind === "package") {
+    const o = await one<{ welcome_sent_at: string | null; stage: string }>(env.DB, "SELECT welcome_sent_at, stage FROM mon_offices WHERE id = ?", r.office_id);
+    const s = await loadSettings(env);
+    if (s.autoWelcome && o && !o.welcome_sent_at && (o.stage === "interested" || o.stage === "paid")) await sendWelcomePackage(env, r.office_id).catch((e) => console.error("monarch welcome", e instanceof Error ? e.message : e));
+  }
 }
 
 export async function createSale(env: AppEnv, a: Actor, b: Record<string, unknown>) {
@@ -184,3 +191,45 @@ export async function monarchStripePaid(env: AppEnv, saleId: string, amountTotal
 }
 
 export { METHODS };
+
+/* ---------------------------------------------------------------- purchases from the website */
+type CheckoutSession = { id: string; payment_link?: string | null; payment_status?: string; amount_total?: number; payment_intent?: string | null; customer_details?: { name?: string | null; email?: string | null; phone?: string | null; address?: { city?: string | null; state?: string | null } | null } | null; custom_fields?: { key?: string; label?: { custom?: string | null }; text?: { value?: string | null } | null; dropdown?: { value?: string | null } | null }[] };
+
+/**
+ * A package bought through a Stripe payment link on the website (one set on
+ * the package in Monarch → Packages). Adds the office (or uses the one with
+ * that email), records the paid sale, and — through the usual paid steps —
+ * sends the welcome. Returns null when the payment isn't for a Monarch package.
+ */
+export async function monarchWebsitePurchase(env: AppEnv, s: CheckoutSession) {
+  if (!s.payment_link || !env.STRIPE_SECRET_KEY) return null;
+  const res = await fetch(`https://api.stripe.com/v1/payment_links/${encodeURIComponent(s.payment_link)}`, { headers: { authorization: `Bearer ${env.STRIPE_SECRET_KEY}` } });
+  const link = (await res.json().catch(() => ({}))) as { url?: string };
+  if (!res.ok || !link.url) return null;
+  const pk = await one<Parameters<typeof toPackage>[0]>(env.DB, "SELECT * FROM mon_packages WHERE stripe_link = ?", link.url);
+  if (!pk) return null;
+  const ref = s.payment_intent ?? s.id;
+  if (await one(env.DB, "SELECT 1 FROM mon_sales WHERE reference = ?", ref)) return { received: true, duplicate: true };
+  const c = s.customer_details ?? {};
+  const email = String(c.email ?? "").trim().toLowerCase().slice(0, 200);
+  const field = (re: RegExp) => (s.custom_fields ?? []).find((f) => re.test(`${f.key ?? ""} ${f.label?.custom ?? ""}`))?.text?.value?.trim() || (s.custom_fields ?? []).find((f) => re.test(`${f.key ?? ""} ${f.label?.custom ?? ""}`))?.dropdown?.value?.trim() || "";
+  const business = field(/business|company|office|firm/i);
+  const contact = String(c.name ?? "").trim().slice(0, 120);
+  const t = now();
+  // The same office buying again (same email) gets the sale on its existing record.
+  let office = email ? await one<{ id: string; name: string }>(env.DB, "SELECT id, name FROM mon_offices WHERE lower(email) = ? ORDER BY created_at LIMIT 1", email) : null;
+  if (!office) {
+    const id = randomId("of");
+    const name = (business || contact || email || "New office").slice(0, 160);
+    await run(env.DB, "INSERT INTO mon_offices (id, name, contact_name, email, phone, city, state, stage, created_at, created_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'interested', ?, NULL, ?)",
+      id, name, contact, email, String(c.phone ?? "").slice(0, 40), String(c.address?.city ?? "").slice(0, 80), String(c.address?.state ?? "").slice(0, 2).toUpperCase(), t, t);
+    office = { id, name };
+  }
+  const amount = Math.max(0, Math.round(s.amount_total ?? pk.price_cents));
+  const saleId = randomId("ms");
+  await run(env.DB, "INSERT INTO mon_sales (id, office_id, package_id, description, qty, unit_cents, amount_cents, status, method, reference, paid_at, created_at, created_by, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?, 'paid', 'Card / bank (Stripe — website)', ?, ?, ?, NULL, ?)",
+    saleId, office.id, pk.id, pk.name, amount, amount, ref, t, t, t);
+  await afterPaid(env, await saleRow(env, saleId));
+  await notify(env, { module: "monarch" }, { kind: "payment", title: `New Monarch purchase: ${office.name} (${usd(amount)})`, body: `${pk.name} — bought on the website. The welcome email went out automatically.`, href: `/monarch/offices/${office.id}` });
+  return { received: true, office: office.id };
+}

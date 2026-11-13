@@ -303,3 +303,72 @@ export async function publicPreparers(env: AppEnv, token: string, ip: string, b:
   return viewFor(env, await officeRow(env, r.id));
 }
 
+
+/* ---------------------------------------------------------------- welcome after purchase */
+/**
+ * The welcome an office gets as soon as its package is paid (automatic when
+ * "Send the welcome automatically" is on in Setup, or sent by staff): their
+ * private setup link (agreement, photo ID, business documents, locations and
+ * EFINs, preparers), the list of what's needed, and the software and bank
+ * applications. Fills in the office's software and bank from the package when
+ * they aren't set yet. Safe to call again (a new link replaces the old one).
+ */
+export async function sendWelcomePackage(env: AppEnv, id: string, a?: Actor) {
+  let r = await officeRow(env, id);
+  if (!r.email) {
+    if (a) throw badRequest("Add the office's email address first.");
+    await notify(env, { module: "monarch" }, { kind: "payment", title: `Monarch: ${r.name} paid but has no email`, body: "Add their email, then send the welcome from their office page.", href: `/monarch/offices/${id}` });
+    return { emailed: false };
+  }
+  // Software and bank come from the package when the office doesn't have them yet.
+  const pkg = r.package_id ? await one<{ software_id: string | null; bank_id: string | null }>(env.DB, "SELECT software_id, bank_id FROM mon_packages WHERE id = ?", r.package_id) : null;
+  if (pkg && ((!r.software_id && pkg.software_id) || (!r.bank_id && pkg.bank_id))) {
+    await run(env.DB, "UPDATE mon_offices SET software_id = coalesce(software_id, ?), bank_id = coalesce(bank_id, ?), updated_at = ?, rev = rev + 1 WHERE id = ?", pkg.software_id, pkg.bank_id, now(), id);
+    r = await officeRow(env, id);
+  }
+  const s = await loadSettings(env);
+  const { items, bank, software } = await itemsFor(env, r);
+  const token = randomToken(32);
+  const t = now();
+  await run(env.DB, "UPDATE mon_offices SET link_hash = ?, link_sent_at = ?, link_last_used = NULL, link_expires_at = ?, link_off_at = NULL, welcome_sent_at = ?, updated_at = ?, rev = rev + 1 WHERE id = ?", await sha256(token), t, addMinutes(t, s.linkDays * 1440), t, t, id);
+  const o = { checklist: json<Record<string, ItemState>>(r.checklist, {}) };
+  const open = items.filter((i) => i.who === "office" && !isDone(itemState(o, i.key))).map((i) => i.label);
+  const first = r.contact_name.split(" ")[0] || "there";
+  const links = [
+    ...(software?.applicationUrl ? [{ label: `${software.name} onboarding application`, note: `Fill this out so we can set up ${r.name} on ${software.name}.`, url: software.applicationUrl }] : []),
+    ...(bank?.applicationUrl ? [{ label: `${bank.name} bank product application`, note: "Fill it out, then upload a copy of your completed application through your setup link.", url: bank.applicationUrl }] : []),
+  ];
+  const res = await sendMonarch(env, s, {
+    to: r.email, template: "monarch_welcome",
+    subject: `Welcome to Monarch Tax Suite — let's get ${r.name} set up`,
+    heading: `Welcome, ${first}! Let's get ${r.name} set up.`,
+    paragraphs: [
+      "Thank you for your purchase. Here's everything we need to get your office ready for the season.",
+      "Use your private setup link to sign your service bureau agreement and send us your documents. It saves as you go, so you can come back to it anytime.",
+    ],
+    list: open.length ? { title: "What we need from you", items: open } : undefined,
+    button: { label: "Open your setup link", url: linkUrl(env, token) },
+    links,
+    after: [
+      ...(links.length ? [] : ["We'll send your software and bank applications separately."]),
+      "Once we have everything, we'll set up your software account and bank product enrollment and let you know when you're ready to go.",
+      `This link is only for ${r.name}. It stops working after ${s.linkDays} days without use — just ask us for a new one.`,
+    ],
+  });
+  if (bank?.applicationUrl) {
+    const cl = json<Record<string, ItemState>>((await officeRow(env, id)).checklist, {});
+    cl.bank_app = { ...(cl.bank_app ?? { status: "open" }), sentAt: t };
+    await run(env.DB, "UPDATE mon_offices SET checklist = ? WHERE id = ?", JSON.stringify(cl), id);
+  }
+  await advance(env, id, { linkSent: true });
+  if (a) await note(a, `Office ${r.name}`, `Welcome emailed to ${r.email}`, env);
+  else await audit(env.DB, { kind: "anonymous", ip: "stripe" }, { action: "Record update", resource: `Monarch — Office ${r.name}`, meta: `Welcome emailed automatically after payment${res.sent ? "" : " (queued)"}` }).catch(() => {});
+  return { emailed: res.sent };
+}
+
+/** Staff: send (or resend) the welcome from the office page. */
+export async function sendWelcomeNow(env: AppEnv, a: Actor, id: string) {
+  need(a, "edit");
+  const out = await sendWelcomePackage(env, id, a);
+  return { ...out, office: await officeView(env, id) };
+}

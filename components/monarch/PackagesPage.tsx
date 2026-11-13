@@ -43,11 +43,11 @@ function Packages({ d }: { d: MonarchData }) {
 function PackageDialog({ value, onClose }: { value: Package | "new" | null; onClose: () => void }) {
   const m = useMonarch();
   const { busy, run } = useAct();
-  const empty = { name: "", kind: "package" as Package["kind"], price: "", billing: "season" as Package["billing"], locations: "1", seats: "1", askPtins: false, features: "", active: true };
+  const empty = { name: "", kind: "package" as Package["kind"], price: "", billing: "season" as Package["billing"], locations: "1", seats: "1", askPtins: false, features: "", stripeLink: "", softwareId: "", bankId: "", active: true };
   const [f, setF] = useState(empty);
   useEffect(() => {
     if (!value) return;
-    setF(value === "new" ? empty : { name: value.name, kind: value.kind, price: dollars(value.priceCents), billing: value.billing, locations: String(value.locations), seats: String(value.seats), askPtins: value.askPtins, features: value.features.join("\n"), active: value.active });
+    setF(value === "new" ? empty : { name: value.name, kind: value.kind, price: dollars(value.priceCents), billing: value.billing, locations: String(value.locations), seats: String(value.seats), askPtins: value.askPtins, features: value.features.join("\n"), stripeLink: value.stripeLink ?? "", softwareId: value.softwareId ?? "", bankId: value.bankId ?? "", active: value.active });
   }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
   const id = value && value !== "new" ? value.id : null;
   const isPkg = f.kind === "package";
@@ -62,6 +62,9 @@ function PackageDialog({ value, onClose }: { value: Package | "new" | null; onCl
         {isPkg && <TextField label="Locations included" type="number" min={0} value={f.locations} onChange={(e) => setF({ ...f, locations: e.target.value })} />}
         {isPkg && <TextField label="Seats included" type="number" min={0} value={f.seats} onChange={(e) => setF({ ...f, seats: e.target.value })} />}
         <div className="sm:col-span-2"><TextArea label="What's included (one per line)" rows={4} value={f.features} onChange={(e) => setF({ ...f, features: e.target.value })} /></div>
+        {isPkg && <SelectField label="Software that comes with it" value={f.softwareId} onChange={(e) => setF({ ...f, softwareId: e.target.value })} options={[["", "Choose later per office"], ...(m.data?.software ?? []).filter((x) => x.active || x.id === f.softwareId).map((x) => [x.id, x.name] as [string, string])]} />}
+        {isPkg && <SelectField label="Bank product" value={f.bankId} onChange={(e) => setF({ ...f, bankId: e.target.value })} options={[["", "Choose later per office"], ...(m.data?.banks ?? []).filter((x) => x.active || x.id === f.bankId).map((x) => [x.id, x.name] as [string, string])]} />}
+        {isPkg && <div className="sm:col-span-2"><TextField label="Stripe payment link (from your website)" value={f.stripeLink} onChange={(e) => setF({ ...f, stripeLink: e.target.value.trim() })} placeholder="https://buy.stripe.com/…" hint="When someone pays through this link, they're added as an office automatically and get the welcome email." /></div>}
         {isPkg && <Checkbox label="Ask offices for preparer names & PTINs" hint="Adds a Preparers step to their upload link" checked={f.askPtins} onChange={(e) => setF({ ...f, askPtins: e.target.checked })} />}
         <Checkbox label="Available for new sales" checked={f.active} onChange={(e) => setF({ ...f, active: e.target.checked })} />
       </div>

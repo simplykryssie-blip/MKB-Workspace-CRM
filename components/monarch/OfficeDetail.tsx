@@ -33,6 +33,7 @@ function Detail({ d, o }: { d: MonarchData; o: Office }) {
   const pkg = d.packages.find((x) => x.id === o.packageId);
   const sw = d.software.find((x) => x.id === o.softwareId);
   const bank = d.banks.find((x) => x.id === o.bankId);
+  const software = d.software.find((x) => x.id === o.softwareId);
   const reseller = d.resellers.find((x) => x.id === o.resellerId);
   const cap = capacity(o, pkg);
   const sales = d.sales.filter((s) => s.officeId === o.id);
@@ -46,6 +47,8 @@ function Detail({ d, o }: { d: MonarchData; o: Office }) {
     return r;
   }, (r) => action === "off" ? "Upload link turned off" : action === "copy" ? "New link copied — the old one no longer works" : r.emailed ? `Upload link emailed to ${o.email}` : "Link created — email isn't connected, so copy it from the outbox");
 
+  const welcome = () => run("email:onboarding", () => m.applyOffice<{ office: Office; emailed: boolean }>("POST", `/api/monarch/offices/${o.id}/email`, { kind: "onboarding" }), (r) => r.emailed ? `Welcome emailed to ${o.email}` : "Welcome created — email isn't connected, so it's in the outbox");
+
   const linkText = o.link.state === "on" ? `${o.link.lastUsed ? `Last used ${shortDate(o.link.lastUsed)}` : "Not opened yet"} · stops working ${shortDate(o.link.expiresAt)} if unused${d.settings.closeOnActive ? ", or when onboarding is complete" : ""}`
     : o.link.state === "expired" ? `Expired ${shortDate(o.link.expiresAt)} after going unused` : o.link.state === "off" ? "Turned off" : "No link sent yet";
 
@@ -58,6 +61,11 @@ function Detail({ d, o }: { d: MonarchData; o: Office }) {
         actions={<><Button icon={Pencil} onClick={() => setEditing(true)}>Edit</Button><Button icon={Wallet} href={`/monarch/sales?office=${o.id}`}>Record a sale</Button></>}
       />
 
+      <Card className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-3 sm:px-6">
+        <Badge tone={o.welcomeSentAt ? "success" : "neutral"} icon={Send}>{o.welcomeSentAt ? `Welcome sent ${shortDate(o.welcomeSentAt)}` : "Welcome not sent"}</Badge>
+        <span className="min-w-[200px] flex-1 text-[13px] text-ink-2">Setup link, what we need, and the {software?.name ?? "software"} and {bank?.name ?? "bank"} applications in one email.{d.settings.autoWelcome ? " Sent automatically when their package is paid." : ""}</span>
+        <Button size="sm" variant={o.welcomeSentAt ? undefined : "primary"} icon={Send} disabled={!!busy || !o.email} title={o.email ? undefined : "Add an email address first"} onClick={() => void welcome()}>{o.welcomeSentAt ? "Resend welcome" : "Send welcome"}</Button>
+      </Card>
       <Card className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-3 sm:px-6">
         <Badge tone={o.link.state === "on" ? "success" : o.link.state === "none" ? "neutral" : "warning"} icon={o.link.state === "on" ? Link2 : Link2Off}>{o.link.state === "on" ? "Upload link on" : o.link.state === "expired" ? "Upload link expired" : o.link.state === "off" ? "Upload link off" : "No upload link"}</Badge>
         <span className="min-w-[200px] flex-1 text-[13px] text-ink-2">{linkText}</span>

@@ -13,7 +13,7 @@ import { publicAssetOrigin, sendTemplate } from "./email";
 import { audit, type Actor } from "./identity";
 import { buildInvoicePdf } from "./intake-pdf";
 import { notify } from "./notifications";
-import { monarchStripePaid } from "./monarch-sales";
+import { monarchStripePaid, monarchWebsitePurchase } from "./monarch-sales";
 import { bookingPaid } from "./booking";
 import { loadFees } from "./settings";
 
@@ -142,6 +142,8 @@ export async function stripeWebhook(env: AppEnv, req: Request) {
   // Paid consultations booked online.
   if (s.metadata?.appointment_id) return bookingPaid(env, s.metadata.appointment_id, s.amount_total ?? 0, s.payment_intent ?? s.id);
   if (s.metadata?.monarch_sale_id) return monarchStripePaid(env, s.metadata.monarch_sale_id, s.amount_total ?? 0, s.payment_intent ?? s.id);
+  // A Monarch package bought through a payment link on the website.
+  if ((s as { payment_link?: string }).payment_link && s.payment_status === "paid") { const m = await monarchWebsitePurchase(env, s as Parameters<typeof monarchWebsitePurchase>[1]); if (m) return m; }
   const id = s.metadata?.invoice_id;
   const r = id ? await one<InvoiceRow>(env.DB, "SELECT * FROM invoices WHERE id = ?", id) : null;
   if (!r) throw notFound("Invoice not found.");

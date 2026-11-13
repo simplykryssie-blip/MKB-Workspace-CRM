@@ -10,7 +10,7 @@ import type { MonarchSettings } from "@/lib/monarch/types";
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
-export type MonarchMail = { to: string; template: string; subject: string; heading: string; paragraphs: string[]; list?: { title: string; items: string[] }; button?: { label: string; url: string }; after?: string[] };
+export type MonarchMail = { to: string; template: string; subject: string; heading: string; paragraphs: string[]; list?: { title: string; items: string[] }; button?: { label: string; url: string }; /** More links under the main button (e.g. applications). */ links?: { label: string; note?: string; url: string }[]; after?: string[] };
 
 export function renderMonarch(env: AppEnv, s: MonarchSettings, m: MonarchMail) {
   const logo = `${publicAssetOrigin(env)}/brand/monarch-email.png`;
@@ -26,11 +26,12 @@ export function renderMonarch(env: AppEnv, s: MonarchSettings, m: MonarchMail) {
 ${m.paragraphs.map(p).join("")}
 ${m.list?.items.length ? `<div style="background:#f7f6f2;border:1px solid #e5e1d8;border-radius:10px;padding:14px 16px;margin:16px 0"><div style="font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#8a6a2a;font-weight:bold;margin-bottom:6px">${esc(m.list.title)}</div><ul style="margin:0;padding-left:18px">${m.list.items.map((d) => `<li>${esc(d)}</li>`).join("")}</ul></div>` : ""}
 ${m.button ? `<p style="text-align:center;margin:24px 0 8px"><a href="${esc(m.button.url)}" style="display:inline-block;background:#b87912;color:#111111;font-weight:bold;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;padding:13px 22px;text-decoration:none;border-radius:4px">${esc(m.button.label)}</a></p>` : ""}
+${m.links?.length ? `<div style="margin:18px 0 4px">${m.links.map((l) => `<div style="border:1px solid #e5e1d8;border-radius:10px;padding:12px 14px;margin:0 0 10px"><a href="${esc(l.url)}" style="color:#8a5a06;font-weight:bold;text-decoration:underline">${esc(l.label)}</a>${l.note ? `<div style="font-size:13px;color:#555;margin-top:4px">${esc(l.note)}</div>` : ""}</div>`).join("")}</div>` : ""}
 ${(m.after ?? []).map((t) => `<p style="font-size:13px;color:#555;margin:12px 0 0">${esc(t).replace(/\n/g, "<br>")}</p>`).join("")}
 </td></tr>
 <tr><td style="background:#0b0b0b;color:#aaaaaa;font-size:12px;padding:16px 24px;line-height:1.5"><b style="color:#f6d37a">Monarch Tax Suite</b>${contact ? ` · ${esc(contact)}` : ""}<br>We never ask for passwords, SSNs or client tax information by email.</td></tr>
 </table></td></tr></table></body></html>`;
-  const text = [m.heading, "", ...m.paragraphs.flatMap((x) => [x, ""]), ...(m.list?.items.length ? [`${m.list.title}:`, ...m.list.items.map((d) => `- ${d}`), ""] : []), ...(m.button ? [`${m.button.label}: ${m.button.url}`, ""] : []), ...(m.after ?? []).flatMap((x) => [x, ""]), `Monarch Tax Suite${contact ? ` · ${contact}` : ""}`].join("\n");
+  const text = [m.heading, "", ...m.paragraphs.flatMap((x) => [x, ""]), ...(m.list?.items.length ? [`${m.list.title}:`, ...m.list.items.map((d) => `- ${d}`), ""] : []), ...(m.button ? [`${m.button.label}: ${m.button.url}`, ""] : []), ...(m.links ?? []).flatMap((l) => [`${l.label}: ${l.url}`, ...(l.note ? [l.note] : []), ""]), ...(m.after ?? []).flatMap((x) => [x, ""]), `Monarch Tax Suite${contact ? ` · ${contact}` : ""}`].join("\n");
   return { subject: m.subject, html, text };
 }
 

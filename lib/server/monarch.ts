@@ -7,6 +7,7 @@
 import { all, badRequest, HttpError, json, notFound, now, one, run, str, type AppEnv } from "./core";
 import { recordConsent } from "./campaigns";
 import { randomId } from "./crypto";
+import { notify } from "./notifications";
 import { audit, requirePermission, type Actor } from "./identity";
 import {
   checklistFor, DEFAULT_SETTINGS, isDone, itemState, stageIndex,
@@ -24,16 +25,16 @@ export type OfficeRow = {
   package_id: string | null; software_id: string | null; bank_id: string | null; reseller_id: string | null; software_username: string;
   renews_on: string | null; extra_seats: number; extra_locations: number; notes: string; checklist: string; locations: string; preparers: string;
   agreement: string | null; link_hash: string | null; link_sent_at: string | null; link_last_used: string | null; link_expires_at: string | null; link_off_at: string | null;
-  created_at: string; created_by: string | null; updated_at: string; rev: number;
+  created_at: string; created_by: string | null; updated_at: string; rev: number; welcome_sent_at?: string | null;
 };
-type PackageRow = { id: string; name: string; kind: Package["kind"]; price_cents: number; billing: Package["billing"]; locations: number; seats: number; ask_ptins: number; features: string; active: number };
-type SoftwareRow = { id: string; name: string; sb_fee_cents: number; download_url: string; welcome_subject: string; welcome_body: string; active: number };
+type PackageRow = { id: string; name: string; kind: Package["kind"]; price_cents: number; billing: Package["billing"]; locations: number; seats: number; ask_ptins: number; features: string; active: number; stripe_link?: string; software_id?: string | null; bank_id?: string | null };
+type SoftwareRow = { id: string; name: string; sb_fee_cents: number; download_url: string; welcome_subject: string; welcome_body: string; active: number; application_url?: string };
 type BankRow = { id: string; name: string; addon_fee_cents: number; application_url: string; layouts: string; active: number };
 type ResellerRow = { id: string; name: string; contact: string; email: string; phone: string; rate_bp: number; notes: string; active: number };
 type FileRow = { id: string; office_id: string; item: string; name: string; size_bytes: number; uploaded_by: string; created_at: string };
 
-export const toPackage = (r: PackageRow): Package => ({ id: r.id, name: r.name, kind: r.kind, priceCents: r.price_cents, billing: r.billing, locations: r.locations, seats: r.seats, askPtins: !!r.ask_ptins, features: json(r.features, []), active: !!r.active });
-export const toSoftware = (r: SoftwareRow): Software => ({ id: r.id, name: r.name, sbFeeCents: r.sb_fee_cents, downloadUrl: r.download_url, welcomeSubject: r.welcome_subject, welcomeBody: r.welcome_body, active: !!r.active });
+export const toPackage = (r: PackageRow): Package => ({ id: r.id, name: r.name, kind: r.kind, priceCents: r.price_cents, billing: r.billing, locations: r.locations, seats: r.seats, askPtins: !!r.ask_ptins, features: json(r.features, []), stripeLink: r.stripe_link ?? "", softwareId: r.software_id ?? undefined, bankId: r.bank_id ?? undefined, active: !!r.active });
+export const toSoftware = (r: SoftwareRow): Software => ({ id: r.id, name: r.name, sbFeeCents: r.sb_fee_cents, downloadUrl: r.download_url, applicationUrl: r.application_url ?? "", welcomeSubject: r.welcome_subject, welcomeBody: r.welcome_body, active: !!r.active });
 export const toBank = (r: BankRow): Bank => ({ id: r.id, name: r.name, addonFeeCents: r.addon_fee_cents, applicationUrl: r.application_url, layouts: json(r.layouts, {}), active: !!r.active });
 export const toReseller = (r: ResellerRow): Reseller => ({ id: r.id, name: r.name, contact: r.contact, email: r.email, phone: r.phone, rateBp: r.rate_bp, notes: r.notes, active: !!r.active });
 
@@ -52,7 +53,7 @@ export function toOffice(r: OfficeRow, files: FileRow[] = [], bank: BankStatus =
     checklist: json(r.checklist, {}), locations: json(r.locations, []), preparers: json(r.preparers, []), agreement: ag ?? undefined,
     link: { state: linkState(r), sentAt: r.link_sent_at ?? undefined, lastUsed: r.link_last_used ?? undefined, expiresAt: r.link_expires_at ?? undefined },
     files: files.filter((f) => f.office_id === r.id).map((f): OfficeFile => ({ id: f.id, item: f.item, name: f.name, sizeKb: Math.max(1, Math.round(f.size_bytes / 1024)), by: f.uploaded_by === "office" ? "office" : "staff", at: f.created_at })),
-    bank, createdAt: r.created_at, updatedAt: r.updated_at, rev: r.rev,
+    welcomeSentAt: r.welcome_sent_at ?? undefined, bank, createdAt: r.created_at, updatedAt: r.updated_at, rev: r.rev,
   };
 }
 
@@ -63,6 +64,7 @@ export async function loadSettings(env: AppEnv): Promise<MonarchSettings> {
   for (const r of rows) {
     if (r.key === "linkDays") s.linkDays = Number(r.value) || DEFAULT_SETTINGS.linkDays;
     if (r.key === "closeOnActive") s.closeOnActive = r.value === "1";
+    if (r.key === "autoWelcome") s.autoWelcome = r.value === "1";
     if (r.key === "phone") s.phone = r.value;
     if (r.key === "email") s.email = r.value;
     if (r.key === "agreement") s.agreement = json(r.value, s.agreement);
@@ -79,6 +81,7 @@ export async function saveSettings(env: AppEnv, a: Actor, b: Record<string, unkn
   const st = [];
   if (b.linkDays !== undefined) { const d = Math.round(Number(b.linkDays)); if (!(d >= 1 && d <= 365)) throw badRequest("Days must be between 1 and 365."); st.push(putSetting(env, "linkDays", String(d), by)); }
   if (b.closeOnActive !== undefined) st.push(putSetting(env, "closeOnActive", b.closeOnActive ? "1" : "0", by));
+  if (b.autoWelcome !== undefined) st.push(putSetting(env, "autoWelcome", b.autoWelcome ? "1" : "0", by));
   if (b.phone !== undefined) st.push(putSetting(env, "phone", str(b.phone, 40), by));
   if (b.email !== undefined) { const e = str(b.email, 200); if (e && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) throw badRequest("That email address doesn't look right."); st.push(putSetting(env, "email", e, by)); }
   if (b.agreement !== undefined) {
@@ -193,13 +196,17 @@ export async function saveCatalog(env: AppEnv, a: Actor, kind: CatalogKind, id: 
     const billing = ["season", "once", "monthly"].includes(String(b.billing)) ? String(b.billing) : "season";
     const n = (v: unknown, max: number) => Math.max(0, Math.min(max, Math.round(Number(v) || 0)));
     const features = Array.isArray(b.features) ? b.features.map((f) => str(f, 160)).filter(Boolean).slice(0, 20) : [];
-    await run(env.DB, `INSERT INTO mon_packages (id, name, kind, price_cents, billing, locations, seats, ask_ptins, features, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET name = excluded.name, kind = excluded.kind, price_cents = excluded.price_cents, billing = excluded.billing, locations = excluded.locations, seats = excluded.seats, ask_ptins = excluded.ask_ptins, features = excluded.features, active = excluded.active, updated_at = excluded.updated_at`,
-      id, name, k, cents(b.price, "Price"), billing, n(b.locations, 500), n(b.seats, 5000), b.askPtins ? 1 : 0, JSON.stringify(features), active, t, t);
+    const link = str(b.stripeLink, 300);
+    if (link && !/^https:\/\/(buy\.stripe\.com|checkout\.stripe\.com)\/[A-Za-z0-9_/-]+$/.test(link)) throw badRequest("Paste the Stripe payment link (it starts with https://buy.stripe.com/).");
+    if (link && (await one(env.DB, "SELECT 1 FROM mon_packages WHERE stripe_link = ? AND id != ?", link, id))) throw badRequest("That payment link is already on another package.");
+    const swId = str(b.softwareId, 60) || null, bkId = str(b.bankId, 60) || null;
+    await run(env.DB, `INSERT INTO mon_packages (id, name, kind, price_cents, billing, locations, seats, ask_ptins, features, active, created_at, updated_at, stripe_link, software_id, bank_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET name = excluded.name, kind = excluded.kind, price_cents = excluded.price_cents, billing = excluded.billing, locations = excluded.locations, seats = excluded.seats, ask_ptins = excluded.ask_ptins, features = excluded.features, stripe_link = excluded.stripe_link, software_id = excluded.software_id, bank_id = excluded.bank_id, active = excluded.active, updated_at = excluded.updated_at`,
+      id, name, k, cents(b.price, "Price"), billing, n(b.locations, 500), n(b.seats, 5000), b.askPtins ? 1 : 0, JSON.stringify(features), active, t, t, link, swId, bkId);
   } else if (kind === "software") {
-    await run(env.DB, `INSERT INTO mon_software (id, name, sb_fee_cents, download_url, welcome_subject, welcome_body, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET name = excluded.name, sb_fee_cents = excluded.sb_fee_cents, download_url = excluded.download_url, welcome_subject = excluded.welcome_subject, welcome_body = excluded.welcome_body, active = excluded.active, updated_at = excluded.updated_at`,
-      id, name, cents(b.sbFee, "Service bureau fee"), url(b.downloadUrl, "Download link"), str(b.welcomeSubject, 200), (typeof b.welcomeBody === "string" ? b.welcomeBody.replace(/\r/g, "") : "").slice(0, 5000), active, t, t);
+    await run(env.DB, `INSERT INTO mon_software (id, name, sb_fee_cents, download_url, welcome_subject, welcome_body, active, created_at, updated_at, application_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET name = excluded.name, sb_fee_cents = excluded.sb_fee_cents, download_url = excluded.download_url, application_url = excluded.application_url, welcome_subject = excluded.welcome_subject, welcome_body = excluded.welcome_body, active = excluded.active, updated_at = excluded.updated_at`,
+      id, name, cents(b.sbFee, "Service bureau fee"), url(b.downloadUrl, "Download link"), str(b.welcomeSubject, 200), (typeof b.welcomeBody === "string" ? b.welcomeBody.replace(/\r/g, "") : "").slice(0, 5000), active, t, t, url(b.applicationUrl, "Onboarding application link"));
   } else if (kind === "banks") {
     await run(env.DB, `INSERT INTO mon_banks (id, name, addon_fee_cents, application_url, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET name = excluded.name, addon_fee_cents = excluded.addon_fee_cents, application_url = excluded.application_url, active = excluded.active, updated_at = excluded.updated_at`,
@@ -369,6 +376,8 @@ export async function advance(env: AppEnv, id: string, opts: { linkSent?: boolea
   if (target !== r.stage) {
     await run(env.DB, "UPDATE mon_offices SET stage = ?, updated_at = ?, rev = rev + 1 WHERE id = ?", target, now(), id);
     if (target === "active") await closeLinkIfDone(env, id);
+    // Everything the office owes is in: it's ready for software setup and bank enrollment.
+    if (target === "setup") await notify(env, { module: "monarch" }, { kind: "documents", title: `Monarch: ${r.name} is ready to onboard`, body: "Their agreement and documents are in. Next: create their software account and send their banking information.", href: `/monarch/offices/${id}` });
   }
 }
 

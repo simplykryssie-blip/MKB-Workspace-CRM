@@ -67,16 +67,18 @@ function LinkSettings({ d }: { d: MonarchData }) {
   const { busy, run } = useAct();
   const [days, setDays] = useState(String(d.settings.linkDays));
   const [close, setClose] = useState(d.settings.closeOnActive);
-  useEffect(() => { setDays(String(d.settings.linkDays)); setClose(d.settings.closeOnActive); }, [d.settings]);
-  const dirty = days !== String(d.settings.linkDays) || close !== d.settings.closeOnActive;
+  const [auto, setAuto] = useState(d.settings.autoWelcome);
+  useEffect(() => { setDays(String(d.settings.linkDays)); setClose(d.settings.closeOnActive); setAuto(d.settings.autoWelcome); }, [d.settings]);
+  const dirty = days !== String(d.settings.linkDays) || close !== d.settings.closeOnActive || auto !== d.settings.autoWelcome;
   return (
     <Card>
       <CardHeader title="Upload links" subtitle="The private link offices use to send documents — no login" />
       <div className="space-y-3 border-t border-line px-5 py-4 sm:px-6">
         <TextField label="Stop working after this many days unused" type="number" min={1} max={365} value={days} onChange={(e) => setDays(e.target.value)} />
         <Checkbox label="Turn the link off when onboarding is complete" checked={close} onChange={(e) => setClose(e.target.checked)} />
+        <Checkbox label="Email the welcome automatically when a package is paid" hint="Their setup link, what we need, and the software and bank applications — whether they paid by link, on your website, or you recorded it by hand." checked={auto} onChange={(e) => setAuto(e.target.checked)} />
         <p className="text-[12.5px] text-muted">Sending a new link always replaces the old one. Each time the office uses the link, the clock starts over.</p>
-        {dirty && <Button size="sm" variant="primary" disabled={!!busy} onClick={() => void run("l", () => m.saveSettings({ linkDays: Number(days), closeOnActive: close }), "Saved")}>Save</Button>}
+        {dirty && <Button size="sm" variant="primary" disabled={!!busy} onClick={() => void run("l", () => m.saveSettings({ linkDays: Number(days), closeOnActive: close, autoWelcome: auto }), "Saved")}>Save</Button>}
       </div>
     </Card>
   );
@@ -122,10 +124,10 @@ function Agreement({ d }: { d: MonarchData }) {
 function SoftwareDialog({ value, onClose }: { value: Software | "new" | null; onClose: () => void }) {
   const m = useMonarch();
   const { busy, run } = useAct();
-  const [f, setF] = useState({ name: "", sbFee: "", downloadUrl: "", welcomeSubject: "", welcomeBody: DEFAULT_WELCOME, active: true });
+  const [f, setF] = useState({ name: "", sbFee: "", downloadUrl: "", applicationUrl: "", welcomeSubject: "", welcomeBody: DEFAULT_WELCOME, active: true });
   useEffect(() => {
     if (!value) return;
-    setF(value === "new" ? { name: "", sbFee: "", downloadUrl: "", welcomeSubject: "", welcomeBody: DEFAULT_WELCOME, active: true } : { name: value.name, sbFee: dollars(value.sbFeeCents), downloadUrl: value.downloadUrl, welcomeSubject: value.welcomeSubject, welcomeBody: value.welcomeBody || DEFAULT_WELCOME, active: value.active });
+    setF(value === "new" ? { name: "", sbFee: "", downloadUrl: "", applicationUrl: "", welcomeSubject: "", welcomeBody: DEFAULT_WELCOME, active: true } : { name: value.name, sbFee: dollars(value.sbFeeCents), downloadUrl: value.downloadUrl, applicationUrl: value.applicationUrl ?? "", welcomeSubject: value.welcomeSubject, welcomeBody: value.welcomeBody || DEFAULT_WELCOME, active: value.active });
   }, [value]);
   const id = value && value !== "new" ? value.id : null;
   return (
@@ -134,6 +136,7 @@ function SoftwareDialog({ value, onClose }: { value: Software | "new" | null; on
       <div className="grid gap-3 sm:grid-cols-2">
         <TextField label="Name" required value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="e.g. the product and edition" />
         <TextField label="Your service bureau fee (per funded return)" inputMode="decimal" value={f.sbFee} onChange={(e) => setF({ ...f, sbFee: e.target.value })} placeholder="0.00" />
+        <div className="sm:col-span-2"><TextField label="Onboarding application link" type="url" value={f.applicationUrl} onChange={(e) => setF({ ...f, applicationUrl: e.target.value })} placeholder="https://" hint="The software company's new-office application. It goes in the welcome email new offices get after paying." /></div>
         <div className="sm:col-span-2"><TextField label="Download link" type="url" value={f.downloadUrl} onChange={(e) => setF({ ...f, downloadUrl: e.target.value })} placeholder="https://" /></div>
         <div className="sm:col-span-2"><TextField label="Welcome email subject" value={f.welcomeSubject} onChange={(e) => setF({ ...f, welcomeSubject: e.target.value })} placeholder="{office name} is set up on {software}" /></div>
         <div className="sm:col-span-2"><TextArea label="Welcome email" rows={9} value={f.welcomeBody} onChange={(e) => setF({ ...f, welcomeBody: e.target.value })} /></div>
@@ -159,7 +162,7 @@ function BankDialog({ value, onClose }: { value: Bank | "new" | null; onClose: (
       <div className="grid gap-3">
         <TextField label="Name" required value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
         <TextField label="Your add-on fee (per bank product)" inputMode="decimal" value={f.addonFee} onChange={(e) => setF({ ...f, addonFee: e.target.value })} placeholder="0.00" />
-        <TextField label="Application link" type="url" value={f.applicationUrl} onChange={(e) => setF({ ...f, applicationUrl: e.target.value })} placeholder="https://" hint="Emailed to offices with “Email bank application”" />
+        <TextField label="Application link" type="url" value={f.applicationUrl} onChange={(e) => setF({ ...f, applicationUrl: e.target.value })} placeholder="https://" hint="Goes in the welcome email new offices get after paying (and with “Email bank application”)." />
         <Checkbox label="Offered to new offices" checked={f.active} onChange={(e) => setF({ ...f, active: e.target.checked })} />
       </div>
     </Modal>
