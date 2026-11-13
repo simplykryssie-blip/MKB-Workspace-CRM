@@ -136,14 +136,17 @@ export async function stripeWebhook(env: AppEnv, req: Request) {
   if (!all.some((v) => safeEqual(v, expected))) throw new HttpError(400, "Bad signature.");
   const evt = JSON.parse(raw) as { type: string; data: { object: { id: string; payment_status?: string; amount_total?: number; payment_intent?: string; metadata?: Record<string, string> } } };
   if (evt.type !== "checkout.session.completed" && evt.type !== "checkout.session.async_payment_succeeded") return { received: true };
-  const s = evt.data.object;
-  if (s.payment_status !== "paid") return { received: true };
+  const s = evt.data.object as typeof evt.data.object & { total_details?: { amount_discount?: number } | null; payment_link?: string | null };
+  // "no_payment_required" = a 100%-off discount code on a Monarch checkout (used to test without charging).
+  const monarchFree = s.payment_status === "no_payment_required" && (!!s.metadata?.monarch_sale_id || !!s.payment_link);
+  if (s.payment_status !== "paid" && !monarchFree) return { received: true };
   // Monarch Tax Suite sales are paid through the same Stripe account.
   // Paid consultations booked online.
   if (s.metadata?.appointment_id) return bookingPaid(env, s.metadata.appointment_id, s.amount_total ?? 0, s.payment_intent ?? s.id);
-  if (s.metadata?.monarch_sale_id) return monarchStripePaid(env, s.metadata.monarch_sale_id, s.amount_total ?? 0, s.payment_intent ?? s.id);
+  if (s.metadata?.monarch_sale_id) return monarchStripePaid(env, s.metadata.monarch_sale_id, s.amount_total ?? 0, s.payment_intent ?? s.id, s.total_details?.amount_discount ?? 0);
   // A Monarch package bought through a payment link on the website.
-  if ((s as { payment_link?: string }).payment_link && s.payment_status === "paid") { const m = await monarchWebsitePurchase(env, s as Parameters<typeof monarchWebsitePurchase>[1]); if (m) return m; }
+  if (s.payment_link) { const m = await monarchWebsitePurchase(env, s as Parameters<typeof monarchWebsitePurchase>[1]); if (m) return m; }
+  if (monarchFree) return { received: true };
   const id = s.metadata?.invoice_id;
   const r = id ? await one<InvoiceRow>(env.DB, "SELECT * FROM invoices WHERE id = ?", id) : null;
   if (!r) throw notFound("Invoice not found.");

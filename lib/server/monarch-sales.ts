@@ -166,6 +166,8 @@ export async function publicMonarchPay(env: AppEnv, token: string, ip: string, d
     "payment_intent_data[metadata][monarch_sale_id]": r.id,
     "payment_intent_data[description]": `Monarch Tax Suite — ${r.description}`,
     client_reference_id: r.id,
+    // Discount codes made in Stripe (e.g. a 100%-off code for testing) can be entered at checkout.
+    allow_promotion_codes: "true",
     success_url: `${base}?done=1`,
     cancel_url: payOrigin(env) + "/",
   });
@@ -176,24 +178,26 @@ export async function publicMonarchPay(env: AppEnv, token: string, ip: string, d
 }
 
 /** Called by the verified Stripe webhook for a Monarch sale. Applies once. */
-export async function monarchStripePaid(env: AppEnv, saleId: string, amountTotal: number, ref: string) {
+export async function monarchStripePaid(env: AppEnv, saleId: string, amountTotal: number, ref: string, discount = 0) {
   const r = await one<SaleRowLite>(env.DB, "SELECT * FROM mon_sales WHERE id = ?", saleId);
   if (!r) throw notFound("Sale not found.");
   if (r.status !== "unpaid" || (r.reference && r.reference === ref)) return { received: true, duplicate: true };
-  if (amountTotal < r.amount_cents) throw new HttpError(400, "Amount paid is less than the sale.");
+  // A discount code entered at checkout counts toward the total (a 100%-off code pays it in full).
+  if (amountTotal + Math.max(0, discount) < r.amount_cents) throw new HttpError(400, "Amount paid is less than the sale.");
   const t = now();
-  const res = await run(env.DB, "UPDATE mon_sales SET status = 'paid', method = 'Card / bank (Stripe)', reference = ?, paid_at = ?, pay_token_hash = NULL, updated_at = ? WHERE id = ? AND status = 'unpaid'", ref, t, t, saleId);
+  const method = discount > 0 ? (amountTotal > 0 ? `Card / bank (Stripe) — discount code ${usd(discount)}` : "Discount code (100% off — nothing charged)") : "Card / bank (Stripe)";
+  const res = await run(env.DB, "UPDATE mon_sales SET status = 'paid', method = ?, reference = ?, paid_at = ?, pay_token_hash = NULL, updated_at = ? WHERE id = ? AND status = 'unpaid'", method, ref, t, t, saleId);
   if (!res.meta.changes) return { received: true, duplicate: true };
   await afterPaid(env, await saleRow(env, saleId));
   const o = await one<{ name: string }>(env.DB, "SELECT name FROM mon_offices WHERE id = ?", r.office_id);
-  await notify(env, { module: "monarch" }, { kind: "payment", title: `Monarch payment: ${o?.name ?? "office"} (${usd(r.amount_cents)})`, body: `${r.description} — paid online through Stripe.`, href: `/monarch/offices/${r.office_id}` });
+  await notify(env, { module: "monarch" }, { kind: "payment", title: `Monarch payment: ${o?.name ?? "office"} (${usd(amountTotal)})`, body: `${r.description} — ${discount > 0 ? `paid through Stripe with a ${usd(discount)} discount code` : "paid online through Stripe"}.`, href: `/monarch/offices/${r.office_id}` });
   return { received: true };
 }
 
 export { METHODS };
 
 /* ---------------------------------------------------------------- purchases from the website */
-type CheckoutSession = { id: string; payment_link?: string | null; payment_status?: string; amount_total?: number; payment_intent?: string | null; customer_details?: { name?: string | null; email?: string | null; phone?: string | null; address?: { city?: string | null; state?: string | null } | null } | null; custom_fields?: { key?: string; label?: { custom?: string | null }; text?: { value?: string | null } | null; dropdown?: { value?: string | null } | null }[] };
+type CheckoutSession = { id: string; payment_link?: string | null; payment_status?: string; amount_total?: number; total_details?: { amount_discount?: number } | null; payment_intent?: string | null; customer_details?: { name?: string | null; email?: string | null; phone?: string | null; address?: { city?: string | null; state?: string | null } | null } | null; custom_fields?: { key?: string; label?: { custom?: string | null }; text?: { value?: string | null } | null; dropdown?: { value?: string | null } | null }[] };
 
 /**
  * A package bought through a Stripe payment link on the website (one set on
@@ -225,10 +229,13 @@ export async function monarchWebsitePurchase(env: AppEnv, s: CheckoutSession) {
       id, name, contact, email, String(c.phone ?? "").slice(0, 40), String(c.address?.city ?? "").slice(0, 80), String(c.address?.state ?? "").slice(0, 2).toUpperCase(), t, t);
     office = { id, name };
   }
+  // What they actually paid (a discount code lowers it; a 100%-off code makes it $0, so no reseller commission).
   const amount = Math.max(0, Math.round(s.amount_total ?? pk.price_cents));
+  const discount = Math.max(0, Math.round(s.total_details?.amount_discount ?? 0));
+  const method = discount > 0 ? (amount > 0 ? `Card / bank (Stripe — website) — discount code ${usd(discount)}` : "Discount code (100% off — nothing charged) — website") : "Card / bank (Stripe — website)";
   const saleId = randomId("ms");
-  await run(env.DB, "INSERT INTO mon_sales (id, office_id, package_id, description, qty, unit_cents, amount_cents, status, method, reference, paid_at, created_at, created_by, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?, 'paid', 'Card / bank (Stripe — website)', ?, ?, ?, NULL, ?)",
-    saleId, office.id, pk.id, pk.name, amount, amount, ref, t, t, t);
+  await run(env.DB, "INSERT INTO mon_sales (id, office_id, package_id, description, qty, unit_cents, amount_cents, status, method, reference, paid_at, created_at, created_by, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?, 'paid', ?, ?, ?, ?, NULL, ?)",
+    saleId, office.id, pk.id, pk.name, amount, amount, method, ref, t, t, t);
   await afterPaid(env, await saleRow(env, saleId));
   await notify(env, { module: "monarch" }, { kind: "payment", title: `New Monarch purchase: ${office.name} (${usd(amount)})`, body: `${pk.name} — bought on the website. The welcome email went out automatically.`, href: `/monarch/offices/${office.id}` });
   return { received: true, office: office.id };
