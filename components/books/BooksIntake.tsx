@@ -1,5 +1,6 @@
 "use client";
 
+import { PdfButtons } from "@/components/leads/LeadIntakes";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, CheckCircle2, Circle, FileUp, Send } from "lucide-react";
@@ -189,6 +190,12 @@ function Submitted({ intake, client, reload }: { intake: Intake; client: Client;
       <Card className="p-5 sm:p-6">
         <h2 className="flex items-center gap-2 text-[19px] font-bold text-ink"><CheckCircle2 size={20} className="text-success" /> Intake submitted</h2>
         <p className="mt-1 text-[13.5px] text-muted">Submitted {intake.submittedAt ? fmtDate(intake.submittedAt) : ""}{intake.consentName ? ` · signed by ${intake.consentName}` : ""}. {intake.prospect ? "The signed PDF copy is on file and moves to their client record when you accept them." : <>The signed PDF copy is in the client&rsquo;s Documents.</>}</p>
+        {(intake.pdfFileId || intake.letterFileId) && (
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+            {intake.pdfFileId && <span className="inline-flex flex-wrap items-center gap-2 text-[13px] font-medium text-ink-2">Intake answers <PdfButtons clientId={intake.clientId} fileId={intake.pdfFileId} /></span>}
+            {intake.letterFileId && <span className="inline-flex flex-wrap items-center gap-2 text-[13px] font-medium text-ink-2">Signed proposal &amp; letter <PdfButtons clientId={intake.clientId} fileId={intake.letterFileId} /></span>}
+          </div>
+        )}
         {intake.prospect && (
           <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-warning/40 bg-warning-soft/50 px-3 py-2.5 text-[13.5px] text-ink">
             <span className="flex-1">{intake.prospect.declined ? "This lead was declined." : "This is a lead, not a client yet. Review the answers (and the price if you like), then accept or decline them on the lead."}</span>

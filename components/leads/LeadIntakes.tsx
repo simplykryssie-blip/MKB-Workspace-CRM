@@ -4,7 +4,7 @@ import { SERVICE_INTAKES, SERVICE_INTAKE_KINDS, type ServiceIntakeKind } from "@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { ClipboardList, Copy, Mail, ShieldCheck, UserCheck, XCircle } from "lucide-react";
+import { ClipboardList, Copy, Download, Eye, FileText, Mail, ShieldCheck, UserCheck, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -19,7 +19,20 @@ import type { Lead } from "@/lib/types";
 
 type TaxItem = { id: string; taxYear: number; form: string; status: string; submittedAt?: string; updatedAt?: string; link: { email: string; state: string; openedAt?: string } | null; pdfFileId?: string };
 type SvcItem = { id: string; kind: ServiceIntakeKind; label: string; status: string; submittedAt?: string; createdAt: string; pdfFileId?: string; link: { email: string; state: string; openedAt?: string } | null };
-type Data = { prospect: { clientId: string; status: string; leadStatus: string } | null; intakes: BooksIntake[]; taxReturns: TaxItem[]; serviceIntakes?: SvcItem[] };
+type SavedFile = { id: string; name: string; category: string; service: string; createdAt: string; sizeKb: number };
+type Data = { prospect: { clientId: string; status: string; leadStatus: string } | null; intakes: BooksIntake[]; taxReturns: TaxItem[]; serviceIntakes?: SvcItem[]; files?: SavedFile[] };
+
+const pill = "inline-flex h-8 items-center gap-1.5 rounded-xl border border-line px-3 text-[13px] font-semibold text-ink-2 hover:bg-surface-hover";
+/** View (opens in a new tab) and Download buttons for a saved PDF. */
+export function PdfButtons({ clientId, fileId, label = "PDF" }: { clientId: string; fileId: string; label?: string }) {
+  const url = `/api/clients/${encodeURIComponent(clientId)}/files/${encodeURIComponent(fileId)}`;
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <a className={pill} href={`${url}?inline=1`} target="_blank" rel="noopener"><Eye size={14} /> View {label}</a>
+      <a className={pill} href={url} download aria-label={`Download ${label}`}><Download size={14} /> Download</a>
+    </span>
+  );
+}
 
 /** The lead's intake forms (sent before they're a client). */
 export function useLeadIntakes(leadId: string) {
@@ -116,7 +129,7 @@ export function LeadIntakesCard({ lead, intakes: h }: { lead: Lead; intakes: Ret
             return (
               <li key={t.id} className="flex flex-wrap items-center gap-3 px-5 py-3 sm:px-6">
                 <span className="min-w-0 flex-1"><span className="block truncate text-[14px] font-medium text-ink">{t.taxYear} tax interview ({t.form})</span><span className="block text-[12px] text-muted">{done ? `Submitted ${t.submittedAt ? relTime(t.submittedAt) : ""} — review the signed PDF` : t.link ? `Sent to ${t.link.email}${t.updatedAt ? ` · updated ${relTime(t.updatedAt)}` : t.link.openedAt ? " · opened, not started" : " · not started yet"}` : "Not sent"}</span></span>
-                {done && t.pdfFileId && d?.prospect ? <Button size="sm" href={`/api/clients/${d.prospect.clientId}/files/${t.pdfFileId}`}>View answers (PDF)</Button>
+                {done && t.pdfFileId && d?.prospect ? <PdfButtons clientId={d.prospect.clientId} fileId={t.pdfFileId} />
                   : t.updatedAt ? <a className="inline-flex h-8 items-center rounded-xl border border-line px-3 text-[13px] font-semibold text-ink-2 hover:bg-surface-hover" href={`/api/leads/${lead.id}/tax/${t.id}`} target="_blank" rel="noopener">View answers so far</a> : null}
                 {done ? <Badge tone="info">Submitted — review</Badge> : t.link?.state === "active" ? <Badge tone="warning">{t.link.openedAt ? "Lead filling in" : "Link sent"}</Badge> : t.link?.state === "expired" ? <Badge tone="warning">Link expired</Badge> : <Badge tone="warning">Not sent</Badge>}
               </li>
@@ -130,14 +143,28 @@ export function LeadIntakesCard({ lead, intakes: h }: { lead: Lead; intakes: Ret
       )) : (
         <ul className="divide-y divide-line border-t border-line">
           {list.map((i) => (
-            <li key={i.id}>
-              <Link href={`/services/bookkeeping/intake/${i.id}`} className="flex flex-wrap items-center gap-3 px-5 py-3 hover:bg-surface-hover sm:px-6">
+            <li key={i.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 pr-5 sm:pr-6">
+              <Link href={`/services/bookkeeping/intake/${i.id}`} className="flex min-w-[240px] flex-1 flex-wrap items-center gap-3 py-3 pl-5 hover:bg-surface-hover sm:pl-6">
                 <span className="min-w-0 flex-1"><span className="block truncate text-[14px] font-medium text-ink">Bookkeeping intake{typeof i.answers.legalName === "string" && i.answers.legalName ? ` — ${i.answers.legalName}` : ""}</span><span className="block text-[12px] text-muted">{i.status === "submitted" ? `Submitted ${i.submittedAt ? relTime(i.submittedAt) : ""} — review the answers` : `Sent to ${i.link?.email ?? "the lead"} · updated ${relTime(i.updatedAt)}`}</span></span>
                 {badge(i)}
               </Link>
+              {i.pdfFileId && <PdfButtons clientId={i.clientId} fileId={i.pdfFileId} />}
             </li>
           ))}
         </ul>
+      )}
+      {!!d?.prospect && !!d.files?.length && (
+        <div className="border-t border-line px-5 py-3 sm:px-6">
+          <p className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-ink"><FileText size={15} className="text-muted" /> Saved documents</p>
+          <ul className="space-y-2">
+            {d.files.map((f) => (
+              <li key={f.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                <span className="min-w-[200px] flex-1"><span className="block truncate text-[13.5px] font-medium text-ink">{f.name}</span><span className="block text-[12px] text-muted">{[f.category, `${f.sizeKb} KB`, relTime(f.createdAt)].filter(Boolean).join(" · ")}</span></span>
+                <PdfButtons clientId={d.prospect!.clientId} fileId={f.id} />
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
       {open && h.hasProspect && (
         <div className="flex flex-wrap items-center gap-2 border-t border-line px-5 py-3 sm:px-6">
@@ -189,7 +216,7 @@ export function ServiceIntakeRows({ items, clientId, action }: { items: SvcItem[
         return (
           <li key={x.id} className="flex flex-wrap items-center gap-3 px-5 py-3 sm:px-6">
             <span className="min-w-0 flex-1"><span className="block truncate text-[14px] font-medium text-ink">{x.label} intake</span><span className="block text-[12px] text-muted">{done ? `Submitted ${x.submittedAt ? relTime(x.submittedAt) : ""} — review the signed PDF` : x.link ? `Sent to ${x.link.email}${x.link.openedAt ? " · opened" : " · not opened yet"}` : "Not sent"}</span></span>
-            {done && x.pdfFileId && clientId && <Button size="sm" href={`/api/clients/${clientId}/files/${x.pdfFileId}`} newTab>View answers (PDF)</Button>}
+            {done && x.pdfFileId && clientId && <PdfButtons clientId={clientId} fileId={x.pdfFileId} />}
             {done && action?.(x)}
             {done ? <Badge tone="info">Submitted — review</Badge> : x.link?.state === "active" ? <Badge tone="warning">{x.link.openedAt ? "Filling in" : "Link sent"}</Badge> : x.link?.state === "expired" ? <Badge tone="warning">Link expired</Badge> : x.link?.state === "cancelled" ? <Badge tone="neutral">Link cancelled</Badge> : <Badge tone="warning">Not sent</Badge>}
           </li>

@@ -30,7 +30,7 @@ import { loadFees } from "./settings";
 import { storeClientPdfAs } from "./tax";
 
 type Row = { id: string; client_id: string; status: "in_progress" | "submitted"; answers: string; step: number; entered_by: string; consent_name: string | null; engagement: string | null; submitted_at: string | null; workspace_id: string | null; history: string; created_at: string; updated_at: string; rev: number; proposal: string | null; c_name?: string; c_status?: string; c_lead?: string | null };
-export type BooksIntake = { id: string; clientId: string; clientName: string; status: Row["status"]; answers: Answers; step: number; enteredBy: string; consentName?: string; engagement?: { version: number; termsVersion: number; acceptedName: string; acceptedAt: string; method: string; signature?: { key: string; sha256: string; bytes: number } }; submittedAt?: string; workspaceId?: string; history: { at: string; by: string; text: string }[]; createdAt: string; updatedAt: string; rev: number; /** The latest private link sent for this intake (never the link itself). */ link?: LinkInfo | null; /** MKB's reviewed price (staff only until it is sent). */ proposal?: Proposal | null; /** Sent to a lead who isn't a client yet (accept them from the lead). */ prospect?: { leadId: string; declined: boolean } | null; /** The latest proposal link (never the link itself). */ proposalLink?: LinkInfo | null };
+export type BooksIntake = { id: string; clientId: string; clientName: string; status: Row["status"]; answers: Answers; step: number; enteredBy: string; consentName?: string; engagement?: { version: number; termsVersion: number; acceptedName: string; acceptedAt: string; method: string; signature?: { key: string; sha256: string; bytes: number } }; submittedAt?: string; workspaceId?: string; history: { at: string; by: string; text: string }[]; createdAt: string; updatedAt: string; rev: number; /** The latest private link sent for this intake (never the link itself). */ link?: LinkInfo | null; /** MKB's reviewed price (staff only until it is sent). */ proposal?: Proposal | null; /** Sent to a lead who isn't a client yet (accept them from the lead). */ prospect?: { leadId: string; declined: boolean } | null; /** The latest proposal link (never the link itself). */ proposalLink?: LinkInfo | null; /** The saved PDF of the submitted answers (a client file id). */ pdfFileId?: string | null; /** The signed proposal & engagement letter PDF, once signed. */ letterFileId?: string | null };
 const toIntake = (r: Row): BooksIntake => ({ id: r.id, clientId: r.client_id, clientName: r.c_name ?? "", status: r.status, answers: json(r.answers, {}), step: r.step, enteredBy: r.entered_by, consentName: r.consent_name ?? undefined, engagement: r.engagement ? json(r.engagement, undefined) : undefined, submittedAt: r.submitted_at ?? undefined, workspaceId: r.workspace_id ?? undefined, history: json(r.history, []), createdAt: r.created_at, updatedAt: r.updated_at, rev: r.rev, proposal: r.proposal ? json<Proposal | null>(r.proposal, null) : null, prospect: (r.c_status === "prospect" || r.c_status === "declined") && r.c_lead ? { leadId: r.c_lead, declined: r.c_status === "declined" } : null });
 const SQL = "SELECT i.*, c.name AS c_name, c.status AS c_status, c.lead_id AS c_lead FROM books_intakes i JOIN clients c ON c.id = i.client_id";
 const hist = (h: string, by: string, text: string) => JSON.stringify([{ at: now(), by, text }, ...json<unknown[]>(h, [])].slice(0, 200));
@@ -53,14 +53,26 @@ export async function listIntakes(env: AppEnv, a: Actor) {
   requireStaff(a);
   const rows = await all<Row>(env.DB, `${SQL} ORDER BY i.updated_at DESC`);
   const out: BooksIntake[] = [];
-  for (const r of rows) { const c = await one<ClientRow>(env.DB, `${CLIENT_SQL} WHERE c.id = ?`, r.client_id); if (c && (await canOpen(env, a, c))) out.push({ ...toIntake(r), link: await latestLink(env, "books_intake", r.id), proposalLink: await latestLink(env, "books_proposal", r.id) }); }
+  for (const r of rows) { const c = await one<ClientRow>(env.DB, `${CLIENT_SQL} WHERE c.id = ?`, r.client_id); if (c && (await canOpen(env, a, c))) out.push({ ...toIntake(r), link: await latestLink(env, "books_intake", r.id), proposalLink: await latestLink(env, "books_proposal", r.id), ...(await intakeFiles(env, r)) }); }
   return { intakes: out };
 }
 
 export async function getIntake(env: AppEnv, a: Actor, id: string) {
   requirePermission(a, "books", "view");
   const r = await row(env, a, id);
-  return { intake: { ...toIntake(r), link: await latestLink(env, "books_intake", r.id), proposalLink: await latestLink(env, "books_proposal", r.id) } };
+  return { intake: { ...toIntake(r), link: await latestLink(env, "books_intake", r.id), proposalLink: await latestLink(env, "books_proposal", r.id), ...(await intakeFiles(env, r)) } };
+}
+
+/**
+ * The PDFs saved for an intake: the submitted answers, and the signed proposal & letter.
+ * Matched by file name and time (the answers PDF is saved when it's submitted; the letter when signed).
+ */
+async function intakeFiles(env: AppEnv, r: Row) {
+  if (r.status !== "submitted" || !r.submitted_at) return { pdfFileId: null, letterFileId: null };
+  const from = new Date(Date.parse(r.submitted_at) - 60_000).toISOString();
+  const pdf = await one<{ id: string }>(env.DB, "SELECT id FROM client_files WHERE client_id = ? AND name LIKE 'MKB-Bookkeeping-Intake-%' AND created_at >= ? ORDER BY created_at ASC LIMIT 1", r.client_id, from);
+  const letter = await one<{ id: string }>(env.DB, "SELECT id FROM client_files WHERE client_id = ? AND name LIKE 'MKB-Bookkeeping-Engagement-Letter-%' AND created_at >= ? ORDER BY created_at DESC LIMIT 1", r.client_id, from);
+  return { pdfFileId: pdf?.id ?? null, letterFileId: letter?.id ?? null };
 }
 
 /** Starts an intake for a client (one open intake at a time). */
@@ -547,6 +559,6 @@ export async function intakesForClient(env: AppEnv, a: Actor, clientId: string) 
   requirePermission(a, "books", "view");
   const rows = await all<Row>(env.DB, `${SQL} WHERE i.client_id = ? ORDER BY i.created_at DESC`, clientId);
   const out: BooksIntake[] = [];
-  for (const r of rows) out.push({ ...toIntake(r), link: await latestLink(env, "books_intake", r.id), proposalLink: await latestLink(env, "books_proposal", r.id) });
+  for (const r of rows) out.push({ ...toIntake(r), link: await latestLink(env, "books_intake", r.id), proposalLink: await latestLink(env, "books_proposal", r.id), ...(await intakeFiles(env, r)) });
   return out;
 }

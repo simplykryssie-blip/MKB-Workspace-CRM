@@ -1,5 +1,6 @@
 "use client";
 
+import { PdfButtons } from "@/components/leads/LeadIntakes";
 import { booksStage, STAGE_LABEL } from "@/lib/books/proposal";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -42,11 +43,12 @@ export function IntakesCard() {
       {!list ? <p className="border-t border-line px-6 py-4 text-[13px] text-muted">Loading…</p> : list.length === 0 ? <p className="border-t border-line px-6 py-4 text-[13.5px] text-muted">No intakes yet. Start one when a new bookkeeping client signs on.</p> : (
         <ul className="divide-y divide-line border-t border-line">
           {list.map((i) => (
-            <li key={i.id}>
-              <Link href={intakeHref(i.id)} className="flex flex-wrap items-center gap-3 px-5 py-3 hover:bg-surface-hover sm:px-6">
+            <li key={i.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 pr-5 sm:pr-6">
+              <Link href={intakeHref(i.id)} className="flex min-w-0 flex-1 flex-wrap items-center gap-3 py-3 pl-5 hover:bg-surface-hover sm:pl-6">
                 <span className="min-w-0 flex-1"><span className="block truncate text-[14px] font-medium text-ink">{(i.answers.legalName as string) || i.clientName}{i.prospect && <span className="ml-2 rounded-md bg-surface-2 px-1.5 py-0.5 text-[11px] font-semibold text-muted ring-1 ring-line">{i.prospect.declined ? "Declined lead" : "Lead"}</span>}</span><span className="block text-[12px] text-muted">{i.status === "submitted" ? `Submitted ${relTime(i.submittedAt!)}` : `${progressOf(i)} · updated ${relTime(i.updatedAt)}`}</span></span>
                 {(() => { const st = booksStage(i); return <Badge tone={st === "started" || st === "signed" ? "success" : st === "in_review" ? "warning" : "info"}>{st === "in_progress" ? (i.link?.state === "active" ? (i.link.openedAt ? "Client filling in" : "Link sent") : i.link?.state === "expired" ? "Link expired" : "In progress") : STAGE_LABEL[st]}</Badge>; })()}
               </Link>
+              {i.pdfFileId && <PdfButtons clientId={i.clientId} fileId={i.pdfFileId} />}
             </li>
           ))}
         </ul>

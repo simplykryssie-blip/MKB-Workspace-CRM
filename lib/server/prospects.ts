@@ -49,7 +49,7 @@ export async function leadIntakes(env: AppEnv, a: Actor, leadId: string) {
   requireStaff(a);
   const l = await lead(env, leadId);
   const p = await prospectOf(env, leadId);
-  if (!p) return { prospect: null, intakes: [], taxReturns: [], serviceIntakes: [] };
+  if (!p) return { prospect: null, intakes: [], taxReturns: [], serviceIntakes: [], files: [] };
   const rows = await all<TaxRow>(env.DB, "SELECT * FROM tax_returns WHERE client_id = ? ORDER BY tax_year DESC", p.id);
   const files = await all<{ id: string; name: string }>(env.DB, "SELECT id, name FROM client_files WHERE client_id = ? AND name LIKE 'MKB-Tax-Interview-%' ORDER BY created_at DESC", p.id);
   const taxReturns = [];
@@ -57,7 +57,11 @@ export async function leadIntakes(env: AppEnv, a: Actor, leadId: string) {
     const r = toReturn(row);
     taxReturns.push({ id: r.id, taxYear: r.taxYear, form: r.form, status: r.organizer.status, submittedAt: r.organizer.submittedAt, updatedAt: r.organizer.interview?.updatedAt, link: await latestLink(env, "tax_interview", r.id), pdfFileId: files.find((f) => f.name.includes(`-${r.taxYear}-`))?.id });
   }
-  return { prospect: { clientId: p.id, status: p.status, leadStatus: l.status }, intakes: await intakesForClient(env, a, p.id).catch(() => []), taxReturns, serviceIntakes: await intakesForClientAll(env, p.id) };
+  // Every PDF saved for this lead (intake answers, signed letters), newest first — the names staff see in Documents.
+  const md = json<{ documents?: { id: string; name: string; category?: string; service?: string }[] }>((await one<{ module_data: string | null }>(env.DB, "SELECT module_data FROM clients WHERE id = ?", p.id))?.module_data ?? null, {});
+  const saved = await all<{ id: string; name: string; created_at: string; size_bytes: number }>(env.DB, "SELECT id, name, created_at, size_bytes FROM client_files WHERE client_id = ? AND content_type = 'application/pdf' ORDER BY created_at DESC LIMIT 50", p.id);
+  const savedFiles = saved.map((f) => { const d = md.documents?.find((x) => x.id === f.id); return { id: f.id, name: d?.name ?? f.name, category: d?.category ?? "", service: d?.service ?? "", createdAt: f.created_at, sizeKb: Math.max(1, Math.round(f.size_bytes / 1024)) }; });
+  return { prospect: { clientId: p.id, status: p.status, leadStatus: l.status }, intakes: await intakesForClient(env, a, p.id).catch(() => []), taxReturns, serviceIntakes: await intakesForClientAll(env, p.id), files: savedFiles };
 }
 
 /** { kind: "books", email } — sends the lead an intake by private link (creating their prospect record if needed). */
