@@ -17,6 +17,17 @@ const YN = "yesno" as const;
 export const CATCHUP_OPT = "Catch-up — some months were never entered";
 export const CLEANUP_OPT = "Cleanup — books were kept but have errors";
 export const BOTH_OPT = "Both catch-up and cleanup";
+/**
+ * Which statements to ask for. Books that are current: the last 3 months. Books that are behind
+ * (catch-up or cleanup): every month from where the work starts to now, so MKB can enter and reconcile them all.
+ */
+export function statementPeriod(a: Answers) {
+  const behind = typeof a.upToDate === "string" && !a.upToDate.startsWith("Current");
+  if (!behind) return "last 3 months";
+  const from = typeof a.catchUpFrom === "string" ? a.catchUpFrom.trim().slice(0, 40) : "";
+  return from ? `${from} to now` : "every month the books are behind, to now";
+}
+
 export const pickableAddOns = (books: ServiceFees["books"]) => books.addOns.filter((x) => !["biweekly", "weekly", "accounts", "locations", "catchup", "cleanup", "qbo"].includes(x.key));
 const ADDON_OPTIONS = pickableAddOns(DEFAULT_SERVICE_FEES.books).map((x) => x.name);
 /** "••••1234" from a saved (masked) account number. */
@@ -142,7 +153,7 @@ const accounts: Section = {
   repeat: {
     noun: "account",
     rowTitle: (r, i) => [r.bank, r.kind, last4Of(r.acct)].filter(Boolean).join(" · ") || `Account ${i + 1}`,
-    rowDocs: (r) => [doc(`Statements for the last 3 months — ${[r.bank, r.kind, last4Of(r.acct)].filter(Boolean).join(" ")}`.trim(), "Bank statements", true)],
+    rowDocs: (r, a) => [doc(`Statements, ${statementPeriod(a)} — ${[r.bank, r.kind, last4Of(r.acct)].filter(Boolean).join(" ")}`.trim(), "Bank statements", true)],
   },
   questions: [
     { id: "kind", label: "Type of account", type: "choice", options: ["Checking", "Savings", "Credit card", "Line of credit", "Payment app (PayPal, Square, Cash App…)", "Merchant / clearing account", "Other"] },
@@ -192,7 +203,7 @@ const income: Section = {
   group: "Income",
   covers: ["Revenue sources", "Payment processors", "Customer invoicing", "Sales tax"],
   docs: (a) => [
-    ...((a.channels as string | undefined)?.split("|").some((c) => ["Card terminal / point of sale", "Online store", "Payment apps (Cash App, Zelle, Venmo, PayPal)", "Marketplace (Amazon, Etsy, eBay)"].includes(c)) ? [doc("Processor / payment-app monthly statements or payout reports (last 3 months)", "Income")] : []),
+    ...((a.channels as string | undefined)?.split("|").some((c) => ["Card terminal / point of sale", "Online store", "Payment apps (Cash App, Zelle, Venmo, PayPal)", "Marketplace (Amazon, Etsy, eBay)"].includes(c)) ? [doc(`Processor / payment-app monthly statements or payout reports (${statementPeriod(a)})`, "Income")] : []),
   ],
   questions: [
     { id: "revenue", label: "About how much does the business bring in per year?", type: "choice", options: ["Under $50,000", "$50,000 – $150,000", "$150,000 – $500,000", "$500,000 – $1 million", "Over $1 million", "Brand new — no sales yet"] },
