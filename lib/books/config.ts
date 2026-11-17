@@ -199,7 +199,8 @@ export type BooksWorkspace = {
   entityType: string;
   bookkeeperId: string;
   reviewerId: string;
-  service: { plan: string; monthlyFee: number; reports: ReportType[]; includes: string[] };
+  /** monthlyFee is the fee per billing period: per month, or per quarter when cadence is "quarterly" (billed at the start of each quarter, paid before that quarter's work). */
+  service: { plan: string; monthlyFee: number; cadence?: "monthly" | "quarterly"; reports: ReportType[]; includes: string[] };
   extras: ExtraCharge[];
   /** Automatic monthly invoice: on `day` of each month, bill that month's fee (plus uninvoiced charges). */
   billing?: WorkspaceBilling;
@@ -230,3 +231,12 @@ export const BOOKS_PERMISSIONS = {
   billing: "books.billing.manage",
   qbo: "books.quickbooks.manage",
 } as const;
+
+/** The quarter a month falls in: its first month ("2026-10") and a label ("Q4 2026 (October–December)"). */
+export function quarterOf(period: string) {
+  const [y, m] = period.split("-").map(Number);
+  const q = Math.floor((m - 1) / 3);
+  const first = q * 3 + 1;
+  const name = (n: number) => new Date(Date.UTC(2000, n - 1, 15)).toLocaleDateString("en-US", { month: "long", timeZone: "UTC" });
+  return { start: `${y}-${String(first).padStart(2, "0")}`, label: `Q${q + 1} ${y} (${name(first)}–${name(first + 2)})` };
+}

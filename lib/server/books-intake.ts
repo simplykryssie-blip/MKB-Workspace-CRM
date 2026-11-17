@@ -5,7 +5,7 @@
  * the bookkeeping team. Server-only.
  */
 import { BOOKS_SECTIONS, pickableAddOns, quoteFor } from "@/lib/books/intake";
-import { proposalAsText, proposalFromQuote, proposalLetterVars, proposalTotals, type Proposal, type ProposalBilling, type ProposalLine } from "@/lib/books/proposal";
+import { booksLetterBody, proposalAsText, proposalFromQuote, proposalLetterVars, proposalTotals, recurring, type Proposal, type ProposalBilling, type ProposalLine } from "@/lib/books/proposal";
 import { fillLetter } from "@/lib/engagement/letters";
 import { feeWords, money } from "@/lib/fees/config";
 import { docsFor, type Answers } from "@/lib/tax/interview/engine";
@@ -365,7 +365,9 @@ export async function publicSubmitIntake(env: AppEnv, token: string, ip: string,
  * price after it was sent or signed creates a new version that must be signed
  * again; the earlier signed letter stays in Documents.
  */
-const BILLINGS: ProposalBilling[] = ["monthly", "one_time", "quote"];
+const BILLINGS: ProposalBilling[] = ["monthly", "quarterly", "one_time", "quote"];
+/** "$549/month" or "$1,482/quarter". */
+const per = (p: { lines: Omit<ProposalLine, "id">[] }) => { const r = recurring(p); return `${money(r.amount)}/${r.per}`; };
 const proposalOf = (r: Row) => (r.proposal ? json<Proposal | null>(r.proposal, null) : null);
 
 function cleanProposal(b: { plan?: unknown; lines?: unknown; message?: unknown }, plans: string[]): Pick<Proposal, "plan" | "lines" | "message"> {
@@ -378,11 +380,12 @@ function cleanProposal(b: { plan?: unknown; lines?: unknown; message?: unknown }
     const billing = BILLINGS.includes(l.billing as ProposalBilling) ? (l.billing as ProposalBilling) : null;
     const amount = billing === "quote" ? 0 : Math.round(Number(l.amount) * 100) / 100;
     if (!label) throw badRequest(`Line ${i + 1} needs a description.`);
-    if (!billing) throw badRequest(`Line ${i + 1}: choose monthly, one-time or custom quote.`);
+    if (!billing) throw badRequest(`Line ${i + 1}: choose monthly, quarterly, one-time or custom quote.`);
     if (!Number.isFinite(amount) || amount < 0 || amount > 1_000_000) throw badRequest(`Line ${i + 1}: enter an amount between $0 and $1,000,000.`);
     return { id: typeof l.id === "string" && /^[\w-]{1,40}$/.test(l.id) ? l.id : randomId("pl"), label, billing, amount, startingAt: l.startingAt === true || undefined };
   });
-  if (!lines.some((l) => l.billing === "monthly" && l.amount > 0)) throw badRequest("The proposal needs a monthly price.");
+  if (!lines.some((l) => (l.billing === "monthly" || l.billing === "quarterly") && l.amount > 0)) throw badRequest("The proposal needs a monthly or quarterly price.");
+  if (lines.some((l) => l.billing === "monthly") && lines.some((l) => l.billing === "quarterly")) throw badRequest("Use either monthly or quarterly prices, not both.");
   const message = typeof b.message === "string" ? b.message.trim().slice(0, 1500) : "";
   return { plan, lines, message: message || undefined };
 }
@@ -398,20 +401,22 @@ export async function saveProposal(env: AppEnv, a: Actor, id: string, b: { plan?
   if (Number(b.rev) !== r.rev) throw new HttpError(409, "Someone else updated this intake. Reloading the latest version.", "conflict");
   const fees = await loadFees(env);
   const next = cleanProposal(b, fees.books.plans.map((p) => p.key));
-  const cur = proposalOf(r) ?? proposalFromQuote(quoteFor(json<Answers>(r.answers, {}), fees.books), now());
-  if (sameTerms(cur, next)) return { intake: { ...toIntake(r), proposalLink: await latestLink(env, "books_proposal", id) }, unchanged: true };
+  const stored = proposalOf(r);
+  const cur = stored ?? proposalFromQuote(quoteFor(json<Answers>(r.answers, {}), fees.books), now());
+  // Saving the automatic quote as-is still records MKB's review (it's what makes the proposal sendable).
+  if (stored && sameTerms(cur, next)) return { intake: { ...toIntake(r), proposalLink: await latestLink(env, "books_proposal", id) }, unchanged: true };
   const t = now();
   const t0 = proposalTotals(cur), t1 = proposalTotals({ lines: next.lines });
   let p: Proposal;
   let note: string;
   if (cur.status === "draft") {
     p = { ...cur, ...next, updatedAt: t, updatedBy: a.member.id };
-    note = `Price reviewed: ${next.plan}, ${money(t1.monthly)}/month${t1.oneTime ? ` + ${money(t1.oneTime)} one-time` : ""}`;
+    note = `Price reviewed: ${next.plan}, ${per(next)}${t1.oneTime ? ` + ${money(t1.oneTime)} one-time` : ""}`;
   } else {
     // A sent or signed proposal changed: new version, the client must sign again.
-    const previous = cur.status === "signed" && cur.signedAt ? [...(cur.previous ?? []), { version: cur.version, signedAt: cur.signedAt, signedName: cur.signedName ?? "", monthlyTotal: t0.monthly, oneTimeTotal: t0.oneTime }] : cur.previous;
+    const previous = cur.status === "signed" && cur.signedAt ? [...(cur.previous ?? []), { version: cur.version, signedAt: cur.signedAt, signedName: cur.signedName ?? "", monthlyTotal: recurring(cur).amount, oneTimeTotal: t0.oneTime }] : cur.previous;
     p = { version: cur.version + 1, status: "draft", ...next, suggested: cur.suggested, updatedAt: t, updatedBy: a.member.id, previous };
-    note = `Proposal revised to version ${p.version} (${money(t0.monthly)} → ${money(t1.monthly)}/month)${cur.status === "signed" ? " — the client must sign the new version" : ""}`;
+    note = `Proposal revised to version ${p.version} (${per(cur)} → ${per(next)})${cur.status === "signed" ? " — the client must sign the new version" : ""}`;
     await cancelLinks(env, "books_proposal", id, a.member.id);
   }
   const res = await run(env.DB, "UPDATE books_intakes SET proposal = ?, history = ?, updated_at = ?, rev = rev + 1 WHERE id = ? AND rev = ?", JSON.stringify(p), hist(r.history, a.member.id, note), t, id, r.rev);
@@ -444,7 +449,7 @@ export async function sendProposal(env: AppEnv, a: Actor, id: string, b: { email
   const text = `Proposal v${p.version} and engagement letter emailed to ${email} for signature${out.sent ? "" : " — email queued"}`;
   await run(env.DB, "UPDATE books_intakes SET proposal = ?, history = ?, updated_at = ?, rev = rev + 1 WHERE id = ?", JSON.stringify(next), hist(r.history, a.member.id, text), t, id);
   await run(env.DB, "INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'message', ?, 'staff', ?, ?)", randomId("x"), c.id, `Bookkeeping: ${text}`, a.member.id, t);
-  await audit(env.DB, a, { action: "Record update", resource: `Bookkeeping intake ${id}`, meta: `Proposal v${p.version} sent to ${email}; ${money(proposalTotals(p).monthly)}/month` });
+  await audit(env.DB, a, { action: "Record update", resource: `Bookkeeping intake ${id}`, meta: `Proposal v${p.version} sent to ${email}; ${per(p)}` });
   return { intake: { ...toIntake((await one<Row>(env.DB, `${SQL} WHERE i.id = ?`, id))!), proposalLink: info }, emailed: out.sent, url };
 }
 
@@ -491,7 +496,7 @@ export async function publicProposal(env: AppEnv, token: string, ip: string) {
   return {
     businessName: bizName, firstName, expiresAt: l.expiresAt,
     proposal: { version: p.version, plan: p.plan, lines: p.lines.map(({ label, billing, amount, startingAt }) => ({ label, billing, amount, startingAt })), message: p.message, planIncludes: plan?.includes ?? [] },
-    letters: { books: { ...letters.books, title: fillLetter(letters.books.title, vars), body: fillLetter(letters.books.body, vars) }, terms: { ...letters.terms, title: fillLetter(letters.terms.title, vars), body: fillLetter(letters.terms.body, vars) } },
+    letters: { books: { ...letters.books, title: fillLetter(letters.books.title, vars), body: fillLetter(booksLetterBody(letters.books.body), vars) }, terms: { ...letters.terms, title: fillLetter(letters.terms.title, vars), body: fillLetter(letters.terms.body, vars) } },
   };
 }
 
@@ -520,7 +525,7 @@ export async function publicSignProposal(env: AppEnv, token: string, ip: string,
   await env.FILES.put(sigKey, sigPng, { httpMetadata: { contentType: "image/png" }, customMetadata: { intake: r.id, proposalVersion: String(p.version), signedBy: name, signedAt: t } });
   await useLink(env, l.id);
   // Signed letter: the reviewed proposal, the bookkeeping letter and the standard terms, with the signature.
-  const letterPdf = await buildLetterPdf({ clientName: bizName, parts: [{ title: `Your bookkeeping proposal — ${p.plan}`, body: proposalAsText(p), version: p.version }, { title: fillLetter(lt.title, vars), body: fillLetter(lt.body, vars), version: lt.version }, { title: fillLetter(terms.title, vars), body: fillLetter(terms.body, vars), version: terms.version }], acceptedName: name, acceptedAt: t, method: "online", signaturePng: sigPng });
+  const letterPdf = await buildLetterPdf({ clientName: bizName, parts: [{ title: `Your bookkeeping proposal — ${p.plan}`, body: proposalAsText(p), version: p.version }, { title: fillLetter(lt.title, vars), body: fillLetter(booksLetterBody(lt.body), vars), version: lt.version }, { title: fillLetter(terms.title, vars), body: fillLetter(terms.body, vars), version: terms.version }], acceptedName: name, acceptedAt: t, method: "online", signaturePng: sigPng });
   const safe = bizName.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
   const letterFile = `MKB-Bookkeeping-Engagement-Letter-${safe}${p.version > 1 ? `-v${p.version}` : ""}.pdf`;
   await storeClientPdfAs(env, null, c.id, letterPdf, { name: `Bookkeeping proposal & engagement letter${p.version > 1 ? ` v${p.version}` : ""} (signed ${longDate(t)})`, fileName: letterFile, category: "Engagement letter", service: "books", activity: `Bookkeeping proposal v${p.version} and engagement letter signed by ${name} online` });
@@ -528,11 +533,11 @@ export async function publicSignProposal(env: AppEnv, token: string, ip: string,
   let emailed = false;
   if (to) {
     const tt = proposalTotals(p);
-    const out = await sendTemplate(env, "books_proposal_signed", { to, vars: { firstName: name.split(/\s+/)[0], businessName: bizName, date: longDate(t), plan: `${p.plan} — ${tt.startingAt ? "starting at " : ""}${money(tt.monthly)}/month${tt.oneTime ? ` plus ${money(tt.oneTime)} one-time` : ""}` }, attachments: [{ filename: letterFile, content: letterPdf }] });
+    const out = await sendTemplate(env, "books_proposal_signed", { to, vars: { firstName: name.split(/\s+/)[0], businessName: bizName, date: longDate(t), plan: `${p.plan} — ${tt.startingAt ? "starting at " : ""}${per(p)}${recurring(p).per === "quarter" ? " (paid in full before each quarter's work begins)" : ""}${tt.oneTime ? ` plus ${money(tt.oneTime)} one-time` : ""}` }, attachments: [{ filename: letterFile, content: letterPdf }] });
     emailed = out.sent;
   }
   await run(env.DB, "INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'intake', ?, 'client', NULL, ?)", randomId("x"), c.id, `Signed the bookkeeping proposal (${p.plan}) and engagement letter online`, t);
-  await notify(env, { module: "books" }, { kind: "intake", title: `${bizName} signed their bookkeeping proposal`, body: `${p.plan} · ${money(proposalTotals(p).monthly)}/month — ready to start bookkeeping`, href: `/services/bookkeeping/intake/${r.id}` });
+  await notify(env, { module: "books" }, { kind: "intake", title: `${bizName} signed their bookkeeping proposal`, body: `${p.plan} · ${per(p)} — ready to start bookkeeping`, href: `/services/bookkeeping/intake/${r.id}` });
   await audit(env.DB, actor, { action: "Record update", resource: `Bookkeeping intake ${r.id}`, meta: `Proposal v${p.version} + engagement letter v${lt.version} signed (drawn) by ${name}${emailed ? "; copy emailed" : ""}` });
   return { signed: true, emailed, next: await nextStop(env, c.id) };
 }

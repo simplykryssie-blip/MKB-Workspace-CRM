@@ -1,6 +1,6 @@
 "use client";
 
-import { proposalTotals } from "@/lib/books/proposal";
+import { recurring } from "@/lib/books/proposal";
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -12,7 +12,7 @@ import { useBooks, waitForWorkspaceSave } from "@/lib/store/books-store";
 import { useTeam } from "@/lib/store/team-store";
 import { meId } from "@/lib/sample/clients";
 import { REPORT_TYPES, periodLabel, type ReportType } from "@/lib/books/config";
-import { DEFAULT_SERVICE_FEES } from "@/lib/fees/config";
+import { DEFAULT_SERVICE_FEES, quarterlyOf } from "@/lib/fees/config";
 import { useServiceFees } from "@/lib/fees/use-fees";
 import { ENTITY_TO_WORKSPACE, quoteFor, reportsFrom } from "@/lib/books/intake";
 import { rowsOf } from "@/lib/tax/interview/engine";
@@ -56,18 +56,20 @@ export function StartWorkspace({ open, onClose, onCreated, intake, clientId: pre
   const [entityType, setEntityType] = useState("LLC");
   const [plan, setPlan] = useState<string>(DEFAULT_SERVICE_FEES.books.plans[0].key);
   const [fee, setFee] = useState(DEFAULT_SERVICE_FEES.books.plans[0].fee);
+  const [cadence, setCadence] = useState<"monthly" | "quarterly">("monthly");
   // When the saved prices arrive, start from the plan the intake recommends (or the first plan).
   useEffect(() => {
     if (!F.fees) return;
     if (intake?.proposal) {
       // The price MKB reviewed (and the client signed): plan, monthly total and the other lines.
       const p = intake.proposal;
-      setPlan(p.plan); setFee(proposalTotals(p).monthly);
-      setExtras(p.lines.filter((l) => !(l.billing === "monthly" && l.label === `${p.plan} plan`)).map((l) => l.label));
+      const r = recurring(p);
+      setPlan(p.plan); setFee(r.amount); setCadence(r.per === "quarter" ? "quarterly" : "monthly");
+      setExtras(p.lines.filter((l) => !((l.billing === "monthly" || l.billing === "quarterly") && l.label === `${p.plan} plan`)).map((l) => l.label));
     } else if (intake) {
       // Plan + extra accounts/locations + monthly add-ons from the intake's quote.
       const q = quoteFor(intake.answers, F.fees.books);
-      setPlan(q.plan.key); setFee(q.monthlyTotal);
+      setPlan(q.plan.key); setFee(q.monthlyTotal); setCadence(q.cadence);
       setExtras([...q.monthly.slice(1), ...q.oneTime, ...q.quoted].map((l) => l.label));
     } else { setPlan(F.fees.books.plans[0].key); setFee(F.fees.books.plans[0].fee); }
   }, [F.fees]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -105,7 +107,7 @@ export function StartWorkspace({ open, onClose, onCreated, intake, clientId: pre
     if (accounts.some((a) => !a.name.trim())) return setErr("Give every account a name (or remove it).");
     if (accounts.some((a) => a.mask && !/^\d{4}$/.test(a.mask))) return setErr("Account numbers: enter only the last 4 digits.");
     const enrollmentId = client.enrollments?.find((e) => e.service === "books")?.id;
-    const id = books.createWorkspace({ clientId: client.id, enrollmentId, businessName, entityType, plan, monthlyFee: fee, reports, includes: [...(F.fees?.books.plans.find((p) => p.key === plan)?.includes ?? INCLUDES), ...extras.map((x) => `Add-on: ${x}`)], bookkeeperId, reviewerId, accounts, firstPeriod: period, qboCompany: qbo });
+    const id = books.createWorkspace({ clientId: client.id, enrollmentId, businessName, entityType, plan, monthlyFee: fee, cadence, reports, includes: [...(F.fees?.books.plans.find((p) => p.key === plan)?.includes ?? INCLUDES), ...extras.map((x) => `Add-on: ${x}`)], bookkeeperId, reviewerId, accounts, firstPeriod: period, qboCompany: qbo });
     // Wait until the workspace is really saved before anything points to it or the page changes.
     setSaving(true); setErr(null);
     const ok = await waitForWorkspaceSave(id);
@@ -129,13 +131,13 @@ export function StartWorkspace({ open, onClose, onCreated, intake, clientId: pre
           <span className="mb-1.5 block text-[13px] font-medium text-ink-2">Plan</span>
           <div className="grid gap-2 sm:grid-cols-2">
             {plans.map((p) => (
-              <button key={p.key} type="button" onClick={() => { setPlan(p.key); setFee(p.fee); }} className={`rounded-xl border p-3 text-left ${plan === p.key ? "border-accent bg-accent-soft/50" : "border-line hover:bg-surface-hover"}`}>
+              <button key={p.key} type="button" onClick={() => { setPlan(p.key); setFee(cadence === "quarterly" ? quarterlyOf(p.fee, F.fees?.books.quarterlyDiscountPct ?? 10) : p.fee); }} className={`rounded-xl border p-3 text-left ${plan === p.key ? "border-accent bg-accent-soft/50" : "border-line hover:bg-surface-hover"}`}>
                 <span className="block text-[14px] font-semibold text-ink">{p.key} · ${p.fee}{p.plus ? "+" : ""}/mo</span>
                 <span className="block text-[12.5px] text-muted">{p.detail}</span>
               </button>
             ))}
           </div>
-          <div className="mt-3 max-w-[220px]"><TextField label="Monthly fee ($)" type="number" min={0} value={fee} onChange={(e) => setFee(Number(e.target.value))} /></div>
+          <div className="mt-3 flex flex-wrap items-end gap-3"><div className="max-w-[220px]"><TextField label={cadence === "quarterly" ? "Quarterly fee ($)" : "Monthly fee ($)"} type="number" min={0} value={fee} onChange={(e) => setFee(Number(e.target.value))} /></div><label className="text-[13px] font-medium text-ink-2">Billing<br /><select value={cadence} onChange={(e) => { const c = e.target.value === "quarterly" ? "quarterly" : "monthly"; const d = F.fees?.books.quarterlyDiscountPct ?? 10; setFee((f) => (c === cadence ? f : c === "quarterly" ? quarterlyOf(f, d) : Math.round(f / (3 * (1 - d / 100))))); setCadence(c); }} className="mt-1 h-11 rounded-xl border border-line bg-surface px-3 text-[14px]"><option value="monthly">Monthly</option><option value="quarterly">Quarterly (paid upfront each quarter)</option></select></label></div>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-3">

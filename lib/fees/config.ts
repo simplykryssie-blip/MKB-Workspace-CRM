@@ -17,7 +17,7 @@ export type BooksPlan = {
 /** Optional bookkeeping services added to a plan. */
 export type BooksAddOn = {
   key: string; name: string;
-  /** monthly = added to the monthly fee; one_time = billed once; quote = priced per client. */
+  /** monthly = added to the monthly fee; one_time = billed once; quote = priced per client. (Catch-up is priced per month behind, from the plan.) */
   billing: "monthly" | "one_time" | "quote";
   price: number;
   /** Shown as "Starting at". */
@@ -36,6 +36,10 @@ export type ServiceFees = {
     overagePerAccount: number;
     /** Months in a row over the limit before moving to the plan that fits. */
     upgradeAfterMonths: number;
+    /** Quarterly clients: discount off 3 months of the plan and monthly add-ons (billed each quarter, paid in full before that quarter's work begins). */
+    quarterlyDiscountPct: number;
+    /** Catch-up bookkeeping: price for each month behind, as a % of the client's monthly plan price. */
+    catchupPctOfPlan: number;
   };
   expunge: {
     /** MKB fee for a basic expungement… */
@@ -72,13 +76,15 @@ export const DEFAULT_SERVICE_FEES: ServiceFees = {
       { key: "accounts", name: "Additional financial accounts", billing: "monthly", price: 50, startingAt: true, unit: "per account", includes: ["Additional bank, credit card, or standard financial accounts", "Reconciliation included", "Pricing may vary for complex accounts (e.g., Stripe, PayPal, loans, merchant processors)"] },
       { key: "locations", name: "Additional locations", billing: "monthly", price: 150, startingAt: true, unit: "per location", includes: ["Bookkeeping for additional business locations", "Includes location-specific reporting (where applicable)", "Final pricing based on transaction volume, number of accounts, and complexity"] },
       { key: "qbo", name: "QuickBooks setup & consultation", billing: "one_time", price: 350, startingAt: true, unit: "", includes: ["Complete setup and customization", "Chart of accounts", "Bank connections", "Initial configuration and training", "Pricing based on your business needs"] },
-      { key: "catchup", name: "Catch-up bookkeeping", billing: "quote", price: 0, startingAt: false, unit: "", includes: ["For books that are behind", "Pricing based on months, volume and complexity", "Get current and move forward with confidence"] },
-      { key: "cleanup", name: "Bookkeeping cleanup", billing: "one_time", price: 500, startingAt: true, unit: "", includes: ["Fix errors and discrepancies", "Reconcile accounts", "Clean up historical transactions", "Pricing based on scope, months and complexity"] },
+      { key: "catchup", name: "Catch-up bookkeeping", billing: "quote", price: 0, startingAt: false, unit: "per month behind", includes: ["For months the books were never entered", "We enter and reconcile every month you're behind", "Priced per month behind, from your plan", "Get current and move forward with confidence"] },
+      { key: "cleanup", name: "Bookkeeping cleanup", billing: "one_time", price: 500, startingAt: true, unit: "", includes: ["For books that were kept but have errors", "Fix miscategorized and duplicate transactions", "Reconcile accounts that don't match the bank", "Pricing based on scope, months and complexity"] },
       { key: "custom", name: "Custom solutions", billing: "quote", price: 0, startingAt: false, unit: "", includes: ["We create tailored solutions for your business", "Flexible pricing based on scope", "Get the exact support you need"] },
     ],
     overagePerTransaction: 0.5,
     overagePerAccount: 50,
     upgradeAfterMonths: 2,
+    quarterlyDiscountPct: 10,
+    catchupPctOfPlan: 100,
   },
   expunge: { baseFee: 550, chargesIncluded: 2, extraChargeFee: 550 },
   taxPartners: { software: "TaxWise", serviceBureau: "MKB Financial Group (in-house)", bankProduct: "Santa Barbara Tax Products Group (TPG)" },
@@ -118,6 +124,8 @@ export function checkFees(f: ServiceFees): string | null {
   if (new Set(f.books.plans.map((p) => p.key.trim().toLowerCase())).size !== f.books.plans.length) return "Bookkeeping plan names must be different.";
   if (![f.books.overagePerTransaction, f.books.overagePerAccount, f.expunge.baseFee, f.expunge.extraChargeFee, f.late.adminFee, f.late.monthlyRatePct, f.late.courtAdminFee].every(n)) return "Prices can't be negative.";
   if (!(f.books.upgradeAfterMonths >= 1 && f.books.upgradeAfterMonths <= 12)) return "Choose 1–12 months before moving to a bigger plan.";
+  if (!(f.books.quarterlyDiscountPct >= 0 && f.books.quarterlyDiscountPct <= 50)) return "The quarterly discount must be 0–50%.";
+  if (!(f.books.catchupPctOfPlan >= 0 && f.books.catchupPctOfPlan <= 300)) return "The catch-up price must be 0–300% of the monthly plan price.";
   if (!(f.expunge.chargesIncluded >= 1 && f.expunge.chargesIncluded <= 20)) return "The expungement fee must cover 1–20 charges.";
   if (f.late.monthlyRatePct > 1) return "Louisiana generally caps agreed interest at 12% a year (1% per month).";
   if (!(f.late.graceDays >= 0 && f.late.courtAfterDays > f.late.graceDays)) return "Court action must come after the grace period.";
@@ -125,14 +133,28 @@ export function checkFees(f: ServiceFees): string | null {
 }
 
 /* ---------------------------------------------------------------- bookkeeping quote */
-export type BooksQuoteLine = { label: string; amount: number; billing: "monthly" | "one_time" | "quote"; startingAt?: boolean };
-export type BooksQuote = { plan: BooksPlan; monthly: BooksQuoteLine[]; oneTime: BooksQuoteLine[]; quoted: BooksQuoteLine[]; monthlyTotal: number; oneTimeTotal: number; extraAccounts: number; extraLocations: number; /** Why the quote looks the way it does (estimates, add-ons the answers call for). */ notes?: string[] };
+export type BooksQuoteLine = { label: string; amount: number; billing: "monthly" | "quarterly" | "one_time" | "quote"; startingAt?: boolean };
+export type BooksCadence = "monthly" | "quarterly";
+export type BooksQuote = {
+  plan: BooksPlan; cadence: BooksCadence;
+  /** Recurring lines: per month, or per quarter for quarterly clients. */
+  monthly: BooksQuoteLine[]; oneTime: BooksQuoteLine[]; quoted: BooksQuoteLine[];
+  /** The recurring total (per month, or per quarter when cadence is quarterly). */
+  monthlyTotal: number; oneTimeTotal: number; extraAccounts: number; extraLocations: number;
+  /** Why the quote looks the way it does (estimates, add-ons the answers call for). */ notes?: string[];
+};
+/** Quarterly price for a monthly amount: 3 months less the quarterly discount, to the dollar. */
+export const quarterlyOf = (monthly: number, discountPct: number) => Math.round(monthly * 3 * (1 - discountPct / 100));
+export const QUARTERLY_TERMS = "Billed at the start of each quarter and paid in full before any work on that quarter begins.";
 
 /**
  * Cheapest plan that fits the monthly transactions, plus extra accounts and
- * locations beyond the plan's limits, plus chosen add-ons.
+ * locations beyond the plan's limits, plus chosen add-ons. Quarterly clients get
+ * the plan and monthly add-ons as one quarterly price (3 months less the discount).
+ * Catch-up is priced per month behind (a % of the plan's monthly price) when the
+ * number of months is known; otherwise it's a custom quote.
  */
-export function booksQuote(b: ServiceFees["books"], need: { transactions: number; accounts: number; locations: number; addOnKeys: string[] }): BooksQuote {
+export function booksQuote(b: ServiceFees["books"], need: { transactions: number; accounts: number; locations: number; addOnKeys: string[]; cadence?: BooksCadence; catchupMonths?: number }): BooksQuote {
   const addOn = (k: string) => b.addOns.find((x) => x.key === k);
   const acctPrice = addOn("accounts")?.price ?? b.overagePerAccount;
   const locPrice = addOn("locations")?.price ?? 0;
@@ -143,7 +165,8 @@ export function booksQuote(b: ServiceFees["books"], need: { transactions: number
   const plan = pool.reduce((best, p) => (cost(p) < cost(best) ? p : best), pool[0]);
   const extraAccounts = Math.max(0, need.accounts - plan.accounts);
   const extraLocations = Math.max(0, need.locations - plan.locations);
-  const monthly: BooksQuoteLine[] = [{ label: `${plan.key} plan`, amount: plan.fee, billing: "monthly", startingAt: plan.startingAt }];
+  const cadence: BooksCadence = need.cadence === "quarterly" ? "quarterly" : "monthly";
+  let monthly: BooksQuoteLine[] = [{ label: `${plan.key} plan`, amount: plan.fee, billing: "monthly", startingAt: plan.startingAt }];
   if (extraAccounts) monthly.push({ label: `Additional financial accounts × ${extraAccounts}`, amount: extraAccounts * acctPrice, billing: "monthly", startingAt: addOn("accounts")?.startingAt });
   if (extraLocations) monthly.push({ label: `Additional locations × ${extraLocations}`, amount: extraLocations * locPrice, billing: "monthly", startingAt: true });
   const oneTime: BooksQuoteLine[] = [];
@@ -151,9 +174,22 @@ export function booksQuote(b: ServiceFees["books"], need: { transactions: number
   for (const k of need.addOnKeys) {
     const x = addOn(k);
     if (!x || k === "accounts" || k === "locations") continue;
+    // Weekly / every-two-weeks updates don't apply to quarterly clients.
+    if (cadence === "quarterly" && (k === "weekly" || k === "biweekly")) continue;
+    if (k === "catchup") {
+      const months = Math.max(0, Math.round(need.catchupMonths ?? 0));
+      const perMonth = Math.round(plan.fee * ((b.catchupPctOfPlan ?? 100) / 100));
+      if (months && perMonth) oneTime.push({ label: `${x.name}: ${months} month${months === 1 ? "" : "s"} × ${money(perMonth)}`, amount: months * perMonth, billing: "one_time", startingAt: plan.startingAt });
+      else quoted.push({ label: x.name, amount: 0, billing: "quote" });
+      continue;
+    }
     const line = { label: x.name, amount: x.price, billing: x.billing, startingAt: x.startingAt };
     (x.billing === "monthly" ? monthly : x.billing === "one_time" ? oneTime : quoted).push(line);
   }
-  return { plan, monthly, oneTime, quoted, monthlyTotal: monthly.reduce((s, l) => s + l.amount, 0), oneTimeTotal: oneTime.reduce((s, l) => s + l.amount, 0), extraAccounts, extraLocations };
+  if (cadence === "quarterly") {
+    const d = b.quarterlyDiscountPct ?? 0;
+    monthly = monthly.map((l) => ({ ...l, label: l.label, amount: quarterlyOf(l.amount, d), billing: "quarterly" as const }));
+  }
+  return { plan, cadence, monthly, oneTime, quoted, monthlyTotal: monthly.reduce((s, l) => s + l.amount, 0), oneTimeTotal: oneTime.reduce((s, l) => s + l.amount, 0), extraAccounts, extraLocations };
 }
 export const priceLabel = (amount: number, startingAt?: boolean, suffix = "") => `${startingAt ? "Starting at " : ""}${money(amount)}${suffix}`;

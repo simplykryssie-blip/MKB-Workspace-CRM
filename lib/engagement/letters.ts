@@ -28,7 +28,7 @@ export const PLACEHOLDERS: { key: string; label: string }[] = [
   { key: "date", label: "Today's date" },
   { key: "taxYear", label: "Tax year (tax letters)" },
   { key: "service", label: "Service or plan name" },
-  { key: "fee", label: "Fee or monthly plan price, if known" },
+  { key: "fee", label: "Fee or plan price, if known (bookkeeping: with its billing terms — monthly, or quarterly paid upfront)" },
   { key: "lateGrace", label: "Days before a payment is late (Settings → Fees)" },
   { key: "lateAdmin", label: "Late admin fee (Settings → Fees)" },
   { key: "lateRate", label: "Late interest rate (Settings → Fees)" },
@@ -199,7 +199,7 @@ Thank you for choosing MKB Financial Group LLC for your bookkeeping. This letter
 Unless we agree in writing, bookkeeping does not include payroll processing, sales tax filings, tax returns, catch-up or clean-up work for prior months, or financial statements prepared under CPA standards (audits, reviews or compilations). We are not a CPA firm.
 
 ## Fees
-Your monthly fee is {{fee}}, billed monthly in advance. It includes your {{service}} plan ({{planIncludes}}) and these add-on services: {{addOns}}. One-time and custom-quoted services are billed separately as agreed.
+Your fee is {{fee}}. It includes your {{service}} plan ({{planIncludes}}) and these add-on services: {{addOns}}. One-time and custom-quoted services, including catch-up bookkeeping (entering months that were never recorded) and cleanup (correcting books that were kept with errors), are billed separately as agreed.
 
 - Overage: in any month your transactions or accounts go over your plan's limits, you will receive an additional bill for the overage at {{booksOverage}}.
 - Plan change: if you are over your plan's limits for {{upgradeMonths}} months in a row, we will move you to the plan that fits your volume, starting with the next month's bill, and let you know when we do.

@@ -1,10 +1,10 @@
 /**
- * Monthly bookkeeping invoices: one per workspace per month, for the plan's
- * monthly fee plus any additional charges not invoiced yet. Run by staff
+ * Bookkeeping invoices: one per workspace per month (or per quarter for quarterly
+ * clients, due on receipt), for the plan's fee plus any additional charges not invoiced yet. Run by staff
  * ("Invoice this month now") or automatically each day by the scheduled job
  * on each workspace's billing day. Server-only.
  */
-import { periodLabel, type ExtraCharge } from "@/lib/books/config";
+import { periodLabel, quarterOf, type ExtraCharge } from "@/lib/books/config";
 import { all, badRequest, forbidden, HttpError, json, notFound, now, one, run, type AppEnv } from "./core";
 import { randomId } from "./crypto";
 import { audit, requirePermission, type Actor } from "./identity";
@@ -23,8 +23,8 @@ export function centralToday(at = new Date()) {
 const addDays = (date: string, n: number) => { const d = new Date(`${date}T17:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString(); };
 
 /** Already billed? (An invoice tied to this month, or an older one naming it.) */
-async function billedNumber(env: AppEnv, ws: WsRow, period: string) {
-  const r = await one<{ number: string }>(env.DB, "SELECT number FROM invoices WHERE workspace_id = ? AND status != 'void' AND (billing_period = ? OR (billing_period IS NULL AND description LIKE ?)) LIMIT 1", ws.id, period, `%${periodLabel(period)}%`);
+async function billedNumber(env: AppEnv, ws: WsRow, period: string, quarterly = false) {
+  const r = await one<{ number: string }>(env.DB, "SELECT number FROM invoices WHERE workspace_id = ? AND status != 'void' AND (billing_period = ? OR (billing_period IS NULL AND description LIKE ?)) LIMIT 1", ws.id, period, `%${quarterly ? quarterOf(period).label : periodLabel(period)}%`);
   return r?.number ?? null;
 }
 
@@ -38,14 +38,17 @@ export async function billWorkspaceMonth(env: AppEnv, wsId: string, period: stri
   if (!ws) throw notFound("Workspace not found.");
   const client = await one<{ status: string; email: string | null }>(env.DB, "SELECT status, email FROM clients WHERE id = ?", ws.client_id);
   if (!client || ["inactive", "prospect", "declined"].includes(client.status)) return { created: false, reason: "client_inactive" as const };
-  const existing = await billedNumber(env, ws, period);
+  const service = json<{ plan: string; monthlyFee: number; cadence?: string }>(ws.service, { plan: "", monthlyFee: 0 });
+  // Quarterly clients: one invoice per quarter (billed as its first month), due on receipt — paid before that quarter's work begins.
+  const quarterly = service.cadence === "quarterly";
+  if (quarterly) period = quarterOf(period).start;
+  const existing = await billedNumber(env, ws, period, quarterly);
   if (existing) return { created: false, reason: "already_billed" as const, number: existing };
-  const service = json<{ plan: string; monthlyFee: number }>(ws.service, { plan: "", monthlyFee: 0 });
   const extras = json<ExtraCharge[]>(ws.extras, []);
   const pending = extras.filter((x) => !x.invoiced);
-  const label = periodLabel(period);
+  const label = quarterly ? quarterOf(period).label : periodLabel(period);
   const lines = [
-    ...(service.monthlyFee > 0 ? [{ label: `Monthly bookkeeping — ${service.plan || "plan"} (${label})`, amount: dollarsOf(cents(service.monthlyFee)), kind: "service" as const }] : []),
+    ...(service.monthlyFee > 0 ? [{ label: quarterly ? `Quarterly bookkeeping — ${service.plan || "plan"} (${label}), paid in full before work on this quarter begins` : `Monthly bookkeeping — ${service.plan || "plan"} (${label})`, amount: dollarsOf(cents(service.monthlyFee)), kind: "service" as const }] : []),
     ...pending.map((x) => ({ label: `${x.label} (${periodLabel(x.period)})`, amount: dollarsOf(cents(x.amount)), kind: "service" as const })),
   ];
   const amount = lines.reduce((s, l) => s + cents(l.amount), 0);
@@ -58,7 +61,7 @@ export async function billWorkspaceMonth(env: AppEnv, wsId: string, period: stri
   const history = JSON.stringify([{ at: t, by: opts.by, text: opts.by === "system" ? `Created automatically for ${label}` : `Created for ${label}` }]);
   try {
     await run(env.DB, "INSERT INTO invoices (id, number, client_id, service, workspace_id, billing_period, description, payment_mode, status, lines, amount_cents, paid_cents, issued_at, due_at, history, created_at, created_by, updated_at) VALUES (?, ?, ?, 'books', ?, ?, ?, 'upfront', 'open', ?, ?, 0, ?, ?, ?, ?, ?, ?)",
-      id, number, ws.client_id, ws.id, period, `${ws.business_name} — bookkeeping, ${label}`, JSON.stringify(lines), amount, t, addDays(issued, billing.dueDays), history, t, opts.by === "system" ? null : opts.by, t);
+      id, number, ws.client_id, ws.id, period, `${ws.business_name} — bookkeeping, ${label}`, JSON.stringify(lines), amount, t, addDays(issued, quarterly ? 0 : billing.dueDays), history, t, opts.by === "system" ? null : opts.by, t);
   } catch (e) {
     if (String(e).includes("UNIQUE")) return { created: false, reason: "already_billed" as const };
     throw e;

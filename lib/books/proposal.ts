@@ -3,9 +3,10 @@
  * sends to the client with the engagement letter. Clients never see a price
  * before this. Shared by the staff screen, the client's link and the server.
  */
-import { money, type BooksQuote } from "@/lib/fees/config";
+import { money, QUARTERLY_TERMS, type BooksQuote } from "@/lib/fees/config";
 
-export type ProposalBilling = "monthly" | "one_time" | "quote";
+/** quarterly = recurring each quarter, paid in full before that quarter's work begins. */
+export type ProposalBilling = "monthly" | "quarterly" | "one_time" | "quote";
 export type ProposalLine = { id: string; label: string; billing: ProposalBilling; amount: number; startingAt?: boolean };
 export type ProposalStatus = "draft" | "sent" | "signed";
 export type Proposal = {
@@ -29,14 +30,19 @@ export type Proposal = {
   previous?: { version: number; signedAt: string; signedName: string; monthlyTotal: number; oneTimeTotal: number }[];
 };
 
-export const BILLING_LABEL: Record<ProposalBilling, string> = { monthly: "Monthly", one_time: "One-time", quote: "Custom quote" };
+export const BILLING_LABEL: Record<ProposalBilling, string> = { monthly: "Monthly", quarterly: "Quarterly (paid upfront)", one_time: "One-time", quote: "Custom quote" };
 
 export const proposalTotals = (p: { lines: Omit<ProposalLine, "id">[] }) => ({
   monthly: p.lines.filter((l) => l.billing === "monthly").reduce((s, l) => s + l.amount, 0),
+  quarterly: p.lines.filter((l) => l.billing === "quarterly").reduce((s, l) => s + l.amount, 0),
   oneTime: p.lines.filter((l) => l.billing === "one_time").reduce((s, l) => s + l.amount, 0),
   quoted: p.lines.filter((l) => l.billing === "quote"),
-  startingAt: p.lines.some((l) => l.billing === "monthly" && l.startingAt),
+  startingAt: p.lines.some((l) => (l.billing === "monthly" || l.billing === "quarterly") && l.startingAt),
 });
+/** Quarterly when the proposal's recurring price is per quarter. */
+export const isQuarterly = (p: { lines: Omit<ProposalLine, "id">[] }) => p.lines.some((l) => l.billing === "quarterly");
+/** The recurring price and its period, e.g. { amount: 1482, per: "quarter" }. */
+export const recurring = (p: { lines: Omit<ProposalLine, "id">[] }) => { const t = proposalTotals(p); return isQuarterly(p) ? { amount: t.quarterly, per: "quarter" as const } : { amount: t.monthly, per: "month" as const }; };
 
 let n = 0;
 export const lineId = () => `pl${Date.now().toString(36)}${(n++).toString(36)}`;
@@ -44,22 +50,30 @@ export const lineId = () => `pl${Date.now().toString(36)}${(n++).toString(36)}`;
 /** A draft proposal from the automatic quote — the starting point for MKB's review. */
 export function proposalFromQuote(q: BooksQuote, at: string): Proposal {
   const lines: ProposalLine[] = [
-    ...q.monthly.map((l) => ({ id: lineId(), label: l.label, billing: "monthly" as const, amount: l.amount, startingAt: l.startingAt || undefined })),
+    ...q.monthly.map((l) => ({ id: lineId(), label: l.label, billing: (l.billing === "quarterly" ? "quarterly" : "monthly") as ProposalBilling, amount: l.amount, startingAt: l.startingAt || undefined })),
     ...q.oneTime.map((l) => ({ id: lineId(), label: l.label, billing: "one_time" as const, amount: l.amount, startingAt: l.startingAt || undefined })),
     ...q.quoted.map((l) => ({ id: lineId(), label: l.label, billing: "quote" as const, amount: 0 })),
   ];
   return { version: 1, status: "draft", plan: q.plan.key, lines, suggested: { plan: q.plan.key, monthlyTotal: q.monthlyTotal, oneTimeTotal: q.oneTimeTotal }, updatedAt: at };
 }
 
-const amt = (l: ProposalLine) => (l.billing === "quote" ? "custom quote" : `${l.startingAt ? "starting at " : ""}${money(l.amount)}${l.billing === "monthly" ? "/month" : " one-time"}`);
+const amt = (l: ProposalLine) => (l.billing === "quote" ? "custom quote" : `${l.startingAt ? "starting at " : ""}${money(l.amount)}${l.billing === "monthly" ? "/month" : l.billing === "quarterly" ? "/quarter" : " one-time"}`);
+
+/**
+ * A saved bookkeeping letter written before quarterly billing said "Your monthly fee is {{fee}},
+ * billed monthly in advance." — {{fee}} now carries its own billing terms, so that sentence is
+ * read as "Your fee is {{fee}}." (no double or wrong wording for quarterly clients).
+ */
+export const booksLetterBody = (body: string) => body.replace("Your monthly fee is {{fee}}, billed monthly in advance.", "Your fee is {{fee}}.");
 
 /** Words for the engagement letter's fill-ins, from the reviewed proposal. */
 export function proposalLetterVars(p: Proposal, planIncludes: string[]) {
   const t = proposalTotals(p);
-  const extra = p.lines.filter((l) => !(l.billing === "monthly" && l.label === `${p.plan} plan`));
+  const extra = p.lines.filter((l) => !((l.billing === "monthly" || l.billing === "quarterly") && l.label === `${p.plan} plan`));
+  const r = recurring(p);
   return {
     service: p.plan,
-    fee: `${t.startingAt ? "starting at " : ""}${money(t.monthly)}`,
+    fee: `${t.startingAt ? "starting at " : ""}${money(r.amount)} per ${r.per}${r.per === "quarter" ? ` (quarterly bookkeeping). ${QUARTERLY_TERMS}` : ", billed monthly in advance"}`,
     planIncludes: planIncludes.join("; "),
     addOns: extra.map((l) => `${l.label} (${amt(l)})`).join("; ") || "none",
   };
@@ -68,14 +82,17 @@ export function proposalLetterVars(p: Proposal, planIncludes: string[]) {
 /** The proposal as letter text (## headings, - bullets) — printed before the engagement letter. */
 export function proposalAsText(p: Proposal) {
   const t = proposalTotals(p);
+  const q = isQuarterly(p);
+  const rec = q ? "quarterly" : "monthly";
   return [
     ...(p.message ? [p.message, ""] : []),
-    "## Monthly",
-    ...p.lines.filter((l) => l.billing === "monthly").map((l) => `- ${l.label}: ${amt(l)}`),
-    `- Monthly total: ${t.startingAt ? "starting at " : ""}${money(t.monthly)}`,
-    ...(p.lines.some((l) => l.billing !== "monthly") ? ["", "## One-time and custom-quoted work", ...p.lines.filter((l) => l.billing !== "monthly").map((l) => `- ${l.label}: ${amt(l)}`)] : []),
+    q ? "## Quarterly" : "## Monthly",
+    ...p.lines.filter((l) => l.billing === rec).map((l) => `- ${l.label}: ${amt(l)}`),
+    `- ${q ? "Quarterly" : "Monthly"} total: ${t.startingAt ? "starting at " : ""}${money(q ? t.quarterly : t.monthly)}`,
+    ...(q ? [`- ${QUARTERLY_TERMS}`] : []),
+    ...(p.lines.some((l) => l.billing !== rec) ? ["", "## One-time and custom-quoted work", ...p.lines.filter((l) => l.billing !== rec).map((l) => `- ${l.label}: ${amt(l)}`)] : []),
     "",
-    "Prices are reviewed by MKB from your intake answers. Monthly fees are billed monthly in advance. Custom-quoted work is agreed in writing before it starts.",
+    `Prices are reviewed by MKB from your intake answers. ${q ? "Quarterly fees are paid in full at the start of each quarter, before any work on that quarter begins." : "Monthly fees are billed monthly in advance."} Catch-up work (months that were never entered) and cleanup work (fixing books that were kept with errors) are priced separately above. Custom-quoted work is agreed in writing before it starts.`,
   ].join("\n");
 }
 

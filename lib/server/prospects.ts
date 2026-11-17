@@ -12,7 +12,7 @@ import { audit, requirePermission, requireStaff, type Actor } from "./identity";
 import { cancelLinks } from "./secure-links";
 import { createIntake, intakesForClient, sendIntakeLink } from "./books-intake";
 import { markConverted } from "./leads";
-import { proposalTotals, type Proposal } from "@/lib/books/proposal";
+import { recurring, type Proposal } from "@/lib/books/proposal";
 import { BUSINESS_FORMS, INDIVIDUAL_FORMS, baseChecklist, defaultPricing, dueDates, type TaxForm, type TaxReturn } from "@/lib/tax/config";
 import { STAGES } from "@/lib/sample/clients";
 import { createReturn, toReturn, type TaxRow } from "./tax";
@@ -194,7 +194,7 @@ export async function acceptLead(env: AppEnv, a: Actor, leadId: string) {
   const stmts: D1PreparedStatement[] = [env.DB.prepare("UPDATE clients SET status = 'onboarding', since = ?, updated_at = ?, rev = rev + 1 WHERE id = ? AND status = 'prospect'").bind(t.slice(0, 10), t, p.id)];
   if (intakes.length && !(await one(env.DB, "SELECT 1 FROM client_enrollments WHERE client_id = ? AND service = 'books'", p.id))) {
     const signed = intakes.map((i) => json<Proposal | null>(i.proposal, null)).find((x) => x?.status === "signed");
-    stmts.push(env.DB.prepare("INSERT INTO client_enrollments (id, client_id, service, title, stage, progress, status, staff_id, started_at, due_at, fee) VALUES (?, ?, 'books', 'Monthly bookkeeping', 'Waiting on Client Items', 0, 'active', ?, ?, NULL, ?)").bind(`e-${randomToken(6).replace(/[^A-Za-z0-9]/g, "x")}`, p.id, l.owner_id, t, signed ? proposalTotals(signed).monthly : 0));
+    stmts.push(env.DB.prepare("INSERT INTO client_enrollments (id, client_id, service, title, stage, progress, status, staff_id, started_at, due_at, fee) VALUES (?, ?, 'books', ?, 'Waiting on Client Items', 0, 'active', ?, ?, NULL, ?)").bind(`e-${randomToken(6).replace(/[^A-Za-z0-9]/g, "x")}`, p.id, signed && recurring(signed).per === "quarter" ? "Quarterly bookkeeping" : "Monthly bookkeeping", l.owner_id, t, signed ? recurring(signed).amount : 0));
   }
   // Each tax return gets its Tax Preparation engagement on the client profile.
   const returns = (await all<TaxRow>(env.DB, "SELECT * FROM tax_returns WHERE client_id = ? AND enrollment_id IS NULL", p.id)).map(toReturn);

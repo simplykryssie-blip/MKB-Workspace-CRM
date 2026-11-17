@@ -8,8 +8,8 @@ import { Card } from "@/components/ui/Card";
 import { LogoMark } from "@/components/brand/Logo";
 import { SignaturePad } from "@/components/ui/SignaturePad";
 import { LetterView } from "@/components/engagement/LetterView";
-import { money } from "@/lib/fees/config";
-import { proposalTotals, type ProposalLine } from "@/lib/books/proposal";
+import { money, QUARTERLY_TERMS } from "@/lib/fees/config";
+import { isQuarterly, proposalTotals, type ProposalLine } from "@/lib/books/proposal";
 
 /**
  * The client's proposal link: MKB's reviewed bookkeeping price and the
@@ -65,6 +65,8 @@ const amount = (l: Omit<ProposalLine, "id">) => (l.billing === "quote" ? "Custom
 function Sign({ data, base, onDone, onErr }: { data: Loaded; base: string; onDone: (d: { emailed: boolean; next?: NextStop }) => void; onErr: (e: { status: number; message: string }) => void }) {
   const p = data.proposal;
   const t = proposalTotals(p);
+  const q = isQuarterly(p);
+  const rec = q ? "quarterly" : "monthly";
   const [accepted, setAccepted] = useState(false);
   const [name, setName] = useState("");
   const [drawn, setDrawn] = useState<string | null>(null);
@@ -92,11 +94,12 @@ function Sign({ data, base, onDone, onErr }: { data: Loaded; base: string; onDon
         {p.message && <p className="mt-2 whitespace-pre-line rounded-xl bg-surface-2 px-3 py-2.5 text-[14px] text-ink-2">{p.message}</p>}
         <table className="mt-3 w-full text-[14px]">
           <tbody>
-            {p.lines.filter((l) => l.billing === "monthly").map((l, i) => <tr key={i}><td className="py-1 text-ink-2">{l.label}</td><td className="py-1 text-right tabular-nums">{amount(l)}/mo</td></tr>)}
-            <tr className="border-t border-line font-semibold"><td className="py-1.5">Monthly total</td><td className="py-1.5 text-right tabular-nums">{t.startingAt ? "from " : ""}{money(t.monthly)}/mo</td></tr>
-            {p.lines.filter((l) => l.billing !== "monthly").map((l, i) => <tr key={`o${i}`}><td className="py-1 text-ink-2">{l.label} {l.billing === "one_time" && <span className="text-muted">(one-time)</span>}</td><td className="py-1 text-right tabular-nums">{amount(l)}</td></tr>)}
+            {p.lines.filter((l) => l.billing === rec).map((l, i) => <tr key={i}><td className="py-1 text-ink-2">{l.label}</td><td className="py-1 text-right tabular-nums">{amount(l)}/{q ? "quarter" : "mo"}</td></tr>)}
+            <tr className="border-t border-line font-semibold"><td className="py-1.5">{q ? "Quarterly total" : "Monthly total"}</td><td className="py-1.5 text-right tabular-nums">{t.startingAt ? "from " : ""}{money(q ? t.quarterly : t.monthly)}/{q ? "quarter" : "mo"}</td></tr>
+            {p.lines.filter((l) => l.billing !== rec).map((l, i) => <tr key={`o${i}`}><td className="py-1 text-ink-2">{l.label} {l.billing === "one_time" && <span className="text-muted">(one-time)</span>}</td><td className="py-1 text-right tabular-nums">{amount(l)}</td></tr>)}
           </tbody>
         </table>
+        {q && <p className="mt-3 rounded-xl bg-warning-soft/50 px-3 py-2.5 text-[13.5px] font-medium text-warning-ink">Quarterly bookkeeping: {QUARTERLY_TERMS}</p>}
         {p.planIncludes.length > 0 && (
           <div className="mt-4">
             <p className="text-[13px] font-semibold text-ink">Your plan includes</p>

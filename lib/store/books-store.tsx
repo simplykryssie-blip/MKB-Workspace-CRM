@@ -185,7 +185,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
   const a = {
     reset: () => dispatch({ type: "reset" }),
     /** Starts a bookkeeping workspace for a client business; its first month opens for client entry. */
-    createWorkspace(input: { clientId: string; enrollmentId?: string; businessName: string; entityType: string; plan: string; monthlyFee: number; reports: ReportType[]; includes: string[]; bookkeeperId: string; reviewerId: string; accounts: { name: string; kind: "bank" | "credit_card"; mask: string; institution: string }[]; firstPeriod: string; qboCompany: string }): string {
+    createWorkspace(input: { clientId: string; enrollmentId?: string; businessName: string; entityType: string; plan: string; monthlyFee: number; cadence?: "monthly" | "quarterly"; reports: ReportType[]; includes: string[]; bookkeeperId: string; reviewerId: string; accounts: { name: string; kind: "bank" | "credit_card"; mask: string; institution: string }[]; firstPeriod: string; qboCompany: string }): string {
       const id = uid("bw");
       const at = nowIso();
       const accounts = input.accounts.map((x) => ({ ...x, id: uid("acct"), mask: x.mask.replace(/\D/g, "").slice(-4) }));
@@ -193,7 +193,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       const month: BooksMonth = { id: `${id}-${p}`, period: p, stage: "Waiting on Client Items", assignedTo: input.bookkeeperId, reopenCount: 0, recons: accounts.map((x) => ({ accountId: x.id, status: "not_started" as const })), reviewItems: [], reports: input.reports.map((t) => ({ id: uid("rp"), type: t, period: p, review: "not_started" as const, delivery: "not_delivered" as const })), reviewNotes: [], history: [{ stage: "Waiting on Client Items", at, by: "system" }] };
       const w: BooksWorkspace = {
         id, clientId: input.clientId, enrollmentId: input.enrollmentId, businessName: input.businessName.trim(), entityType: input.entityType, bookkeeperId: input.bookkeeperId, reviewerId: input.reviewerId,
-        service: { plan: input.plan, monthlyFee: input.monthlyFee, reports: input.reports, includes: input.includes }, extras: [],
+        service: { plan: input.plan, monthlyFee: input.monthlyFee, cadence: input.cadence ?? "monthly", reports: input.reports, includes: input.includes }, extras: [],
         qbo: { status: "not_connected", companyName: input.qboCompany.trim() || input.businessName.trim(), access: "qboa" },
         accounts, months: [month], tasks: standardTasks(p), notes: [],
         activity: [{ id: uid("x"), kind: "status", text: `Bookkeeping started — ${input.plan} plan, first month ${periodLabel(p)}`, at, actor: "staff" }],
@@ -494,7 +494,11 @@ function useBooksSync(state: State, dispatch: React.Dispatch<Action>) {
     try {
       const r = await call<{ workspaces: RevWorkspace[] }>("GET", "/api/books");
       r.workspaces.forEach((x) => { revs.current.set(x.id, x.rev ?? 1); synced.current.set(x.id, x); });
-      dispatch({ type: "hydrate", workspaces: r.workspaces });
+      // Keep workspaces started on this screen that haven't reached the server yet (a load finishing
+      // just after "Start bookkeeping" must not wipe the new one before it's saved).
+      const onServer = new Set(r.workspaces.map((x) => x.id));
+      const unsaved = stateRef.current.workspaces.filter((w) => !onServer.has(w.id) && !revs.current.has(w.id));
+      dispatch({ type: "hydrate", workspaces: [...r.workspaces, ...unsaved] });
     } catch (e) {
       if (!(e instanceof RemoteError && (e.status === 401 || e.status === 403))) notify("Couldn't load bookkeeping workspaces.");
     }

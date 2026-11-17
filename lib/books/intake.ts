@@ -9,11 +9,15 @@
  */
 import type { DocSpec } from "@/lib/tax/config";
 import { all, has, is, not, rowsOf, yes, type Answers, type Q, type Section } from "@/lib/tax/interview/engine";
-import { DEFAULT_SERVICE_FEES, booksQuote, type BooksPlan, type ServiceFees } from "@/lib/fees/config";
+import { DEFAULT_SERVICE_FEES, QUARTERLY_TERMS, booksQuote, type BooksPlan, type ServiceFees } from "@/lib/fees/config";
 
 const YN = "yesno" as const;
 /** Add-ons a client can pick in the intake (frequency, extra accounts/locations, QuickBooks setup and catch-up are worked out from other answers). */
-export const pickableAddOns = (books: ServiceFees["books"]) => books.addOns.filter((x) => !["biweekly", "weekly", "accounts", "locations", "catchup", "qbo"].includes(x.key));
+/** What the books need when they're behind (drives catch-up vs cleanup pricing). */
+export const CATCHUP_OPT = "Catch-up — some months were never entered";
+export const CLEANUP_OPT = "Cleanup — books were kept but have errors";
+export const BOTH_OPT = "Both catch-up and cleanup";
+export const pickableAddOns = (books: ServiceFees["books"]) => books.addOns.filter((x) => !["biweekly", "weekly", "accounts", "locations", "catchup", "cleanup", "qbo"].includes(x.key));
 const ADDON_OPTIONS = pickableAddOns(DEFAULT_SERVICE_FEES.books).map((x) => x.name);
 /** "••••1234" from a saved (masked) account number. */
 export const last4Of = (v?: string) => { const d = (v ?? "").replace(/\D/g, ""); return d.length >= 4 ? `••••${d.slice(-4)}` : ""; };
@@ -117,7 +121,9 @@ const status: Section = {
   questions: [
     { id: "upToDate", label: "How up to date are your books?", type: "choice", options: ["Current — reconciled through last month", "Behind a few months", "Behind a year or more", "Never been kept", "Not sure"] },
     { id: "lastReconciled", label: "About when were the books last reconciled?", type: "text", placeholder: "e.g. June 2025", show: is("upToDate", "Behind a few months", "Behind a year or more", "Not sure") },
-    { id: "catchUpFrom", label: "From what month do the books need to be caught up?", type: "text", placeholder: "e.g. January 2025", show: not(is("upToDate", "Current — reconciled through last month")), help: "Usually the start of the last year a tax return wasn't filed from good books. Catch-up work is quoted separately." },
+    { id: "booksWork", label: "What do your books need?", type: "choice", options: [CATCHUP_OPT, CLEANUP_OPT, BOTH_OPT, "Not sure"], show: not(is("upToDate", "Current — reconciled through last month")), help: "Catch-up means months that were never entered. Cleanup means books that were kept but have errors or don't match the bank." },
+    { id: "catchUpFrom", label: "From what month do the books need to be caught up?", type: "text", placeholder: "e.g. January 2025", show: not(is("upToDate", "Current — reconciled through last month")), help: "Usually the start of the earliest tax year that still needs to be filed from good books." },
+    { id: "catchUpMonths", label: "How many months need to be caught up?", type: "number", optional: true, show: is("booksWork", CATCHUP_OPT, BOTH_OPT), help: "Count every month not entered, through last month. Example: all of 2025 plus January–October 2026 = 22 months." },
     { id: "keptBy", label: "Who has been keeping the books?", type: "choice", options: ["I do it myself", "An employee", "An outside bookkeeper or CPA", "No one"] },
     { id: "priorAccess", label: "Can we get files or access from the previous bookkeeper?", type: YN, show: is("keptBy", "An outside bookkeeper or CPA") },
     { id: "priorFinancials", label: "Do you have a balance sheet or financial statements from the end of last year?", type: YN, docs: [doc("Prior year-end balance sheet and profit & loss", "Financial statements")] },
@@ -337,7 +343,12 @@ export function addOnKeysFrom(a: Answers, books: ServiceFees["books"]) {
   if (a.frequency === "Every two weeks") keys.add("biweekly");
   if (a.frequency === "Weekly") keys.add("weekly");
   if (a.setupQbo === "Yes" || a.desktopMove === "Yes") keys.add("qbo");
-  if (typeof a.upToDate === "string" && !a.upToDate.startsWith("Current")) keys.add("catchup");
+  // Behind: catch-up (months never entered) and/or cleanup (kept but wrong). Older intakes without the question: catch-up.
+  if (typeof a.upToDate === "string" && !a.upToDate.startsWith("Current")) {
+    const w = (a.booksWork as string) ?? "";
+    if (w !== CLEANUP_OPT) keys.add("catchup");
+    if (w === CLEANUP_OPT || w === BOTH_OPT) keys.add("cleanup");
+  }
   // Tracking who owes them / who they owe is A/R and A/P work, which plans don't include.
   if (a.invoices === "Yes" || picked(a, "reports").includes("Who owes us (A/R aging)")) keys.add("ar");
   if (a.bills === "Yes" || picked(a, "reports").includes("Who we owe (A/P aging)")) keys.add("ap");
@@ -349,7 +360,9 @@ export function quoteFor(a: Answers, books: ServiceFees["books"]) {
   const tx = transactionsFrom(a);
   const acc = accountsFrom(a);
   const keys = addOnKeysFrom(a, books);
-  const q = booksQuote(books, { transactions: tx.count, accounts: acc.count, locations: Math.max(1, Number(a.locations) || 1), addOnKeys: keys });
+  const cadence = a.frequency === "Quarterly" ? "quarterly" : "monthly";
+  const catchupMonths = Math.max(0, Math.min(120, Math.round(Number(a.catchUpMonths) || 0)));
+  const q = booksQuote(books, { transactions: tx.count, accounts: acc.count, locations: Math.max(1, Number(a.locations) || 1), addOnKeys: keys, cadence, catchupMonths });
   const chosen = new Set(picked(a, "addons"));
   const name = (k: string) => books.addOns.find((x) => x.key === k)?.name ?? k;
   const notes: string[] = [];
@@ -357,6 +370,9 @@ export function quoteFor(a: Answers, books: ServiceFees["books"]) {
   if (acc.processors.length) notes.push(`${acc.processors.join(", ")} ${acc.processors.length === 1 ? "is counted as a financial account" : "are counted as financial accounts"} to reconcile.`);
   if (keys.includes("ar") && !chosen.has(name("ar"))) notes.push(`${name("ar")} added because you invoice customers or want the A/R aging report.`);
   if (keys.includes("ap") && !chosen.has(name("ap"))) notes.push(`${name("ap")} added because you have vendor bills or want the A/P aging report.`);
+  if (cadence === "quarterly") notes.push(`Quarterly bookkeeping: 3 months of the plan less ${books.quarterlyDiscountPct}%, per quarter. ${QUARTERLY_TERMS}`);
+  if (keys.includes("catchup")) notes.push(catchupMonths ? `Catch-up: ${catchupMonths} month${catchupMonths === 1 ? "" : "s"} behind${a.catchUpFrom ? ` (from ${a.catchUpFrom})` : ""}, priced per month at ${books.catchupPctOfPlan}% of the ${q.plan.key} plan.` : "Catch-up is a custom quote — the number of months behind wasn't given. Confirm the months, then price it.");
+  if (keys.includes("cleanup")) notes.push("Cleanup is a starting price — confirm the scope (months and accounts with errors) before sending.");
   if (a.hasEmployees === "Yes") notes.push("Payroll processing and payroll tax filings aren't part of bookkeeping plans — we'll talk with you about payroll separately.");
   return { ...q, notes };
 }

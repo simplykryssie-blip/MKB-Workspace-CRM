@@ -278,7 +278,7 @@ function ClientsTab({ byId }: { byId: Map<string, Client> }) {
                 </div>
                 <div className="mt-3 flex items-center justify-between text-[12.5px] text-muted">
                   <span>{openTasks(w).length} open client task{openTasks(w).length === 1 ? "" : "s"}</span>
-                  <span className={bal > 0 ? "font-semibold text-danger-ink" : ""}>{bal > 0 ? `${usd(bal)} due` : `${usd(w.service.monthlyFee)}/mo`}</span>
+                  <span className={bal > 0 ? "font-semibold text-danger-ink" : ""}>{bal > 0 ? `${usd(bal)} due` : `${usd(w.service.monthlyFee)}/${w.service.cadence === "quarterly" ? "qtr" : "mo"}`}</span>
                 </div>
               </Link>
             </li>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Copy, FileSignature, Mail, Plus, RotateCcw, Save, Trash2, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -9,9 +9,9 @@ import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { call, RemoteError } from "@/lib/sync/remote";
 import { useServiceFees } from "@/lib/fees/use-fees";
-import { money } from "@/lib/fees/config";
+import { money, quarterlyOf, QUARTERLY_TERMS } from "@/lib/fees/config";
 import { quoteFor } from "@/lib/books/intake";
-import { BILLING_LABEL, booksStage, lineId, proposalFromQuote, proposalTotals, STAGE_LABEL, type ProposalBilling, type ProposalLine } from "@/lib/books/proposal";
+import { BILLING_LABEL, booksStage, isQuarterly, lineId, proposalFromQuote, proposalTotals, recurring, STAGE_LABEL, type ProposalBilling, type ProposalLine } from "@/lib/books/proposal";
 import { fmtDate, relTime } from "@/lib/format";
 import type { BooksIntake } from "@/lib/server/books-intake";
 import type { Client } from "@/lib/types";
@@ -34,6 +34,12 @@ export function ProposalPanel({ intake, client, reload }: { intake: BooksIntake;
   const [sending, setSending] = useState(false);
   const [email, setEmail] = useState((typeof intake.answers.email === "string" && intake.answers.email) || client.email || "");
   const [sentUrl, setSentUrl] = useState<string | null>(null);
+  // Fees can arrive after the first render: start from the quote once it exists (only if nothing is filled in yet).
+  const startKey = start ? `${start.plan}|${start.version}|${start.updatedAt}` : "";
+  useEffect(() => {
+    if (!start || plan) return;
+    setPlan(start.plan); setLines(start.lines); setMessage(start.message ?? "");
+  }, [startKey]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!F.fees || !start) return <Card className="p-6 text-[13px] text-muted">Loading the price review…</Card>;
   const p = intake.proposal;
   const stage = booksStage(intake);
@@ -41,12 +47,19 @@ export function ProposalPanel({ intake, client, reload }: { intake: BooksIntake;
   const dirty = !p || JSON.stringify([plan, lines.map((l) => [l.label, l.billing, l.amount, !!l.startingAt]), message.trim()]) !== JSON.stringify([p.plan, p.lines.map((l) => [l.label, l.billing, l.amount, !!l.startingAt]), p.message ?? ""]);
   const t = proposalTotals({ lines });
   const plans = F.fees.books.plans;
+  const disc = F.fees.books.quarterlyDiscountPct ?? 10;
+  const quarterly = isQuarterly({ lines });
+  const rec = recurring({ lines });
+  // Switch the recurring lines between monthly and quarterly (3 months less the quarterly discount).
+  const switchCadence = () => setLines((x) => x.map((l) => quarterly
+    ? (l.billing === "quarterly" ? { ...l, billing: "monthly" as const, amount: Math.round(l.amount / (3 * (1 - disc / 100))) } : l)
+    : (l.billing === "monthly" ? { ...l, billing: "quarterly" as const, amount: quarterlyOf(l.amount, disc) } : l)));
   const upd = (id: string, patch: Partial<ProposalLine>) => setLines((x) => x.map((l) => (l.id === id ? { ...l, ...patch } : l)));
   const pickPlan = (key: string) => {
     const np = plans.find((x) => x.key === key);
     if (!np) return;
     // Swap the plan line's name and price; everything else stays as reviewed.
-    setLines((x) => x.map((l) => (l.billing === "monthly" && l.label === `${plan} plan` ? { ...l, label: `${np.key} plan`, amount: np.fee, startingAt: np.startingAt || undefined } : l)));
+    setLines((x) => x.map((l) => ((l.billing === "monthly" || l.billing === "quarterly") && l.label === `${plan} plan` ? { ...l, label: `${np.key} plan`, amount: l.billing === "quarterly" ? quarterlyOf(np.fee, disc) : np.fee, startingAt: np.startingAt || undefined } : l)));
     setPlan(key);
   };
   const save = async () => {
@@ -86,7 +99,7 @@ export function ProposalPanel({ intake, client, reload }: { intake: BooksIntake;
 
       {auto && (
         <div className="mt-3 rounded-xl border border-line bg-surface-2 p-3 text-[12.5px] text-ink-2">
-          <p><b>Automatic quote:</b> {auto.plan.key} · {money(auto.monthlyTotal)}/mo{auto.oneTimeTotal ? ` + ${money(auto.oneTimeTotal)} one-time` : ""} — a starting point only.</p>
+          <p><b>Automatic quote:</b> {auto.plan.key} · {money(auto.monthlyTotal)}/{auto.cadence === "quarterly" ? "quarter" : "mo"}{auto.oneTimeTotal ? ` + ${money(auto.oneTimeTotal)} one-time` : ""} — a starting point only.</p>
           {!!auto.notes?.length && <ul className="mt-1 space-y-0.5 text-muted">{auto.notes.map((n) => <li key={n}>• {n}</li>)}</ul>}
         </div>
       )}
@@ -112,8 +125,10 @@ export function ProposalPanel({ intake, client, reload }: { intake: BooksIntake;
           </tbody>
         </table>
       </div>
-      <Button size="sm" variant="ghost" icon={Plus} className="mt-1" onClick={() => setLines((x) => [...x, { id: lineId(), label: "", billing: "monthly", amount: 0 }])}>Add a line</Button>
-      <p className="mt-2 text-[13.5px] text-ink">Monthly total: <b className="tabular-nums">{t.startingAt ? "from " : ""}{money(t.monthly)}/mo</b>{t.oneTime ? <> · one-time <b className="tabular-nums">{money(t.oneTime)}</b></> : null}{t.quoted.length ? ` · ${t.quoted.length} custom-quoted` : ""}{auto && t.monthly !== auto.monthlyTotal && <span className="text-muted"> (automatic quote {money(auto.monthlyTotal)}/mo)</span>}</p>
+      <Button size="sm" variant="ghost" icon={Plus} className="mt-1" onClick={() => setLines((x) => [...x, { id: lineId(), label: "", billing: quarterly ? "quarterly" : "monthly", amount: 0 }])}>Add a line</Button>
+      <Button size="sm" variant="ghost" className="ml-1 mt-1" onClick={switchCadence}>{quarterly ? "Switch to monthly billing" : `Switch to quarterly billing (−${disc}%)`}</Button>
+      <p className="mt-2 text-[13.5px] text-ink">{quarterly ? "Quarterly" : "Monthly"} total: <b className="tabular-nums">{t.startingAt ? "from " : ""}{money(rec.amount)}/{quarterly ? "quarter" : "mo"}</b>{t.oneTime ? <> · one-time <b className="tabular-nums">{money(t.oneTime)}</b></> : null}{t.quoted.length ? ` · ${t.quoted.length} custom-quoted` : ""}{auto && rec.amount !== auto.monthlyTotal && <span className="text-muted"> (automatic quote {money(auto.monthlyTotal)})</span>}</p>
+      {quarterly && <p className="mt-1 rounded-lg bg-warning-soft/50 px-3 py-1.5 text-[12.5px] text-warning-ink">Quarterly: {QUARTERLY_TERMS} The proposal and engagement letter say so.</p>}
       <label className="mt-3 block text-[13px] font-medium text-ink-2">Note to the client (optional)<textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={2} placeholder="e.g. We moved you to Growth because of your monthly volume; your catch-up months will be quoted after we see your statements." className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-[13.5px] text-ink" /></label>
 
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4">
@@ -124,7 +139,7 @@ export function ProposalPanel({ intake, client, reload }: { intake: BooksIntake;
       </div>
       {p?.status === "sent" && <p className="mt-2 text-[12.5px] text-muted">Sent to {p.sentTo} {p.sentAt ? relTime(p.sentAt) : ""}{intake.proposalLink ? ` · ${intake.proposalLink.openedAt ? `opened ${relTime(intake.proposalLink.lastOpenedAt ?? intake.proposalLink.openedAt)}` : "not opened yet"} · expires ${fmtDate(intake.proposalLink.expiresAt)}` : ""}.</p>}
       {p?.status === "signed" && <p className="mt-2 text-[12.5px] text-success-ink">Signed by {p.signedName} on {p.signedAt ? fmtDate(p.signedAt) : ""} (drawn signature). The signed proposal and engagement letter are in the client&rsquo;s Documents.</p>}
-      {!!p?.previous?.length && <p className="mt-1 text-[12px] text-muted">Earlier signed versions: {p.previous.map((x) => `v${x.version} ${money(x.monthlyTotal)}/mo, signed ${fmtDate(x.signedAt)} by ${x.signedName}`).join("; ")}.</p>}
+      {!!p?.previous?.length && <p className="mt-1 text-[12px] text-muted">Earlier signed versions: {p.previous.map((x) => `v${x.version} ${money(x.monthlyTotal)}, signed ${fmtDate(x.signedAt)} by ${x.signedName}`).join("; ")}.</p>}
 
       <Modal open={sending} onClose={() => { setSending(false); if (sentUrl) reload(); }} title="Send proposal & engagement letter" description="The client opens a private link (no login) to see this price, read the engagement letter and sign with a drawn signature."
         footer={sentUrl ? <Button variant="primary" onClick={() => { setSending(false); reload(); }}>Done</Button> : <><Button onClick={() => setSending(false)}>Cancel</Button><Button variant="primary" icon={Mail} disabled={busy || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())} onClick={send}>{busy ? "Sending…" : "Email the proposal"}</Button></>}>

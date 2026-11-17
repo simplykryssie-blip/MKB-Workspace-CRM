@@ -53,7 +53,7 @@ import { PaymentDialog, downloadDoc } from "@/components/crm/dialogs";
 import { staffList, staffById } from "@/lib/sample/clients";
 import { useClients } from "@/lib/store/clients-store";
 import { balanceDue, currentMonth, nextAction, openTasks, unresolved, useBooks, workspaceDocs, workspaceInvoices, workspaceMessages } from "@/lib/store/books-store";
-import { DEFAULT_BILLING, QBO_ACCESS, QBO_STATUS, REPORT_TYPES, REVIEW_KIND, STAGE_META, TASK_TYPE, closeTarget, periodLabel, type BooksMonth, type BooksWorkspace, type ClientTaskType, type ReportType, type WorkspaceBilling } from "@/lib/books/config";
+import { DEFAULT_BILLING, QBO_ACCESS, QBO_STATUS, REPORT_TYPES, REVIEW_KIND, STAGE_META, TASK_TYPE, closeTarget, periodLabel, type BooksMonth, type BooksWorkspace, type ClientTaskType, type ReportType, type WorkspaceBilling, quarterOf } from "@/lib/books/config";
 import { fileSize, fmtDate, fmtDateTime, relTime, usd } from "@/lib/format";
 import { formatPhone } from "@/lib/validation";
 import type { Client } from "@/lib/types";
@@ -235,7 +235,7 @@ function OverviewTab({ w, c, m, go }: { w: BooksWorkspace; c: Client; m: BooksMo
           <dt className="text-muted">Email</dt><dd className="font-medium text-ink"><a href={`mailto:${c.email}`} className="inline-flex items-center gap-1 hover:text-accent"><AtSign size={13} className="text-muted" />{c.email}</a></dd>
           <dt className="text-muted">Phone</dt><dd className="font-medium text-ink"><span className="inline-flex items-center gap-1"><Phone size={13} className="text-muted" />{c.phone && c.phone !== "—" ? formatPhone(c.phone) : "—"}</span></dd>
           <dt className="text-muted">Bookkeeper</dt><dd className="font-medium text-ink">{staffById(w.bookkeeperId).name}</dd>
-          <dt className="text-muted">Service</dt><dd className="font-medium text-ink">{w.service.plan} · {usd(w.service.monthlyFee)}/month</dd>
+          <dt className="text-muted">Service</dt><dd className="font-medium text-ink">{w.service.plan} · {usd(w.service.monthlyFee)}/{w.service.cadence === "quarterly" ? "quarter (paid upfront)" : "month"}</dd>
           <dt className="text-muted">QuickBooks</dt><dd className="font-medium text-ink">{w.qbo.companyName}<br /><span className="text-[12.5px] font-normal text-muted">{QBO_ACCESS[w.qbo.access].label} · {QBO_STATUS[w.qbo.status].label}</span></dd>
           <dt className="text-muted">Client since</dt><dd className="font-medium text-ink">{fmtDate(w.startedAt)}</dd>
         </dl>
@@ -798,7 +798,7 @@ function AutoBilling({ w, billedThisMonth }: { w: BooksWorkspace; billedThisMont
   const sel = "h-9 rounded-lg border border-line bg-surface px-2 text-[13.5px] text-ink";
   return (
     <Card>
-      <CardHeader icon={Repeat} title="Automatic monthly invoice" subtitle={b.auto ? `Next: ${next ? next.toLocaleDateString("en-US", { month: "long", day: "numeric" }) : `tomorrow morning (${today.toLocaleDateString("en-US", { month: "long" })} isn't billed yet)`} — ${usd(w.service.monthlyFee)}${w.extras.some((x) => !x.invoiced) ? " + additional charges" : ""}` : "Off — invoices are created when you click Invoice now"} />
+      <CardHeader icon={Repeat} title={w.service.cadence === "quarterly" ? "Automatic quarterly invoice" : "Automatic monthly invoice"} subtitle={b.auto ? `Next: ${next ? next.toLocaleDateString("en-US", { month: "long", day: "numeric" }) : `tomorrow morning (${today.toLocaleDateString("en-US", { month: "long" })} isn't billed yet)`} — ${usd(w.service.monthlyFee)}${w.extras.some((x) => !x.invoiced) ? " + additional charges" : ""}` : "Off — invoices are created when you click Invoice now"} />
       <div className="space-y-3 px-5 pb-5 text-[13.5px] sm:px-6">
         <label className="flex items-center gap-2 font-medium text-ink"><input type="checkbox" checked={b.auto} onChange={(e) => set({ auto: e.target.checked })} /> Bill this client automatically every month</label>
         <div className={`grid gap-3 sm:grid-cols-2 ${b.auto ? "" : "pointer-events-none opacity-50"}`}>
@@ -810,7 +810,7 @@ function AutoBilling({ w, billedThisMonth }: { w: BooksWorkspace; billedThisMont
           </label>
         </div>
         <label className={`flex items-center gap-2 text-ink-2 ${b.auto ? "" : "pointer-events-none opacity-50"}`}><input type="checkbox" checked={b.email} onChange={(e) => set({ email: e.target.checked })} /> Email the invoice with a Pay online link</label>
-        <p className="text-[12px] text-muted">Each month is billed once — the plan&rsquo;s monthly fee plus any additional charges not invoiced yet. Runs every morning; if a billing day is missed, it catches up the next morning.</p>
+        <p className="text-[12px] text-muted">{w.service.cadence === "quarterly" ? <>Quarterly client: billed once per quarter (January, April, July and October, on the billing day), <b>due on receipt</b> &mdash; paid in full before any work on that quarter begins. Includes any additional charges not invoiced yet.</> : <>Each month is billed once &mdash; the plan&rsquo;s monthly fee plus any additional charges not invoiced yet. Runs every morning; if a billing day is missed, it catches up the next morning.</>}</p>
       </div>
     </Card>
   );
@@ -833,7 +833,7 @@ function BillingTab({ w, c, open }: { w: BooksWorkspace; c: Client; open: (d: Dl
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {(
           [
-            ["Monthly fee", usd(w.service.monthlyFee), "text-ink"],
+            [w.service.cadence === "quarterly" ? "Quarterly fee" : "Monthly fee", usd(w.service.monthlyFee), "text-ink"],
             ["Billed to date", usd(billed), "text-ink"],
             ["Paid", usd(paid), "text-success-ink"],
             ["Balance due", usd(billed - paid), billed - paid > 0 ? "text-danger-ink" : "text-faint"],
@@ -847,11 +847,11 @@ function BillingTab({ w, c, open }: { w: BooksWorkspace; c: Client; open: (d: Dl
           <Card>
             <CardHeader icon={Receipt} title="Bookkeeping service" />
             <div className="space-y-2 px-5 pb-5 text-[13.5px] sm:px-6">
-              <p className="font-semibold text-ink">{w.service.plan} — {usd(w.service.monthlyFee)}/month</p>
+              <p className="font-semibold text-ink">{w.service.plan} — {usd(w.service.monthlyFee)}/{w.service.cadence === "quarterly" ? "quarter, paid before each quarter\u2019s work begins" : "month"}</p>
               <ul className="space-y-1 text-ink-2">{w.service.includes.map((x) => <li key={x} className="flex items-start gap-1.5"><CheckCircle2 size={14} className="mt-0.5 shrink-0 text-success" /> {x}</li>)}</ul>
             </div>
           </Card>
-          {BACKEND && <AutoBilling w={w} billedThisMonth={invoices.some((i) => i.status !== "void" && i.description.includes(periodLabel(thisMonth)))} />}
+          {BACKEND && <AutoBilling w={w} billedThisMonth={invoices.some((i) => i.status !== "void" && i.description.includes(w.service.cadence === "quarterly" ? quarterOf(thisMonth).label : periodLabel(thisMonth)))} />}
           <Card>
             <CardHeader title="Additional service charges" action={<Button size="sm" icon={Plus} onClick={() => open("extra")}>Add charge</Button>} />
             <ul className="divide-y divide-line border-t border-line">

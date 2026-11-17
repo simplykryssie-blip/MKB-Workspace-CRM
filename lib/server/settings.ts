@@ -39,6 +39,8 @@ export async function saveFees(env: AppEnv, a: Actor, b: { fees?: ServiceFees })
       overagePerTransaction: Number(f.books?.overagePerTransaction),
       overagePerAccount: Number(f.books?.overagePerAccount),
       upgradeAfterMonths: Math.round(Number(f.books?.upgradeAfterMonths)),
+      quarterlyDiscountPct: Number(f.books?.quarterlyDiscountPct ?? DEFAULT_SERVICE_FEES.books.quarterlyDiscountPct),
+      catchupPctOfPlan: Number(f.books?.catchupPctOfPlan ?? DEFAULT_SERVICE_FEES.books.catchupPctOfPlan),
     },
     expunge: { baseFee: Number(f.expunge?.baseFee), chargesIncluded: Math.round(Number(f.expunge?.chargesIncluded)), extraChargeFee: Number(f.expunge?.extraChargeFee) },
     taxPartners: { software: String(f.taxPartners?.software ?? "").trim().slice(0, 80), serviceBureau: String(f.taxPartners?.serviceBureau ?? "").trim().slice(0, 80), bankProduct: String(f.taxPartners?.bankProduct ?? "").trim().slice(0, 80) },
