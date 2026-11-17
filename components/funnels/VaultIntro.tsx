@@ -3,18 +3,19 @@
 import { useEffect, useLayoutEffect, useState } from "react";
 
 /**
- * The Money Vault intro, made from MKB's own vault photo. The room and doorway are the photo
- * (with the open door taken out); the closed door is built from the photo's own frame ring,
- * bolts and hand wheel. "Open the vault" spins the wheel, swings the door open on its hinge
- * (its back is the photographed door), lands on the real photo, lights the doorway, pushes in
- * and flashes into the page. About 4 seconds. Skip intro / Esc; once per browser session;
+ * The Money Vault intro, made from MKB's two vault photos (door closed, door open). It starts on
+ * the closed photo; "Open the vault" spins the wheel, swings the real door open on its hinge
+ * (the open room shows behind it), lands on the open photo, lights the doorway, pushes in and
+ * flashes into the page. About 4 seconds. Skip intro / Esc; once per browser session;
  * skipped for reduced motion.
  *
- * Scene coordinates are the photo's own pixels (1672 x 941): doorway centre (1097, 470),
- * doorway radius ~395, closed door radius 430, hinge on the doorway's left edge.
+ * Scene coordinates are the photos' own pixels (1672 x 941; both photos line up): door centre
+ * (1092, 438), door radius ~420, hinge axis at x 615 on the left.
  */
 const SEEN = "mkb_mv_intro_seen";
-const PW = 1672, PH = 941, CX = 1097, CY = 470, DOOR_R = 430;
+const PW = 1672, PH = 941, CX = 1092, CY = 438, DOOR_R = 420;
+/** The door cut from the closed photo: left edge = hinge axis (x 615), from y 16; 901 x 844. */
+const DX = 615, DY = 16, DW = 901, DH = 844, HUBX = 1095 - DX, HUBY = 437 - DY, WR = 292;
 
 type Fit = { s: number; tx: number; ty: number; portrait: boolean };
 function fit(): Fit {
@@ -22,8 +23,9 @@ function fit(): Fit {
   const portrait = vw / vh < 1.05;
   if (portrait) {
     // Phones: the door fills the width, centred a little above the middle; the words sit underneath.
-    const s = Math.min(vw / 900, (vh * 0.6) / 900);
-    return { s, tx: vw / 2 - CX * s, ty: vh * 0.39 - CY * s, portrait };
+    // Centred on the whole door including its hinge (x 580..1516).
+    const s = Math.min(vw / 960, (vh * 0.6) / 960);
+    return { s, tx: vw / 2 - 1048 * s, ty: vh * 0.39 - CY * s, portrait };
   }
   const s = Math.min(Math.max(vw / PW, vh / PH), (vh * 0.8) / (2 * DOOR_R));
   return { s, tx: vw / 2 - CX * s, ty: vh * 0.035 + DOOR_R * s - CY * s, portrait };
@@ -71,19 +73,21 @@ export function VaultIntro({ taxYear }: { taxYear: number }) {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img className="vi-plate" src="/campaigns/vault-plate.webp" srcSet="/campaigns/vault-plate-1100.webp 1100w, /campaigns/vault-plate.webp 1672w" sizes="100vw" alt="" width={PW} height={PH} />
           {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img className="vi-plate" src="/campaigns/vault-room.webp" srcSet="/campaigns/vault-room-1100.webp 1100w, /campaigns/vault-room.webp 1672w" sizes="100vw" alt="" width={PW} height={PH} />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img className="vi-photo" src="/campaigns/money-vault-1672.webp" alt="" width={PW} height={PH} />
           <div className="vi-glow"><div className="vi-rays" /></div>
           <div className="vi-door">
             <div className="vi-face vi-front">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/campaigns/vault-door.webp" alt="" width={860} height={860} />
+              <img className="vi-door-img" src="/campaigns/vault-door-closed.webp" alt="" width={DW} height={DH} />
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img className="vi-wheel" src="/campaigns/vault-wheel.webp" alt="" width={340} height={340} />
+              <img className="vi-wheel" src="/campaigns/vault-wheel-closed.webp" alt="" width={WR * 2} height={WR * 2} />
               <div className="vi-glint" />
             </div>
             <div className="vi-face vi-back">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/campaigns/vault-inner.webp" alt="" width={860} height={860} />
+              <img className="vi-inner" src="/campaigns/vault-inner.webp" alt="" width={DOOR_R * 2} height={DOOR_R * 2} />
             </div>
           </div>
         </div>
@@ -110,25 +114,26 @@ const CSS = `
 .vi-zoom{position:absolute;inset:0;transform-origin:${CX}px ${CY}px;perspective:3200px;perspective-origin:${CX}px ${CY}px;transition:transform 1.5s cubic-bezier(.7,0,.25,1) 2.45s}
 .is-open .vi-zoom{transform:scale(3.3)}
 .vi-plate,.vi-photo{position:absolute;inset:0;width:100%;height:100%;display:block}
-.vi-photo{opacity:0;transition:opacity .7s ease 1.85s}
+.vi-photo{opacity:0;transition:opacity .45s ease 2.1s}
 .is-open .vi-photo{opacity:1}
 .vi-glow{position:absolute;left:${CX - 395}px;top:${CY - 395}px;width:790px;height:790px;border-radius:50%;overflow:hidden;opacity:0;mix-blend-mode:screen;
   background:radial-gradient(circle,rgba(255,250,228,1) 0%,rgba(255,231,161,.9) 22%,rgba(247,215,127,.55) 45%,rgba(184,121,18,.25) 70%,transparent 100%);transition:opacity 1.3s ease 1.25s}
 .is-open .vi-glow{opacity:1}
 .vi-rays{position:absolute;inset:-35%;background:repeating-conic-gradient(from 0deg,rgba(255,246,214,.45) 0deg 2deg,transparent 2deg 9deg);filter:blur(2px);
   -webkit-mask:radial-gradient(circle,#000 8%,transparent 60%);mask:radial-gradient(circle,#000 8%,transparent 60%);animation:vi-spin 20s linear infinite}
-.vi-door{position:absolute;left:${CX - DOOR_R}px;top:${CY - DOOR_R}px;width:${DOOR_R * 2}px;height:${DOOR_R * 2}px;transform-style:preserve-3d;transform-origin:0 50%;
-  transition:transform 1.7s cubic-bezier(.5,0,.2,1) 1.0s,opacity .7s ease 1.85s}
+.vi-door{position:absolute;left:${DX}px;top:${DY}px;width:${DW}px;height:${DH}px;transform-style:preserve-3d;transform-origin:0 50%;
+  transition:transform 1.7s cubic-bezier(.5,0,.2,1) 1.0s,opacity .4s ease 2.15s}
 .is-open .vi-door{transform:rotateY(-112deg);opacity:0}
-.vi-face{position:absolute;inset:0;border-radius:50%;overflow:hidden;-webkit-backface-visibility:hidden;backface-visibility:hidden;box-shadow:0 30px 60px rgba(0,0,0,.55)}
-.vi-face img{position:absolute;inset:0;width:100%;height:100%}
+.vi-face{position:absolute;inset:0;-webkit-backface-visibility:hidden;backface-visibility:hidden}
+.vi-door-img{position:absolute;inset:0;width:100%;height:100%;filter:drop-shadow(0 26px 40px rgba(0,0,0,.55))}
+.vi-inner{position:absolute;left:${DW - (CX - DX) - DOOR_R}px;top:${CY - DY - DOOR_R}px;width:${DOOR_R * 2}px;height:${DOOR_R * 2}px;border-radius:50%}
 .vi-back{transform:rotateY(180deg)}
 .vi-front{transition:filter 1.7s ease 1.0s}
 .is-open .vi-front{filter:brightness(.7)}
-.vi-front .vi-wheel{inset:auto;left:${DOOR_R - 170}px;top:${DOOR_R - 170}px;width:340px;height:340px;filter:drop-shadow(6px 10px 10px rgba(0,0,0,.55));transition:transform 1.15s cubic-bezier(.6,0,.3,1)}
-.is-open .vi-wheel{transform:rotate(-400deg)}
-.vi-glint{position:absolute;inset:0;background:linear-gradient(105deg,transparent 35%,rgba(255,244,210,.0) 40%,rgba(255,244,210,.38) 50%,rgba(255,244,210,0) 60%,transparent 65%);transform:translateX(-120%);mix-blend-mode:screen}
-.is-open .vi-glint{transform:translateX(120%);transition:transform 1s ease .05s}
+.vi-front .vi-wheel{position:absolute;left:${HUBX - WR}px;top:${HUBY - WR}px;width:${WR * 2}px;height:${WR * 2}px;transition:transform 1.15s cubic-bezier(.6,0,.3,1)}
+.is-open .vi-wheel{transform:rotate(-405deg)}
+.vi-glint{position:absolute;inset:0;-webkit-mask:url(/campaigns/vault-door-closed.webp) 0 0/100% 100%;mask:url(/campaigns/vault-door-closed.webp) 0 0/100% 100%;background:linear-gradient(105deg,transparent 35%,rgba(255,244,210,.0) 40%,rgba(255,244,210,.38) 50%,rgba(255,244,210,0) 60%,transparent 65%);background-size:300% 100%;background-position:100% 0;mix-blend-mode:screen}
+.is-open .vi-glint{background-position:0% 0;transition:background-position 1s ease .05s}
 .vi-shade{position:absolute;left:0;right:0;bottom:0;height:46%;background:linear-gradient(transparent,rgba(5,4,3,.82) 55%,#050403);pointer-events:none;transition:opacity .4s}
 .is-portrait .vi-shade{height:52%}
 .is-open .vi-shade{opacity:0}
