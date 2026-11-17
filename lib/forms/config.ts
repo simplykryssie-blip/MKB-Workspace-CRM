@@ -81,6 +81,15 @@ export type FormField = {
 };
 
 export type FormStatus = "draft" | "published" | "archived";
+export type FormLayout = "single" | "steps";
+
+/**
+ * Where a visitor came from: ad and campaign tags only (UTM, ad click IDs, the page
+ * they landed on). Never anything they typed. "first" is their first visit, "latest" this one.
+ */
+export type Touch = { utm_source?: string; utm_medium?: string; utm_campaign?: string; utm_content?: string; utm_term?: string; fbclid?: string; gclid?: string; landing?: string; referrer?: string; at?: string };
+export type Attribution = { campaign?: string; first?: Touch; latest?: Touch };
+export const TOUCH_KEYS = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "fbclid", "gclid", "landing", "referrer", "at"] as const;
 
 export type LeadForm = {
   id: string;
@@ -94,6 +103,8 @@ export type LeadForm = {
   services: ServiceKey[];
   routing: { ownerId: string; stageId: string; source: string; sourceDetail?: string; tags: string[]; followUpHours: number; autoIntake?: AutoIntake };
   thankYou: string;
+  /** "steps": one section at a time (each Section heading starts a step), with a progress bar and a review step. */
+  layout?: FormLayout;
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;
@@ -116,6 +127,7 @@ export type Submission = {
   outcome: SubmissionOutcome;
   leadId?: string;
   clientId?: string;
+  attribution?: Attribution;
 };
 
 /** Words that suggest a field would collect sensitive information — not allowed on public forms. */
@@ -141,6 +153,8 @@ export type AutoIntake = {
   kind: "tax" | "books" | "payroll" | "biz" | "relief"; returnFieldId?: string; yearFieldId?: string;
   /** Send only when this question's answer equals `onlyIfEquals` (e.g. "Is the record in Louisiana?" → "Yes"). */
   onlyIfFieldId?: string; onlyIfEquals?: string;
+  /** Tax: always this tax year (e.g. a campaign for one season) instead of asking. */
+  taxYear?: number;
 };
 export const TAX_RETURN_CHOICES: Record<string, string> = {
   "Personal return": "1040",

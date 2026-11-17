@@ -22,9 +22,9 @@ export function PublicFormPage({ slug }: { slug: string }) {
     if (!BACKEND) return;
     fetch(`/api/public/forms/${encodeURIComponent(slug)}`).then(async (r) => setForm(r.ok ? ((await r.json()) as { form: LeadForm }).form : null)).catch(() => setForm(null));
   }, [slug]);
-  const submit = async (data: Record<string, string>, honeypot: string) => {
+  const submit = async (data: Record<string, string>, honeypot: string, clientKey: string) => {
     if (!BACKEND) return;
-    const r = await fetch(`/api/public/forms/${encodeURIComponent(slug)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ data, honeypot, embed }) });
+    const r = await fetch(`/api/public/forms/${encodeURIComponent(slug)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ data, honeypot, embed, clientKey }) });
     if (!r.ok) return ((await r.json().catch(() => ({}))) as { error?: string }).error ?? "Something went wrong. Please try again or call us.";
   };
   return (
@@ -37,6 +37,8 @@ export function PublicFormPage({ slug }: { slug: string }) {
             form={form}
             mode="live"
             onSubmit={submit}
+            // Embedded on a website page: tell the page about progress (event names and step numbers only) for its analytics.
+            onEvent={embed ? (e) => window.parent?.postMessage({ mkbForm: slug, event: e.name, step: e.step, total: e.total }, "*") : undefined}
             note={err ? <p role="alert" className="mx-auto mt-4 max-w-md rounded-xl bg-danger-soft/60 px-3 py-2 text-[13px] text-danger-ink">{err}</p> : BACKEND ? null : <p className="mx-auto mt-4 max-w-md rounded-xl bg-warning-soft/60 px-3 py-2 text-[12.5px] text-warning-ink">Design preview — this response wasn&rsquo;t saved. Once the backend is connected, it goes straight to MKB&rsquo;s Leads.</p>}
           />
         ) : (

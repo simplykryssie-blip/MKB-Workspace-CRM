@@ -348,10 +348,12 @@ export const WORDING_FIELDS: { key: keyof EmailWording; label: string; long?: bo
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const fill = (s: string, v: Record<string, string>) => s.replace(/\{\{(\w+)\}\}/g, (_, k: string) => v[k] ?? "");
 
-export type RenderInput = { wording: EmailWording; docsTitle: string; vars: Record<string, string>; documents?: string[]; buttonUrl: string; logoUrl: string };
+/** A second, quieter choice under the main button (e.g. "Prefer to talk first? Book a call"). */
+export type SecondaryButton = { lead: string; label: string; url: string };
+export type RenderInput = { wording: EmailWording; docsTitle: string; vars: Record<string, string>; documents?: string[]; buttonUrl: string; logoUrl: string; secondary?: SecondaryButton };
 
 /** Branded email (HTML + plain text). Wording is escaped; only the fixed layout is HTML. */
-export function renderEmail({ wording: w, docsTitle, vars, documents = [], buttonUrl, logoUrl }: RenderInput) {
+export function renderEmail({ wording: w, docsTitle, vars, documents = [], buttonUrl, logoUrl, secondary }: RenderInput) {
   const t = (s: string) => fill(s, vars);
   const steps = w.steps.split("\n").map((x) => x.trim()).filter(Boolean).map(t);
   const gold = "#b87912";
@@ -369,6 +371,7 @@ export function renderEmail({ wording: w, docsTitle, vars, documents = [], butto
 ${documents.length ? `<div style="background:#f7f6f2;border:1px solid #e5e1d8;border-radius:10px;padding:14px 16px;margin:16px 0"><div style="font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#8a6a2a;font-weight:bold;margin-bottom:6px">${esc(docsTitle)}</div><ul style="margin:0;padding-left:18px">${documents.map((d) => `<li>${esc(d)}</li>`).join("")}</ul>${w.docsNote ? `<p style="margin:8px 0 0;font-size:13px;color:#555">${esc(t(w.docsNote))}</p>` : ""}</div>` : ""}
 ${steps.length ? `<div style="font:500 19px Georgia,serif;margin:20px 0 6px">What happens next</div><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${steps.map((s, i) => `<tr><td width="34" valign="top" style="padding:8px 0"><div style="width:26px;height:26px;line-height:26px;border-radius:13px;background:#0b0b0b;color:#f6d37a;font-weight:bold;font-size:13px;text-align:center">${i + 1}</div></td><td style="padding:8px 0;border-bottom:1px solid #f0ede6">${esc(s)}</td></tr>`).join("")}</table>` : ""}
 <p style="text-align:center;margin:24px 0 8px"><a href="${esc(buttonUrl)}" style="display:inline-block;background:${gold};color:#111111;font-weight:bold;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;padding:13px 22px;text-decoration:none;border-radius:4px">${esc(t(w.button))}</a></p>
+${secondary ? `<p style="text-align:center;margin:14px 0 8px;font-size:14px;color:#444">${esc(secondary.lead)}<br><a href="${esc(secondary.url)}" style="display:inline-block;margin-top:8px;border:1.5px solid #111111;color:#111111;font-weight:bold;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;padding:11px 20px;text-decoration:none;border-radius:4px">${esc(secondary.label)}</a></p>` : ""}
 <p style="font-size:13px;color:#555;margin:12px 0 0">${esc(t(w.closing))}</p>
 </td></tr>
 <tr><td style="background:#0b0b0b;color:#aaaaaa;font-size:12px;padding:16px 24px;line-height:1.5"><b style="color:#f6d37a">${FIRM.name}</b> · ${FIRM.phone} · ${FIRM.email}<br>${FIRM.areas} — For your security we never ask you to email tax documents or your Social Security number.</td></tr>
@@ -377,7 +380,7 @@ ${steps.length ? `<div style="font:500 19px Georgia,serif;margin:20px 0 6px">Wha
     t(w.heading), "", t(w.intro),
     ...(documents.length ? ["", `${docsTitle}:`, ...documents.map((d) => `- ${d}`), ...(w.docsNote ? [t(w.docsNote)] : [])] : []),
     ...(steps.length ? ["", "What happens next:", ...steps.map((s, i) => `${i + 1}. ${s}`)] : []),
-    "", `${t(w.button)}: ${buttonUrl}`, "", t(w.closing), "", `${FIRM.name} · ${FIRM.phone} · ${FIRM.email}`, "For your security we never ask you to email tax documents or your Social Security number.",
+    "", `${t(w.button)}: ${buttonUrl}`, ...(secondary ? ["", `${secondary.lead} ${secondary.label}: ${secondary.url}`] : []), "", t(w.closing), "", `${FIRM.name} · ${FIRM.phone} · ${FIRM.email}`, "For your security we never ask you to email tax documents or your Social Security number.",
   ].join("\n");
   return { subject: t(w.subject), html, text };
 }

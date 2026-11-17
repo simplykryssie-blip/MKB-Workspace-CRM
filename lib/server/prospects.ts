@@ -61,7 +61,7 @@ export async function leadIntakes(env: AppEnv, a: Actor, leadId: string) {
 }
 
 /** { kind: "books", email } — sends the lead an intake by private link (creating their prospect record if needed). */
-export async function sendLeadIntake(env: AppEnv, a: Actor, leadId: string, b: { kind?: unknown; email?: unknown; taxYear?: unknown; form?: unknown }) {
+export async function sendLeadIntake(env: AppEnv, a: Actor, leadId: string, b: { kind?: unknown; email?: unknown; taxYear?: unknown; form?: unknown; bookCall?: boolean }) {
   requirePermission(a, "leads", "edit");
   requireStaff(a);
   if (b.kind !== "books" && b.kind !== "tax" && !isServiceIntakeKind(b.kind)) throw badRequest("Choose which intake to send.");
@@ -103,7 +103,7 @@ export async function sendLeadIntake(env: AppEnv, a: Actor, leadId: string, b: {
   }
   if (kind === "tax") {
     const ret = await prospectReturn(env, a, p.id, l, b);
-    const sent = await sendTaxInterviewLink(env, a, ret.id, { email });
+    const sent = await sendTaxInterviewLink(env, a, ret.id, { email, bookCall: b.bookCall === true });
     await leadLog(env, leadId, `${ret.taxYear} tax interview emailed to ${email} (private link)${sent.emailed ? "" : " — email queued"}`, a.member.id);
     return { returnId: ret.id, link: sent.link, url: sent.url, emailed: sent.emailed };
   }

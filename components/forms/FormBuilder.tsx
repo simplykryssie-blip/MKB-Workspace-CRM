@@ -167,6 +167,7 @@ function Settings({ f, can }: { f: LeadForm; can: boolean }) {
           <TextArea id="fs-intro" label="Introduction" value={v.intro ?? ""} onChange={(e) => setV({ ...v, intro: e.target.value })} />
           <TextField id="fs-slug" label="Link name" hint={`${publicOrigin()}${publicPath(v.slug)}`} value={v.slug} onChange={(e) => setV({ ...v, slug: e.target.value })} />
           <TextArea id="fs-thanks" label="Thank-you message" value={v.thankYou} onChange={(e) => setV({ ...v, thankYou: e.target.value })} />
+          <SelectField id="fs-layout" label="Layout" value={v.layout ?? "single"} onChange={(e) => setV({ ...v, layout: e.target.value === "steps" ? "steps" : "single" })} options={[["single", "All questions on one page"], ["steps", "One section at a time (each Section heading starts a step, then a review step)"]]} />
         </fieldset>
       </Card>
       <Card>
@@ -184,6 +185,7 @@ function Settings({ f, can }: { f: LeadForm; can: boolean }) {
             <div className="grid gap-4 sm:grid-cols-2">
               <SelectField id="fs-auto-ret" label="Question that picks the return" value={v.routing.autoIntake.returnFieldId ?? ""} onChange={(e) => setV({ ...v, routing: { ...v.routing, autoIntake: { ...v.routing.autoIntake!, returnFieldId: e.target.value || undefined } } })} options={[["", "Choose…"], ...v.fields.filter((x) => x.type === "radio" || x.type === "select").map((x) => [x.id, x.label] as [string, string])]} />
               <SelectField id="fs-auto-year" label="Question that picks the tax year (optional)" value={v.routing.autoIntake.yearFieldId ?? ""} onChange={(e) => setV({ ...v, routing: { ...v.routing, autoIntake: { ...v.routing.autoIntake!, yearFieldId: e.target.value || undefined } } })} options={[["", "None — always the most recent year"], ...v.fields.filter((x) => x.type === "radio" || x.type === "select").map((x) => [x.id, x.label] as [string, string])]} />
+              {v.routing.autoIntake.taxYear && <p className="text-[12.5px] font-medium text-ink-2 sm:col-span-2">This form always sends the {v.routing.autoIntake.taxYear} interview (a campaign for one tax season), with a Book a call button.</p>}
               <p className="text-[12.5px] text-muted sm:col-span-2">The return question&rsquo;s answers must be: {Object.keys(TAX_RETURN_CHOICES).join(" · ")} (anything else, like &ldquo;Not sure&rdquo;, means you follow up). The year question sends only for &ldquo;{MOST_RECENT_YEAR}&rdquo;.</p>
             </div>
           )}
@@ -195,7 +197,7 @@ function Settings({ f, can }: { f: LeadForm; can: boolean }) {
           <p className="rounded-xl bg-surface-2 px-3 py-2 text-[12.5px] text-ink-2 ring-1 ring-line">No duplicates: if the email or phone matches an existing <strong>client</strong>, the submission is added to their activity; if it matches an open <strong>lead</strong>, the answers are added to that lead.</p>
         </fieldset>
       </Card>
-      {can && <div className="xl:col-span-2"><Button variant="primary" disabled={!dirty || !v.name.trim()} onClick={() => { forms.updateForm(f.id, { name: v.name, title: v.title, intro: v.intro, slug: v.slug, thankYou: v.thankYou, routing: v.routing, services: v.services }); toast("Settings saved"); }}>Save settings</Button></div>}
+      {can && <div className="xl:col-span-2"><Button variant="primary" disabled={!dirty || !v.name.trim()} onClick={() => { forms.updateForm(f.id, { name: v.name, title: v.title, intro: v.intro, slug: v.slug, thankYou: v.thankYou, layout: v.layout, routing: v.routing, services: v.services }); toast("Settings saved"); }}>Save settings</Button></div>}
     </div>
   );
 }

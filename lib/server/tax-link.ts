@@ -36,7 +36,7 @@ const firstOf = (c: Pick<ClientBits, "name" | "contact_name">) => (c.contact_nam
 
 /* ---------------------------------------------------------------- staff */
 /** { email } — emails the client a private link to this return's interview (replacing any earlier link). */
-export async function sendTaxInterviewLink(env: AppEnv, a: Actor, id: string, b: { email?: unknown }) {
+export async function sendTaxInterviewLink(env: AppEnv, a: Actor, id: string, b: { email?: unknown; bookCall?: boolean }) {
   requirePermission(a, "tax", "edit");
   requireStaff(a);
   const r = await loadReturn(env, a, id);
@@ -48,7 +48,7 @@ export async function sendTaxInterviewLink(env: AppEnv, a: Actor, id: string, b:
   if (!(await rateLimit(env.DB, `taxlink:${id}`, 10, 60))) throw new HttpError(429, "Too many links sent for this return in the last hour.", "rate_limited");
   const { token, info } = await createLink(env, { purpose: "tax_interview", targetId: id, clientId: c.id, email, memberId: a.member.id });
   const url = `${linkOrigin(env)}/i/t/${token}`;
-  const out = await sendTemplate(env, "tax_interview_link", { to: email, buttonUrl: url, vars: { firstName: firstOf(c), taxYear: String(r.taxYear), expires: longDate(info.expiresAt), staffName: a.member.name } });
+  const out = await sendTemplate(env, "tax_interview_link", { to: email, buttonUrl: url, vars: { firstName: firstOf(c), taxYear: String(r.taxYear), expires: longDate(info.expiresAt), staffName: a.member.name }, ...(b.bookCall ? { secondary: { lead: "Prefer to talk first?", label: "Book a call", url: `${linkOrigin(env)}/w/book?type=apt-tax` } } : {}) });
   const t = now();
   const organizer = { ...r.organizer, status: r.organizer.status === "not_sent" ? "sent" : r.organizer.status, sentAt: r.organizer.sentAt ?? t };
   const text = `Interview link emailed to ${email} (expires ${longDate(info.expiresAt)})${out.sent ? "" : " — email queued"}`;
