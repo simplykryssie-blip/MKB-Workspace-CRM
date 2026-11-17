@@ -111,11 +111,11 @@ export function MoneyVaultFunnel({ form, tracking, campaignId, taxYear, home, pr
       {/* Hero */}
       <header className="relative overflow-hidden bg-[#0d0c0a] text-white">
         <picture>
-          <source type="image/webp" srcSet="/campaigns/money-vault-800.webp 800w, /campaigns/money-vault-1280.webp 1280w" sizes="100vw" />
+          <source type="image/webp" srcSet="/campaigns/money-vault-800.webp 800w, /campaigns/money-vault-1280.webp 1280w, /campaigns/money-vault-1672.webp 1672w" sizes="100vw" />
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/campaigns/money-vault-1280.jpg" srcSet="/campaigns/money-vault-800.jpg 800w, /campaigns/money-vault-1280.jpg 1280w" sizes="100vw" alt="" fetchPriority="high" className="block aspect-[16/9] w-full object-cover md:absolute md:inset-0 md:h-full md:aspect-auto md:object-[70%_50%]" />
+          <img src="/campaigns/money-vault-1280.jpg" srcSet="/campaigns/money-vault-800.jpg 800w, /campaigns/money-vault-1280.jpg 1280w" sizes="100vw" alt="" fetchPriority="high" className="block aspect-[16/9] w-full object-cover md:absolute md:inset-0 md:h-full md:aspect-auto md:object-[30%_50%]" />
         </picture>
-        <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 hidden h-full bg-gradient-to-r from-black/85 via-black/55 to-transparent md:block" />
+        <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 hidden h-full bg-gradient-to-l from-black/80 via-black/45 to-transparent md:block" />
         <div aria-hidden className="pointer-events-none absolute inset-x-0 top-[calc(56.25vw-6rem)] h-24 bg-gradient-to-b from-transparent to-[#0d0c0a] md:hidden" />
         <div className="relative mx-auto max-w-6xl px-4 pb-12 pt-6 sm:px-6 md:flex md:min-h-[86vh] md:flex-col md:pb-20">
           <a href={home} className="flex items-center gap-2.5 md:mb-auto">
@@ -123,7 +123,7 @@ export function MoneyVaultFunnel({ form, tracking, campaignId, taxYear, home, pr
             <img src="/brand/mkb-monogram.webp" alt="" width={34} height={34} className="h-[34px] w-[34px] rounded-lg" />
             <span className="text-[13px] font-semibold uppercase tracking-[0.14em] text-white/85">MKB Financial Group</span>
           </a>
-          <div className="mt-6 max-w-xl md:mb-auto md:mt-16">
+          <div className="mt-6 max-w-xl md:mb-auto md:ml-auto md:mr-[2%] md:mt-16 md:max-w-[34rem]">
             <p className="foil-text text-[12.5px] font-bold uppercase tracking-[0.2em]">2027 tax season · Tax year {taxYear}</p>
             <h1 className="mt-3 font-serif text-[38px] font-medium leading-[1.08] tracking-tight sm:text-[52px]">Unlock your <span className="foil-text">{taxYear} tax return.</span></h1>
             <p className="mt-4 text-[17px] leading-relaxed text-white/85">Start from your phone. Answer a few quick questions and we&rsquo;ll email you a private link to begin your tax interview, or book a call if you&rsquo;d rather talk first.</p>
