@@ -84,7 +84,7 @@ export const DEFAULT_SERVICE_FEES: ServiceFees = {
     overagePerAccount: 50,
     upgradeAfterMonths: 2,
     quarterlyDiscountPct: 10,
-    catchupPctOfPlan: 100,
+    catchupPctOfPlan: 75,
   },
   expunge: { baseFee: 550, chargesIncluded: 2, extraChargeFee: 550 },
   taxPartners: { software: "TaxWise", serviceBureau: "MKB Financial Group (in-house)", bankProduct: "Santa Barbara Tax Products Group (TPG)" },
@@ -178,7 +178,7 @@ export function booksQuote(b: ServiceFees["books"], need: { transactions: number
     if (cadence === "quarterly" && (k === "weekly" || k === "biweekly")) continue;
     if (k === "catchup") {
       const months = Math.max(0, Math.round(need.catchupMonths ?? 0));
-      const perMonth = Math.round(plan.fee * ((b.catchupPctOfPlan ?? 100) / 100));
+      const perMonth = Math.round(plan.fee * ((b.catchupPctOfPlan ?? 75) / 100));
       if (months && perMonth) oneTime.push({ label: `${x.name}: ${months} month${months === 1 ? "" : "s"} × ${money(perMonth)}`, amount: months * perMonth, billing: "one_time", startingAt: plan.startingAt });
       else quoted.push({ label: x.name, amount: 0, billing: "quote" });
       continue;

@@ -366,7 +366,7 @@ function FeesEditor() {
               <p className="mt-1 text-[12px] text-muted">Quarterly clients pay 3 months of their plan and monthly add-ons, less this discount, once per quarter &mdash; paid in full before any work on that quarter begins.</p>
             </div>
             <div>
-              <Num id="bo-catch" label="Catch-up price per month behind" suffix="% of the monthly plan price" value={f.books.catchupPctOfPlan ?? 100} disabled={ro} onChange={(n) => setF({ ...f, books: { ...f.books, catchupPctOfPlan: n } })} />
+              <Num id="bo-catch" label="Catch-up price per month behind" suffix="% of the monthly plan price" value={f.books.catchupPctOfPlan ?? 75} disabled={ro} onChange={(n) => setF({ ...f, books: { ...f.books, catchupPctOfPlan: n } })} />
               <p className="mt-1 text-[12px] text-muted">Catch-up = months that were never entered. Cleanup (books kept with errors) uses the Bookkeeping cleanup add-on price.</p>
             </div>
           </div>
