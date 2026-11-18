@@ -26,6 +26,18 @@ function owner(a: Actor) {
   return a;
 }
 
+/** "Eraka Childs Eraka Childs" → "Eraka Childs"; "Stephanie Costley Costley" → "Stephanie Costley". */
+export function tidyName(n: string) {
+  const w = n.trim().split(/\s+/);
+  if (w.length % 2 === 0 && w.length >= 2) {
+    const h = w.length / 2;
+    if (w.slice(0, h).join(" ").toLowerCase() === w.slice(h).join(" ").toLowerCase()) return w.slice(0, h).join(" ");
+  }
+  return w.filter((x, i) => i === 0 || x.toLowerCase() !== w[i - 1].toLowerCase()).join(" ");
+}
+/** Common misspellings of big email domains (likely typos). */
+const TYPO_DOMAINS = /@(gmsil|gmial|gmai|gamil|gnail|gmail\.co|gmail\.con|yaho|yahooo|yahoo\.co|hotmial|icloud\.co|iclod|outlok)\.?[a-z]*$/i;
+
 const digits = (s: string) => s.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
 const fmtPhone = (s: string) => { const d = digits(s); return d.length === 10 ? `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` : s.trim().slice(0, 40); };
 
@@ -42,9 +54,14 @@ async function read(env: AppEnv, a: Extract<Actor, { kind: "staff" }>, csv: stri
   const leads = new Set((await all<{ e: string }>(env.DB, "SELECT lower(email) AS e FROM leads WHERE email != ''")).map((x) => x.e));
   const offices = new Set((await all<{ e: string }>(env.DB, "SELECT lower(email) AS e FROM mon_offices WHERE email != ''")).map((x) => x.e));
   const seen = new Set<string>();
+  // Pass 1: the owner's own rows (by name or email) give their phone numbers; other rows sharing one look like a duplicate of you.
+  const looksLikeMe = (name: string, email: string) => (myEmail && email === myEmail) || (me && name.toLowerCase().startsWith(me));
+  const myPhones = new Set(rows.slice(hi + 1).filter((r) => looksLikeMe((r[iN] ?? "").trim(), (r[iE] ?? "").trim().toLowerCase())).map((r) => digits(iP >= 0 ? r[iP] ?? "" : "")).filter((d) => d.length === 10));
+  const phoneCount = new Map<string, number>();
+  rows.slice(hi + 1).forEach((r) => { const d = digits(iP >= 0 ? r[iP] ?? "" : ""); if (d.length === 10) phoneCount.set(d, (phoneCount.get(d) ?? 0) + 1); });
   const out: ContactRow[] = [];
   rows.slice(hi + 1).forEach((r, k) => {
-    const name = (r[iN] ?? "").trim().slice(0, 160);
+    const name = tidyName((r[iN] ?? "").trim()).slice(0, 160);
     const email = (r[iE] ?? "").trim().toLowerCase().slice(0, 200);
     if (!name && !email) return;
     const phone = iP >= 0 ? fmtPhone(r[iP] ?? "") : "";
@@ -54,7 +71,11 @@ async function read(env: AppEnv, a: Extract<Actor, { kind: "staff" }>, csv: stri
     if (/\bqb-/.test(tagText)) { suggested = "lead"; why = "QuickBooks tags → MKB bookkeeping lead"; }
     else if (/tax ?prep|tax return|tax client/.test(tagText)) { suggested = "lead"; why = "Tax prep tags → MKB tax preparation lead"; }
     else if (/tax pro|verexa/.test(tagText)) { suggested = "monarch"; why = "Tax-pro tags → Monarch office"; }
-    if ((myEmail && email === myEmail) || (me && name.toLowerCase().startsWith(me))) { suggested = "skip"; why = "Looks like you"; }
+    const d = digits(phone);
+    if (looksLikeMe(name, email)) { suggested = "skip"; why = "Looks like you"; }
+    else if (d.length === 10 && myPhones.has(d)) { suggested = "skip"; why = "Same phone number as your own row — probably you or a test"; }
+    else if (TYPO_DOMAINS.test(email)) { suggested = "skip"; why = `Email may have a typo (${email.split("@")[1]}) — check before importing`; }
+    else if (d.length === 10 && (phoneCount.get(d) ?? 0) > 1) why = `${why} · same phone as another row in this file`;
     const badEmail = !!email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
     const duplicate = badEmail ? "Email doesn't look right" : seen.has(email) && email ? "Twice in this file" : clients.has(email) ? "Already a client" : leads.has(email) ? "Already a lead" : offices.has(email) ? "Already a Monarch office" : null;
     if (email) seen.add(email);
