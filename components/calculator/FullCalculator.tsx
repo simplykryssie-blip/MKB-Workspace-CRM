@@ -141,31 +141,6 @@ export function FullCalculator({ leadCapture }: { leadCapture?: LeadCaptureConfi
   }
 
   const err = (id: string) => bad.includes(id);
-  // Tax first (before and after credits), then what was paid and the refundable credits, then the inputs used.
-  const r0 = result;
-  const groups: { title: string; rows: [string, number, boolean?][] }[] = [
-    { title: "Federal tax", rows: [
-      ["Federal income tax before credits", r0?.incomeTaxBeforeCredits ?? 0],
-      ["Child Tax Credit (nonrefundable)", -(r0?.nonrefundableCtc ?? 0)],
-      ["Federal income tax after credits", r0?.incomeTaxAfterCredits ?? 0],
-      ["Self-employment tax", r0?.seTax ?? 0],
-      ["Additional Medicare tax", r0?.additionalMedicare ?? 0],
-      ["Total federal tax", r0?.totalTax ?? 0, true],
-    ] },
-    { title: "Payments & refundable credits", rows: [
-      ["Federal income tax withheld", r0?.withholding ?? 0],
-      ["Earned Income Tax Credit (EITC)", r0?.eitc ?? 0],
-      ["Additional Child Tax Credit (refundable)", r0?.actc ?? 0],
-      ["Total payments & refundable credits", r0?.payments ?? 0, true],
-    ] },
-    { title: "How it was figured", rows: [
-      ["Adjusted gross income (estimate)", r0?.agi ?? 0],
-      ["Schedule 1-A deductions entered", r0?.schedule1A ?? 0],
-      ["Standard deduction used", r0?.standardDeduction ?? 0],
-      ["Taxable income (estimate)", r0?.taxableIncome ?? 0],
-    ] },
-  ];
-  const money = (v: number) => (v < 0 ? `−${fullMoney(-v)}` : fullMoney(v));
   const title = leadCapture?.businessName ? `${leadCapture.businessName} Refund Calculator` : "Refund Calculator";
   const buttonLabel = sent === "sending" ? "Sending…" : leadCapture ? (sent === "sent" ? "Calculate Again" : "Calculate and Send My Results") : "Calculate My Estimated Refund";
 
@@ -210,7 +185,7 @@ export function FullCalculator({ leadCapture }: { leadCapture?: LeadCaptureConfi
               </div>
               <div className="fc-row">
                 <Num id="fc_inv" label="Investment Income ($)" value={investment} set={setInvestment} />
-                <Num id="fc_kids" label="Qualifying Children Under 17" value={kids} set={setKids} />
+                <Num id="fc_kids" label="Qualifying Children Under 17" value={kids} set={setKids} help="Count only children who were under 17 on Dec. 31, 2026, lived with you more than half the year, have a Social Security number, and will be claimed as your dependent." />
               </div>
 
               {kidCount === 0 && (
@@ -264,7 +239,7 @@ export function FullCalculator({ leadCapture }: { leadCapture?: LeadCaptureConfi
                 <input id="fc_consent" type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
                 <span>
                   I agree that {leadCapture.businessName} may contact me about my estimate by email, phone or text.
-                  {leadCapture.includeSummary ? " My contact details and my estimated results (refund or balance due, tax, credits and deductions) will be sent to them; the income figures I entered will not." : " Only my contact details will be sent to them."}
+                  {leadCapture.includeSummary ? " My contact details and my estimate will be sent to them; the income figures I entered will not." : " Only my contact details will be sent to them."}
                 </span>
               </label>
             )}
@@ -279,19 +254,7 @@ export function FullCalculator({ leadCapture }: { leadCapture?: LeadCaptureConfi
           <div className="fc-card" id="fc_results" ref={resultsRef}>
             <div className="fc-result-label">2026 Tax Year • 2027 Filing Season</div>
             <div className="fc-big" id="fc_refund_big">{result ? fullHeadline(result.difference) : "Enter your information"}</div>
-            <div className="fc-pills">
-              <div className="fc-pill"><div className="fc-pill-label">Federal Tax Before Credits</div><div className="fc-pill-val" id="fc_tax_before_pill">{fullMoney(result?.incomeTaxBeforeCredits ?? 0)}</div></div>
-              <div className="fc-pill"><div className="fc-pill-label">Total Federal Tax After Credits</div><div className="fc-pill-val" id="fc_tax_pill">{fullMoney(result?.totalTax ?? 0)}</div></div>
-            </div>
-            <div className="fc-breakdown" id="fc_breakdown">
-              {groups.map((g) => (
-                <div key={g.title} className="fc-group">
-                  <div className="fc-group-title">{g.title}</div>
-                  {g.rows.map(([label, value, total]) => <div className={"fc-line" + (total ? " fc-total" : "")} key={label}><span>{label}</span><strong>{money(value)}</strong></div>)}
-                </div>
-              ))}
-              <div className="fc-line fc-total fc-final"><span>{result && result.difference < 0 ? "Estimated balance due" : "Estimated refund"}</span><strong>{fullMoney(Math.abs(result?.difference ?? 0))}</strong></div>
-            </div>
+            {result && <div className="fc-ready" id="fc_ready">Your preliminary estimate is ready. Complete a professional review{leadCapture?.businessName ? ` with ${leadCapture.businessName}` : ""} to determine your actual refund.</div>}
             <div className="fc-note">This is a preliminary federal tax estimate, not a completed tax return. Final results depend on all income, deductions, credits, filing information, and IRS eligibility requirements. Do not enter Social Security numbers or other sensitive personal information.</div>
           </div>
         </div>
@@ -316,6 +279,7 @@ export function FullCalculator({ leadCapture }: { leadCapture?: LeadCaptureConfi
         .fullcalc .fc-pill{border:1px solid #ddd;border-radius:10px;padding:12px;min-width:0}.fullcalc .fc-pill-label{font-size:11px;color:#666;margin-bottom:5px}.fullcalc .fc-pill-val{font-size:16px;font-weight:900;overflow-wrap:anywhere}
         .fullcalc .fc-breakdown{margin-top:16px;border-top:1px solid #ddd;padding-top:12px;display:grid;gap:9px}
         .fullcalc .fc-line{display:flex;justify-content:space-between;gap:12px;font-size:12px;border-bottom:1px solid #eee;padding-bottom:8px}.fullcalc .fc-line strong{text-align:right}
+        .fullcalc .fc-ready{margin-top:14px;padding:12px 14px;border:1px solid #000;border-radius:10px;font-size:13px;font-weight:700;line-height:1.45}
         .fullcalc .fc-note{margin-top:14px;padding:11px 12px;border:1px solid #ddd;border-radius:9px;font-size:11px;line-height:1.5;color:#444}
         .fullcalc .fc-section{margin-top:18px;padding-top:16px;border-top:1px solid #ddd}.fullcalc .fc-section-title{font-size:13px;font-weight:800;margin-bottom:4px}
         .fullcalc .fc-check{display:flex;gap:8px;align-items:flex-start;font-size:12px;font-weight:600;line-height:1.4;margin-top:8px}.fullcalc .fc-check input{margin-top:1px;width:22px;height:22px;min-height:22px;flex:none;accent-color:#000;cursor:pointer}
