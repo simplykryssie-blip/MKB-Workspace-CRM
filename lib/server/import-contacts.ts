@@ -4,7 +4,8 @@
  *  - "lead": the MKB Leads pipeline (first stage, tags kept, a note with where it came from);
  *  - "monarch": a Monarch office at "Interested" (tags kept in the office notes);
  *  - "skip".
- * Suggested: QuickBooks tags (QB-…) → lead; tax-pro / Verexa tags → Monarch; the owner's own row → skip.
+ * Suggested: QuickBooks tags (QB-…) → bookkeeping lead; tax prep tags (e.g. "Tax Prep Leads") → tax
+ * preparation lead; tax-pro / Verexa tags → Monarch; the owner's own row → skip.
  * Preview first (nothing saved), then apply with the owner's choices. Duplicates (same email
  * already a client, lead or Monarch office) are skipped, never overwritten. Server-only.
  */
@@ -51,6 +52,7 @@ async function read(env: AppEnv, a: Extract<Actor, { kind: "staff" }>, csv: stri
     const tagText = tags.join(" ").toLowerCase();
     let suggested: ContactDest = "lead", why = "Default: MKB lead";
     if (/\bqb-/.test(tagText)) { suggested = "lead"; why = "QuickBooks tags → MKB bookkeeping lead"; }
+    else if (/tax ?prep|tax return|tax client/.test(tagText)) { suggested = "lead"; why = "Tax prep tags → MKB tax preparation lead"; }
     else if (/tax pro|verexa/.test(tagText)) { suggested = "monarch"; why = "Tax-pro tags → Monarch office"; }
     if ((myEmail && email === myEmail) || (me && name.toLowerCase().startsWith(me))) { suggested = "skip"; why = "Looks like you"; }
     const badEmail = !!email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
@@ -90,10 +92,11 @@ export async function applyContacts(env: AppEnv, a: Actor, b: { csv?: unknown; c
     if (dest === "lead") {
       const id = `L-${randomId("w").slice(2)}`;
       const books = r.tags.some((x) => /^qb-/i.test(x));
+      const tax = r.tags.some((x) => /tax ?prep|tax return|tax client/i.test(x));
       const intakeDone = r.tags.some((x) => /intake-submitted/i.test(x));
       await env.DB.batch([
         env.DB.prepare("INSERT INTO leads (id, type, name, contact_name, email, phone, address, business, source, source_detail, interests, est_value, owner_id, stage_id, status, priority, tags, created_at, last_activity_at) VALUES (?, 'individual', ?, NULL, ?, ?, NULL, NULL, ?, 'Imported contacts', ?, 0, ?, ?, 'open', 'medium', ?, ?, ?)")
-          .bind(id, r.name, r.email, r.phone, SOURCE, JSON.stringify(books ? ["books"] : []), s.member.id, stage.id, JSON.stringify([...new Set([...r.tags.map((x) => x.slice(0, 40)), "Imported"])].slice(0, 12)), t, t),
+          .bind(id, r.name, r.email, r.phone, SOURCE, JSON.stringify([...(books ? ["books"] : []), ...(tax ? ["tax"] : [])]), s.member.id, stage.id, JSON.stringify([...new Set([...r.tags.map((x) => x.slice(0, 40)), "Imported"])].slice(0, 12)), t, t),
         env.DB.prepare("INSERT INTO lead_notes (id, lead_id, author_id, body, at) VALUES (?, ?, ?, ?, ?)").bind(randomId("n"), id, s.member.id, `Imported from the old CRM.\n${tagLine}${intakeDone ? "\nThe old CRM shows their QuickBooks intake as submitted — it isn't in this CRM; send a new bookkeeping intake if needed." : ""}`, t),
         env.DB.prepare("INSERT INTO lead_activity (id, lead_id, kind, text, actor, at) VALUES (?, ?, 'lead', ?, 'system', ?)").bind(randomId("x"), id, "Lead imported from the old CRM", t),
       ]);
