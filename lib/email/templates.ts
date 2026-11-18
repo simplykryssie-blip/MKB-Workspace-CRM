@@ -22,7 +22,7 @@ export type EmailWording = {
 
 export type TemplateDef = EmailWording & { key: TemplateKey; name: string; when: string; placeholders: string[]; docsTitle: string };
 
-export const FIRM = { name: "MKB Financial Group", tagline: "STRATEGY • GROWTH • LEGACY", phone: "833-379-3320", email: "info@mkbfinancialgroup.com", areas: "Louisiana • Texas • Virtual" };
+export const FIRM = { name: "MKB Financial Group", tagline: "STRATEGY • GROWTH • LEGACY", phone: "888-379-9372", email: "info@mkbfinancialgroup.com", areas: "Louisiana • Texas • Virtual" };
 
 export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
   tax_intake_received: {
@@ -37,7 +37,7 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
     docsNote: "Upload them in your portal, or drop them off at our office. Please don't email tax documents.",
     steps: "We gather your documents. As they arrive we check them off — you'll see the list update in your portal.\nYour preparer works on your return and reaches out only if something is unclear.\nYou review and sign. We'll send your return for approval and e-signature.\nWe file and confirm. You'll get an email when the IRS accepts it.",
     button: "Open your client portal",
-    closing: "Questions? Reply through your portal or call us at 833-379-3320.",
+    closing: "Questions? Reply through your portal or call us at 888-379-9372.",
   },
   tax_document_reminder: {
     key: "tax_document_reminder",
@@ -79,7 +79,7 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
     docsNote: "Upload them in your portal, or drop them off at our office. Please don't email tax documents.",
     steps: "An extension gives you more time to file, not more time to pay. Interest applies to any tax not paid by the original due date.\nWe'll keep working on your return as your documents come in.\nWe'll let you know when it's ready for your review and signature.",
     button: "Open your client portal",
-    closing: "Questions? Reply through your portal or call us at 833-379-3320.",
+    closing: "Questions? Reply through your portal or call us at 888-379-9372.",
   },
   portal_invite: {
     key: "portal_invite",
@@ -93,7 +93,7 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
     docsNote: "",
     steps: "Choose your password using the button below.\nEach time you sign in, we'll email you a 6-digit code to confirm it's you.\nOpen your to-do list to see anything we need from you.",
     button: "Set up my portal",
-    closing: "This invitation link expires on {{expires}}. Didn't expect this email? Call us at 833-379-3320.",
+    closing: "This invitation link expires on {{expires}}. Didn't expect this email? Call us at 888-379-9372.",
   },
   books_items: {
     key: "books_items",
@@ -107,7 +107,7 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
     docsNote: "Upload files and answer questions right in the portal — please don't email bank statements or receipts.",
     steps: "",
     button: "Open my portal",
-    closing: "Questions? Reply in the portal or call us at 833-379-3320.",
+    closing: "Questions? Reply in the portal or call us at 888-379-9372.",
   },
   books_reminder: {
     key: "books_reminder",
@@ -121,7 +121,7 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
     docsNote: "",
     steps: "",
     button: "Open my portal",
-    closing: "Questions? Reply in the portal or call us at 833-379-3320.",
+    closing: "Questions? Reply in the portal or call us at 888-379-9372.",
   },
   books_reports_ready: {
     key: "books_reports_ready",
@@ -135,7 +135,7 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
     docsNote: "",
     steps: "",
     button: "View my reports",
-    closing: "Questions about your numbers? Message us in the portal or call 833-379-3320.",
+    closing: "Questions about your numbers? Message us in the portal or call 888-379-9372.",
   },
   portal_message: {
     key: "portal_message",
@@ -149,7 +149,7 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
     docsNote: "",
     steps: "",
     button: "Read my message",
-    closing: "Questions? Call us at 833-379-3320.",
+    closing: "Questions? Call us at 888-379-9372.",
   },
   tax_interview_link: {
     key: "tax_interview_link",
@@ -163,7 +163,7 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
     docsNote: "",
     steps: "Answer the questions about your household, income and deductions.\nRead and sign our engagement letter, then sign and submit.\nWe email you a copy and the list of documents to upload in your client portal.",
     button: "Start my interview",
-    closing: "This link is just for you — please don't forward it. It expires on {{expires}} and stops working once you submit. Didn't expect this email or need a new link? Call us at 833-379-3320.",
+    closing: "This link is just for you — please don't forward it. It expires on {{expires}} and stops working once you submit. Didn't expect this email or need a new link? Call us at 888-379-9372.",
   },
   books_intake_received: {
     key: "books_intake_received",
@@ -177,7 +177,7 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
     docsNote: "Upload these in your client portal. Please don't email bank statements or tax documents.",
     steps: "We review your answers and confirm the right plan and price.\nWe email you your proposal and engagement letter to review and sign online.\nOnce you sign, we connect your accounts and set your first monthly close date.\nEach month you get your reports and a list of anything we need from you.",
     button: "Open your client portal",
-    closing: "Questions? Reply through your portal or call us at 833-379-3320.",
+    closing: "Questions? Reply through your portal or call us at 888-379-9372.",
   },
   books_proposal: {
     key: "books_proposal",
@@ -191,7 +191,7 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
     docsNote: "",
     steps: "Review your plan and price.\nRead the engagement letter.\nSign with your finger or mouse and submit.",
     button: "Review and sign",
-    closing: "This link is just for you — please don't forward it. It expires on {{expires}}. Questions about your price? Call us at 833-379-3320 before you sign.",
+    closing: "This link is just for you — please don't forward it. It expires on {{expires}}. Questions about your price? Call us at 888-379-9372 before you sign.",
   },
   books_proposal_signed: {
     key: "books_proposal_signed",
@@ -205,7 +205,7 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
     docsNote: "",
     steps: "We connect your accounts and review your books, including any catch-up months.\nWe confirm your first monthly close date.\nEach month you get your reports and a list of anything we need from you.",
     button: "Open your client portal",
-    closing: "Questions? Reply through your portal or call us at 833-379-3320.",
+    closing: "Questions? Reply through your portal or call us at 888-379-9372.",
   },
   service_intake_link: {
     key: "service_intake_link",
@@ -219,7 +219,7 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
     docsNote: "",
     steps: "Answer the questions.\nSign with your finger or mouse and submit.\nWe review your answers and reach out with next steps.",
     button: "Start my intake",
-    closing: "This link is just for you — please don't forward it. It expires on {{expires}} ({{days}} days) and stops working once you submit. Didn't expect this email or need a new link? Call us at 833-379-3320.",
+    closing: "This link is just for you — please don't forward it. It expires on {{expires}} ({{days}} days) and stops working once you submit. Didn't expect this email or need a new link? Call us at 888-379-9372.",
   },
   service_intake_received: {
     key: "service_intake_received",
@@ -233,7 +233,7 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
     docsNote: "Upload these in your client portal. Please don't email documents with Social Security or account numbers.",
     steps: "",
     button: "Open your client portal",
-    closing: "Questions? Reply through your portal or call us at 833-379-3320.",
+    closing: "Questions? Reply through your portal or call us at 888-379-9372.",
   },
   books_intake_link: {
     key: "books_intake_link",
@@ -247,7 +247,7 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
     docsNote: "",
     steps: "Answer the questions about your business, accounts and goals.\nSign with your finger or mouse and submit.\nWe review your answers and email you your proposal and engagement letter to sign.",
     button: "Start my intake",
-    closing: "This link is just for you — please don't forward it. It expires on {{expires}} ({{days}} days) and stops working once you submit. Didn't expect this email or need a new link? Call us at 833-379-3320.",
+    closing: "This link is just for you — please don't forward it. It expires on {{expires}} ({{days}} days) and stops working once you submit. Didn't expect this email or need a new link? Call us at 888-379-9372.",
   },
   invoice_sent: {
     key: "invoice_sent",
@@ -261,7 +261,7 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
     docsNote: "",
     steps: "",
     button: "View and pay",
-    closing: "Questions about your invoice? Call us at 833-379-3320.",
+    closing: "Questions about your invoice? Call us at 888-379-9372.",
   },
   tax_document_request: {
     key: "tax_document_request",
@@ -275,7 +275,7 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
     docsNote: "Upload them in your portal, or drop them off at our office. Please don't email tax documents.",
     steps: "",
     button: "Upload in your portal",
-    closing: "Questions? Reply through your portal or call us at 833-379-3320.",
+    closing: "Questions? Reply through your portal or call us at 888-379-9372.",
   },
   booking_confirmed: {
     key: "booking_confirmed",
@@ -289,7 +289,7 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
     docsNote: "A calendar invite is attached — add it to your calendar so you don't miss it.",
     steps: "",
     button: "Reschedule or cancel",
-    closing: "Questions before we meet? Call us at 833-379-3320. Please don't email tax documents or your Social Security number.",
+    closing: "Questions before we meet? Call us at 888-379-9372. Please don't email tax documents or your Social Security number.",
   },
   booking_reminder: {
     key: "booking_reminder",
@@ -303,7 +303,7 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
     docsNote: "",
     steps: "",
     button: "Reschedule or cancel",
-    closing: "Running late or need to change the time? Call us at 833-379-3320.",
+    closing: "Running late or need to change the time? Call us at 888-379-9372.",
   },
   booking_changed: {
     key: "booking_changed",
@@ -317,7 +317,7 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
     docsNote: "An updated calendar invite is attached.",
     steps: "",
     button: "Reschedule or cancel",
-    closing: "Questions? Call us at 833-379-3320.",
+    closing: "Questions? Call us at 888-379-9372.",
   },
   booking_cancelled: {
     key: "booking_cancelled",
@@ -331,7 +331,7 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
     docsNote: "",
     steps: "",
     button: "Book a new time",
-    closing: "Paid for this appointment? We'll be in touch about your refund. Questions? Call us at 833-379-3320.",
+    closing: "Paid for this appointment? We'll be in touch about your refund. Questions? Call us at 888-379-9372.",
   },
 };
 

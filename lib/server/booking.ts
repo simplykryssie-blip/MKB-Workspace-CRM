@@ -418,7 +418,7 @@ async function mail(env: AppEnv, key: TemplateKey, r: ApptRow, token: string | n
   const { wording } = await loadWording(env, key);
   if (brand === "monarch") {
     const fill = (x: string) => x.replace(/\{\{(\w+)\}\}/g, (_, k: string) => (vars as Record<string, string>)[k] ?? "");
-    const e = renderMonarch(env, await monarchSettings(env), { to: r.guest_email, template: key, subject: fill(wording.subject), heading: fill(wording.heading), paragraphs: [fill(wording.intro)], list: lines.length ? { title: "Appointment details", items: lines } : undefined, button: { label: fill(wording.button), url: button }, after: [fill(wording.docsNote), fill(wording.closing).replace(/833-379-3320/g, "us")].filter(Boolean) });
+    const e = renderMonarch(env, await monarchSettings(env), { to: r.guest_email, template: key, subject: fill(wording.subject), heading: fill(wording.heading), paragraphs: [fill(wording.intro)], list: lines.length ? { title: "Appointment details", items: lines } : undefined, button: { label: fill(wording.button), url: button }, after: [fill(wording.docsNote), fill(wording.closing).replace(/888-379-9372/g, "us")].filter(Boolean) });
     await sendEmail(env, { to: r.guest_email, template: key, subject: e.subject, text: e.text, html: e.html, attachments });
     return;
   }

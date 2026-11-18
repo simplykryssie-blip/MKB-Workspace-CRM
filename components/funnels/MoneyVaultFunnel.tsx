@@ -85,10 +85,10 @@ export function MoneyVaultFunnel({ form, tracking, campaignId, taxYear, home, pr
           body: JSON.stringify({ data, honeypot, clientKey, attribution: { campaign: campaignId, first: first.current, latest: latest.current } }),
         });
         if (r.ok) return;
-        if (r.status < 500) return ((await r.json().catch(() => ({}))) as { error?: string }).error ?? "Something went wrong. Please try again or call us at 833-379-3320.";
+        if (r.status < 500) return ((await r.json().catch(() => ({}))) as { error?: string }).error ?? "Something went wrong. Please try again or call us at 888-379-9372.";
       } catch { /* network hiccup: try once more with the same one-time key */ }
     }
-    return "We couldn't send your answers. Please check your connection and try again, or call us at 833-379-3320.";
+    return "We couldn't send your answers. Please check your connection and try again, or call us at 888-379-9372.";
   };
 
   const toForm = () => document.getElementById("start")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -210,7 +210,7 @@ export function MoneyVaultFunnel({ form, tracking, campaignId, taxYear, home, pr
               ["What happens after I send the inquiry?", "We email you a private link to your tax interview. Your answers save as you go, so you can stop and come back. The email also has a button to book a call."],
               ["Do I need my documents now?", "No. Start with the inquiry. After your interview we send you a list of what to upload in your secure client portal."],
               ["How much does it cost?", "It depends on your return. We'll tell you the fee before we start preparing it."],
-              ["I didn't get the email.", "Check your spam or promotions folder. Still nothing? Call us at 833-379-3320."],
+              ["I didn't get the email.", "Check your spam or promotions folder. Still nothing? Call us at 888-379-9372."],
             ].map(([q, a]) => (
               <details key={q} className="group py-4">
                 <summary className="cursor-pointer list-none text-[16px] font-semibold marker:hidden">{q}</summary>
@@ -223,7 +223,7 @@ export function MoneyVaultFunnel({ form, tracking, campaignId, taxYear, home, pr
       </section>
 
       <footer className="bg-[#0d0c0a] px-4 py-8 text-center text-[13px] text-white/70">
-        <p><a href={home} className="foil-text font-semibold hover:underline">MKB Financial Group</a> · <a href="tel:8333793320" className="hover:underline">833-379-3320</a> · Virtual service in Louisiana and Texas</p>
+        <p><a href={home} className="foil-text font-semibold hover:underline">MKB Financial Group</a> · <a href="tel:8883799372" className="hover:underline">888-379-9372</a> · Virtual service in Louisiana and Texas</p>
         <p className="mt-2">© {new Date().getFullYear()} MKB Financial Group{privacyHref ? <> · <a href={privacyHref} className="hover:underline">Privacy policy</a></> : null}</p>
       </footer>
     </div>

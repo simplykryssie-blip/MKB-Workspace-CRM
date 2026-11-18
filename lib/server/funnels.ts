@@ -60,7 +60,7 @@ export function moneyVaultFields(): FormField[] {
     f({ id: "mv-marketing", type: "marketing", label: MARKETING_OPT_IN }),
   ];
 }
-const THANK_YOU = "We just emailed you a private link to start your 2026 tax interview. The same email has a button to book a call if you'd rather talk first. Don't see it in a few minutes? Check your spam or promotions folder, or call us at 833-379-3320.";
+const THANK_YOU = "We just emailed you a private link to start your 2026 tax interview. The same email has a button to book a call if you'd rather talk first. Don't see it in a few minutes? Check your spam or promotions folder, or call us at 888-379-9372.";
 
 /** Creates the Money Vault form (published) if it doesn't exist yet. Staff can edit it in Forms afterwards. */
 async function ensureForm(env: AppEnv, a: Actor): Promise<string> {

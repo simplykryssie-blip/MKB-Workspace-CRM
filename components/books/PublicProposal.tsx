@@ -47,22 +47,22 @@ export function PublicProposal({ token }: { token: string }) {
               <div className="mt-4 rounded-2xl border border-accent/40 bg-accent-soft/40 p-4">
                 <p className="text-[15px] font-bold text-ink">Next: pay your first invoice — {money(done.pay.amount)}</p>
                 <p className="mt-1 text-[13.5px] text-ink-2">Invoice {done.pay.number} covers your first billing period{done.pay.amount ? " and any project deposit" : ""}. We start as soon as it&rsquo;s paid. It&rsquo;s also in your email.</p>
-                {done.pay.url ? <a href={done.pay.url} className="mt-3 inline-flex h-12 items-center gap-2 rounded-xl bg-accent px-6 text-[15px] font-semibold text-white hover:bg-accent-hover"><CreditCard size={18} /> Pay now</a> : <p className="mt-2 text-[13px] text-muted">Use the Pay online button in the invoice email, or call us at 833-379-3320.</p>}
+                {done.pay.url ? <a href={done.pay.url} className="mt-3 inline-flex h-12 items-center gap-2 rounded-xl bg-accent px-6 text-[15px] font-semibold text-white hover:bg-accent-hover"><CreditCard size={18} /> Pay now</a> : <p className="mt-2 text-[13px] text-muted">Use the Pay online button in the invoice email, or call us at 888-379-9372.</p>}
               </div>
             )}
             <NextStopButton next={done.next} />
-            <p className="mt-3 text-[13.5px] text-muted">This link is now closed. Questions? Call us at 833-379-3320.</p>
+            <p className="mt-3 text-[13.5px] text-muted">This link is now closed. Questions? Call us at 888-379-9372.</p>
           </Card>
         ) : err ? (
           <Card className="p-8 text-center">
             <h1 className="text-[20px] font-bold text-ink">{err.status === 410 ? "This link isn't active" : err.status === 0 ? "Connection problem" : "We couldn't open this link"}</h1>
             <p className="mx-auto mt-2 max-w-md text-[14px] text-muted">{err.message}</p>
-            <p className="mt-4 text-[13.5px] text-ink-2">Call MKB Financial Group at <a className="font-semibold text-accent" href="tel:8333793320">833-379-3320</a>.</p>
+            <p className="mt-4 text-[13.5px] text-ink-2">Call MKB Financial Group at <a className="font-semibold text-accent" href="tel:8883799372">888-379-9372</a>.</p>
           </Card>
         ) : !data ? (
           <Card className="p-10 text-center text-[14px] text-muted"><span role="status">Loading your proposal…</span></Card>
         ) : <Sign data={data} base={base} onDone={setDone} onErr={(e) => { setErr(e); setData(null); }} />}
-        <p className="mt-8 text-center text-[12px] text-muted">© MKB Financial Group · 833-379-3320</p>
+        <p className="mt-8 text-center text-[12px] text-muted">© MKB Financial Group · 888-379-9372</p>
       </div>
     </main>
   );
@@ -150,7 +150,7 @@ export function Sign({ data, base, onDone, onErr, preview }: { data: Loaded; bas
           <p className="text-[13px] font-semibold text-ink">You&rsquo;ll need your own accounting software</p>
           <p className="mt-1 text-[13px] text-ink-2">{SOFTWARE_REQUIRED}</p>
         </div>
-        <p className="mt-3 text-[12.5px] text-muted">Questions about your price? Call us at 833-379-3320 before you sign.</p>
+        <p className="mt-3 text-[12.5px] text-muted">Questions about your price? Call us at 888-379-9372 before you sign.</p>
       </Card>
       <Card className="p-5 sm:p-6">
         <h3 className="flex items-center gap-2 text-[15px] font-semibold text-ink"><FileSignature size={16} className="text-accent" /> Engagement letter</h3>

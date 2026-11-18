@@ -18,7 +18,7 @@ export const MKB_SETTINGS: SiteSettings = {
   tagline: "Strategy • Growth • Legacy",
   topBar: "LOUISIANA • TEXAS • VIRTUAL   STRATEGY • GROWTH • LEGACY",
   logo: OLD_LOGO,
-  phone: "833-379-3320",
+  phone: "888-379-9372",
   email: "info@mkbfinancialgroup.com",
   location: "Louisiana • Texas • Virtual",
   facebook: "https://www.facebook.com/share/14vYUMQyJwW/",
@@ -214,7 +214,7 @@ const ALL_PAGES: SitePage[] = [
   ]),
   page("contact", "Let's Talk", "Tell MKB Financial Group about your business — we'll follow up within one business day.", 7, [
     { ...hero("Get started", "Let's talk about your business.", "Tell us a little about yourself and what you need. We'll follow up within one business day.", []), image: undefined },
-    { id: id(), type: "form", tone: "warm", eyebrow: "Contact MKB", title: "Tell us about your business.", body: "Prefer to call? 833-379-3320 · info@mkbfinancialgroup.com", formSlug: "contact" },
+    { id: id(), type: "form", tone: "warm", eyebrow: "Contact MKB", title: "Tell us about your business.", body: "Prefer to call? 888-379-9372 · info@mkbfinancialgroup.com", formSlug: "contact" },
   ], false),
   /* Tax calculator funnel: landing page (contact details → MKB lead) → the calculator → "let MKB prepare your return". */
   page("tax-calculator", "Tax Calculator", "Free tax estimator from MKB Financial Group — see what you might owe or get back.", 8, [

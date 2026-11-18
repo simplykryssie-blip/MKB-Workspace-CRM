@@ -15,7 +15,7 @@ export function Unsubscribe({ token }: { token: string }) {
   const go = async () => {
     setBusy(true);
     try { const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }); if (!r.ok) throw new Error(); setDone(true); }
-    catch { setErr("Something went wrong. Please try again, or call 833-379-3320."); }
+    catch { setErr("Something went wrong. Please try again, or call 888-379-9372."); }
     setBusy(false);
   };
   const logo = info?.brand === "monarch" ? "/brand/monarch-email.png" : "/brand/mkb-seal-192.png";

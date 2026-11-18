@@ -35,7 +35,7 @@ export function PublicTaxInterview({ token }: { token: string }) {
     try { r = await fetch(base + path, { method, headers: { "content-type": "application/json" }, body: method === "GET" ? undefined : JSON.stringify(body ?? {}), cache: "no-store", referrerPolicy: "no-referrer" }); }
     catch { throw new LinkError(0, "Couldn't reach MKB — check your internet connection and try again."); }
     const data = (await r.json().catch(() => ({}))) as T & { error?: string };
-    if (!r.ok) throw new LinkError(r.status, data.error ?? "Something went wrong. Please try again or call us at 833-379-3320.");
+    if (!r.ok) throw new LinkError(r.status, data.error ?? "Something went wrong. Please try again or call us at 888-379-9372.");
     return data;
   }, [base]);
   const [data, setData] = useState<Loaded | null>(null);
@@ -64,18 +64,18 @@ export function PublicTaxInterview({ token }: { token: string }) {
               </div>
             )}
             <NextStopButton next={done.next} />
-            <p className="mt-4 text-[13.5px] text-muted">This link is now closed. Questions? Call us at 833-379-3320.</p>
+            <p className="mt-4 text-[13.5px] text-muted">This link is now closed. Questions? Call us at 888-379-9372.</p>
           </Card>
         ) : err ? (
           <Card className="p-8 text-center">
             <h1 className="text-[20px] font-bold text-ink">{err.status === 410 ? "This link isn't active" : err.status === 429 ? "Please wait a moment" : err.status === 0 ? "Connection problem" : "We couldn't open this link"}</h1>
             <p className="mx-auto mt-2 max-w-md text-[14px] text-muted">{err.message}</p>
-            <p className="mt-4 text-[13.5px] text-ink-2">Call MKB Financial Group at <a className="font-semibold text-accent" href="tel:8333793320">833-379-3320</a>.</p>
+            <p className="mt-4 text-[13.5px] text-ink-2">Call MKB Financial Group at <a className="font-semibold text-accent" href="tel:8883799372">888-379-9372</a>.</p>
           </Card>
         ) : !data ? (
           <Card className="p-10 text-center text-[14px] text-muted"><span role="status">Loading your interview…</span></Card>
         ) : <Runner key={gen} data={data} api={api} reload={load} onDone={setDone} onGone={setErr} />}
-        <p className="mt-8 text-center text-[12px] text-muted">© MKB Financial Group · 833-379-3320 · We never ask you to email tax documents or your Social Security number.</p>
+        <p className="mt-8 text-center text-[12px] text-muted">© MKB Financial Group · 888-379-9372 · We never ask you to email tax documents or your Social Security number.</p>
       </div>
     </main>
   );
@@ -224,7 +224,7 @@ function Review({ data, sections, a, answers, rev, api, flush, goTo, onDone, onE
         <Button variant="primary" icon={Send} disabled={busy || !agree || (!!L && !accepted) || sig.trim().length < 3 || !drawn || missing.length > 0} onClick={submit}>{busy ? "Submitting…" : "Sign and submit"}</Button>
         {missing.length > 0 && <p className="text-[12px] text-muted">Answer the remaining questions to submit.</p>}
         {!drawn && missing.length === 0 && <p className="text-[12px] text-muted">Draw your signature in the box to submit.</p>}
-        <p className="text-[12px] text-muted">Once you submit, this link closes. To change something afterwards, call us at 833-379-3320.</p>
+        <p className="text-[12px] text-muted">Once you submit, this link closes. To change something afterwards, call us at 888-379-9372.</p>
       </Card>
     </div>
   );
