@@ -15,6 +15,7 @@ export const SECTION_TYPES = [
   { key: "embed", label: "Custom code", hint: "Your own HTML, shown in a sealed frame." },
   { key: "document", label: "Full HTML page", hint: "The whole page is your own HTML." },
   { key: "wisp", label: "WISP Generator", hint: "Monarch's free WISP builder — answers become Monarch leads." },
+  { key: "store", label: "Store products", hint: "Monarch's store: every product listed in Monarch → Packages, with a Buy button." },
 ] as const;
 export type SectionType = (typeof SECTION_TYPES)[number]["key"];
 export const TONES = [
@@ -44,7 +45,10 @@ export type Section = {
   afterHref?: string;
   html?: string;
   height?: number;
+  /** "store" sections: filled in by the server when the page is shown (never saved). */
+  products?: StoreCard[];
 };
+export type StoreCard = { slug: string; name: string; price: string; summary: string; image?: string };
 
 export type SiteSettings = {
   siteName: string;

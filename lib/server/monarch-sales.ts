@@ -197,7 +197,7 @@ export async function monarchStripePaid(env: AppEnv, saleId: string, amountTotal
 export { METHODS };
 
 /* ---------------------------------------------------------------- purchases from the website */
-type CheckoutSession = { id: string; payment_link?: string | null; payment_status?: string; amount_total?: number; total_details?: { amount_discount?: number } | null; payment_intent?: string | null; customer_details?: { name?: string | null; email?: string | null; phone?: string | null; address?: { city?: string | null; state?: string | null } | null } | null; custom_fields?: { key?: string; label?: { custom?: string | null }; text?: { value?: string | null } | null; dropdown?: { value?: string | null } | null }[] };
+export type CheckoutSession = { id: string; payment_link?: string | null; payment_status?: string; amount_total?: number; total_details?: { amount_discount?: number } | null; payment_intent?: string | null; customer_details?: { name?: string | null; email?: string | null; phone?: string | null; address?: { city?: string | null; state?: string | null } | null } | null; custom_fields?: { key?: string; label?: { custom?: string | null }; text?: { value?: string | null } | null; dropdown?: { value?: string | null } | null }[] };
 
 /**
  * A package bought through a Stripe payment link on the website (one set on
@@ -212,8 +212,16 @@ export async function monarchWebsitePurchase(env: AppEnv, s: CheckoutSession) {
   if (!res.ok || !link.url) return null;
   const pk = await one<Parameters<typeof toPackage>[0]>(env.DB, "SELECT * FROM mon_packages WHERE stripe_link = ?", link.url);
   if (!pk) return null;
+  return recordWebsiteSale(env, s, pk, "link");
+}
+
+/**
+ * A paid website purchase (payment link or the store): adds the office (or uses the one with
+ * that email), records the paid sale once, runs the paid steps and rings the bell.
+ */
+export async function recordWebsiteSale(env: AppEnv, s: CheckoutSession, pk: Parameters<typeof toPackage>[0], via: "link" | "store") {
   const ref = s.payment_intent ?? s.id;
-  if (await one(env.DB, "SELECT 1 FROM mon_sales WHERE reference = ?", ref)) return { received: true, duplicate: true };
+  if (await one(env.DB, "SELECT 1 FROM mon_sales WHERE reference = ?", ref)) return { received: true, duplicate: true } as const;
   const c = s.customer_details ?? {};
   const email = String(c.email ?? "").trim().toLowerCase().slice(0, 200);
   const field = (re: RegExp) => (s.custom_fields ?? []).find((f) => re.test(`${f.key ?? ""} ${f.label?.custom ?? ""}`))?.text?.value?.trim() || (s.custom_fields ?? []).find((f) => re.test(`${f.key ?? ""} ${f.label?.custom ?? ""}`))?.dropdown?.value?.trim() || "";
@@ -232,11 +240,13 @@ export async function monarchWebsitePurchase(env: AppEnv, s: CheckoutSession) {
   // What they actually paid (a discount code lowers it; a 100%-off code makes it $0, so no reseller commission).
   const amount = Math.max(0, Math.round(s.amount_total ?? pk.price_cents));
   const discount = Math.max(0, Math.round(s.total_details?.amount_discount ?? 0));
-  const method = discount > 0 ? (amount > 0 ? `Card / bank (Stripe — website) — discount code ${usd(discount)}` : "Discount code (100% off — nothing charged) — website") : "Card / bank (Stripe — website)";
+  const where = via === "store" ? "website store" : "website";
+  const method = discount > 0 ? (amount > 0 ? `Card / bank (Stripe — ${where}) — discount code ${usd(discount)}` : `Discount code (100% off — nothing charged) — ${where}`) : `Card / bank (Stripe — ${where})`;
   const saleId = randomId("ms");
   await run(env.DB, "INSERT INTO mon_sales (id, office_id, package_id, description, qty, unit_cents, amount_cents, status, method, reference, paid_at, created_at, created_by, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?, 'paid', ?, ?, ?, ?, NULL, ?)",
     saleId, office.id, pk.id, pk.name, amount, amount, method, ref, t, t, t);
   await afterPaid(env, await saleRow(env, saleId));
-  await notify(env, { module: "monarch" }, { kind: "payment", title: `New Monarch purchase: ${office.name} (${usd(amount)})`, body: `${pk.name} — bought on the website. The welcome email went out automatically.`, href: `/monarch/offices/${office.id}` });
-  return { received: true, office: office.id };
+  const next = pk.kind === "package" ? "The welcome email went out automatically." : pk.after_purchase ? `Next step for you: ${pk.after_purchase}` : "They got a purchase confirmation email.";
+  await notify(env, { module: "monarch" }, { kind: "payment", title: `New Monarch purchase: ${office.name} (${usd(amount)})`, body: `${pk.name} — bought on the ${where}. ${next}`.slice(0, 500), href: `/monarch/offices/${office.id}` });
+  return { received: true, office: office.id } as const;
 }

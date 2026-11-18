@@ -48,9 +48,29 @@ const OG: Record<SiteKey, string> = { mkb: "/brand/mkb-seal-512.png", monarch: "
 const SANDBOX = "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation";
 const html = (body: string, status = 200, sandboxed = false) => new Response(body, { status, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff", "referrer-policy": "strict-origin-when-cross-origin", ...(sandboxed ? { "content-security-policy": SANDBOX } : {}) } });
 
+/** Monarch's store pages (/store, /store/<product>, /store/thanks), drawn with the site's header and footer. */
+async function storePage(req: Request, parts: string[]): Promise<PublicSite | null> {
+  if (!BACKEND) return null;
+  const [{ getEnv }, { siteChrome }, { storeSections }] = await Promise.all([import("./core"), import("./website"), import("./monarch-store")]);
+  const env = await getEnv();
+  const st = await storeSections(env, parts, new URL(req.url).searchParams);
+  if (!st) return null;
+  const chrome = await siteChrome(env, "monarch");
+  return { settings: chrome.settings, page: { slug: parts.join("/"), title: st.title, description: st.description }, sections: st.sections, nav: chrome.nav, legal: chrome.legal };
+}
+/** Fills "Store products" sections on any Monarch page with the current products. */
+async function fillStore(s: PublicSite) {
+  if (!BACKEND || !s.sections.some((x) => x.type === "store")) return s;
+  const [{ getEnv }, { storeCards, storeProducts }] = await Promise.all([import("./core"), import("./monarch-store")]);
+  const cards = storeCards(await storeProducts(await getEnv()));
+  return { ...s, sections: s.sections.map((x) => (x.type === "store" ? { ...x, products: cards } : x)) };
+}
+
 export async function serveSite(req: Request, site: SiteKey, slugParts?: string[]) {
   const slug = (slugParts ?? []).join("/").toLowerCase();
-  const s = await load(site, slug).catch(() => null);
+  const parts = slug.split("/");
+  const loaded = site === "monarch" && parts[0] === "store" ? await storePage(req, parts).catch((e) => { console.error("store page", e); return null; }) : await load(site, slug).catch(() => null);
+  const s = loaded ? await fillStore(loaded).catch(() => loaded) : null;
   const own = await ownHost(req, site);
   const prefix = own ? "" : site === "monarch" ? "/msite" : "/site";
   if (!s) return html(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Page not found</title>${ICONS[site]}</head><body style="font-family:Arial,sans-serif;text-align:center;padding:80px 20px"><h1 style="font:500 34px Georgia,serif">Page not found</h1><p>This page doesn't exist.</p><p><a href="${prefix || "/"}">Go to the home page</a></p></body></html>`, 404, !own);

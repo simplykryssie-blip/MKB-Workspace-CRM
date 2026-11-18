@@ -61,6 +61,11 @@ export const SITE_CSS = String.raw`/* MKB public website — black, white and go
 .mkbsite .cols-3 { grid-template-columns: repeat(3, 1fr); }
 .mkbsite .cols-4 { grid-template-columns: repeat(4, 1fr); }
 .mkbsite .card { background: #fff; padding: 30px; min-height: 190px; }
+.mkbsite a.card.prod { display: flex; flex-direction: column; gap: 6px; text-decoration: none; color: inherit; }
+.mkbsite a.card.prod img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; margin-bottom: 10px; background: #f3f1ec; }
+.mkbsite a.card.prod p { margin: 0; }
+.mkbsite a.card.prod .more { margin-top: auto; padding-top: 10px; font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 700; color: #8a5a06; }
+.mkbsite a.card.prod:hover h3 { text-decoration: underline; }
 .mkbsite .tone-warm .card { background: #fff; }
 .mkbsite .tone-dark .cards { background: #2a2a2a; border-color: #2a2a2a; }
 .mkbsite .tone-dark .card { background: #111; color: #fff; }

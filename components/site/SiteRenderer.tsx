@@ -211,6 +211,16 @@ function SectionView({ s, L, ext, base, preview, site, widgets }: { s: Section; 
           </div>
         </section>
       );
+    case "store":
+      return (
+        <section className={`sec ${tone}`}>
+          <div className="wrap">
+            <Head s={s} />
+            {s.body && <div className="lead">{paras(s.body)}</div>}
+            <p className="note">Your store products appear here — every product switched on under Monarch → Packages → “Show in the store”.</p>
+          </div>
+        </section>
+      );
     case "embed":
       return (
         <section>

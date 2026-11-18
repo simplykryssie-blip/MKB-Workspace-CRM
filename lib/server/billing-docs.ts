@@ -14,6 +14,7 @@ import { audit, type Actor } from "./identity";
 import { buildInvoicePdf } from "./intake-pdf";
 import { notify } from "./notifications";
 import { monarchStripePaid, monarchWebsitePurchase } from "./monarch-sales";
+import { monarchStorePurchase } from "./monarch-store";
 import { bookingPaid } from "./booking";
 import { loadFees } from "./settings";
 
@@ -140,13 +141,15 @@ export async function stripeWebhook(env: AppEnv, req: Request) {
   if (evt.type !== "checkout.session.completed" && evt.type !== "checkout.session.async_payment_succeeded") return { received: true };
   const s = evt.data.object as typeof evt.data.object & { total_details?: { amount_discount?: number } | null; payment_link?: string | null };
   // "no_payment_required" = a 100%-off discount code on a Monarch checkout (used to test without charging).
-  const monarchFree = s.payment_status === "no_payment_required" && (!!s.metadata?.monarch_sale_id || !!s.payment_link);
+  const monarchFree = s.payment_status === "no_payment_required" && (!!s.metadata?.monarch_sale_id || !!s.metadata?.monarch_package_id || !!s.payment_link);
   if (s.payment_status !== "paid" && !monarchFree) return { received: true };
   // Monarch Tax Suite sales are paid through the same Stripe account.
   // Paid consultations booked online.
   if (s.metadata?.appointment_id) return bookingPaid(env, s.metadata.appointment_id, s.amount_total ?? 0, s.payment_intent ?? s.id);
   if (s.metadata?.monarch_sale_id) return monarchStripePaid(env, s.metadata.monarch_sale_id, s.amount_total ?? 0, s.payment_intent ?? s.id, s.total_details?.amount_discount ?? 0);
   // A Monarch package bought through a payment link on the website.
+  // A product bought in Monarch's online store (/store).
+  if (s.metadata?.monarch_package_id) { const m = await monarchStorePurchase(env, s as Parameters<typeof monarchStorePurchase>[1]); if (m) return m; }
   if (s.payment_link) { const m = await monarchWebsitePurchase(env, s as Parameters<typeof monarchWebsitePurchase>[1]); if (m) return m; }
   if (monarchFree) return { received: true };
   const id = s.metadata?.invoice_id;

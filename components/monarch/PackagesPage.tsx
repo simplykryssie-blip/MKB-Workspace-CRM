@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Pencil, Plus } from "lucide-react";
+import { ExternalLink, ImagePlus, Pencil, Plus, X } from "lucide-react";
+import { useToast } from "@/components/ui/Toast";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -21,16 +22,17 @@ function Packages({ d }: { d: MonarchData }) {
   const sold = (id: string) => d.sales.filter((s) => s.packageId === id && s.status === "paid").reduce((n, s) => n + s.qty, 0);
   return (
     <div>
-      <PageHeader title="Packages" subtitle={'What you sell. These show up in "Record a sale" and set what each office includes.'} actions={<Button variant="primary" icon={Plus} onClick={() => setEdit("new")}>New package</Button>} />
+      <PageHeader title="Packages" subtitle={'What you sell. These show up in "Record a sale" and set what each office includes. Switch on "Show in the store" to sell one on your website at /store.'} actions={<Button variant="primary" icon={Plus} onClick={() => setEdit("new")}>New package</Button>} />
       {d.packages.length ? (
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {d.packages.map((p) => (
             <Card key={p.id} className={`flex flex-col gap-2 p-5 ${p.active ? "" : "opacity-70"}`}>
-              <div className="flex items-start justify-between gap-2"><h2 className="text-[17px] font-bold text-ink">{p.name}</h2><Badge tone={p.active ? "success" : "neutral"}>{p.active ? "Active" : "Retired"}</Badge></div>
+              {p.store.images[0] && <img src={`/site/media/${p.store.images[0]}`} alt="" className="aspect-[16/9] w-full rounded-lg bg-surface-2 object-cover" />}
+              <div className="flex items-start justify-between gap-2"><h2 className="text-[17px] font-bold text-ink">{p.name}</h2><span className="flex shrink-0 gap-1">{p.store.listed && p.active && <Badge tone="info">In store</Badge>}<Badge tone={p.active ? "success" : "neutral"}>{p.active ? "Active" : "Retired"}</Badge></span></div>
               <p><span className="text-[26px] font-bold text-ink">{usd(p.priceCents)}</span> <span className="text-[13px] text-muted">{p.kind === "package" ? BILLING_LABEL[p.billing] : "each"}</span></p>
               <p className="text-[12.5px] text-muted">{p.kind === "package" ? `${p.locations} location${p.locations === 1 ? "" : "s"} · ${p.seats} seat${p.seats === 1 ? "" : "s"}${p.askPtins ? " · asks for PTINs" : ""}` : KIND_LABEL[p.kind]} · {sold(p.id)} sold</p>
               {p.features.length > 0 && <ul className="list-disc space-y-0.5 pl-5 text-[13px] text-ink-2">{p.features.map((f, i) => <li key={i}>{f}</li>)}</ul>}
-              <div className="mt-auto pt-2"><Button size="sm" icon={Pencil} onClick={() => setEdit(p)}>Edit</Button></div>
+              <div className="mt-auto flex flex-wrap gap-2 pt-2"><Button size="sm" icon={Pencil} onClick={() => setEdit(p)}>Edit</Button>{p.store.listed && p.active && p.store.slug && <a href={`/msite/store/${p.store.slug}`} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line px-3 text-[12.5px] font-medium text-ink-2 hover:bg-surface-2"><ExternalLink size={14} /> Store page</a>}</div>
             </Card>
           ))}
         </section>
@@ -43,11 +45,24 @@ function Packages({ d }: { d: MonarchData }) {
 function PackageDialog({ value, onClose }: { value: Package | "new" | null; onClose: () => void }) {
   const m = useMonarch();
   const { busy, run } = useAct();
-  const empty = { name: "", kind: "package" as Package["kind"], price: "", billing: "season" as Package["billing"], locations: "1", seats: "1", askPtins: false, features: "", stripeLink: "", softwareId: "", bankId: "", active: true };
+  const toast = useToast();
+  const noStore = { listed: false, slug: "", summary: "", description: "", terms: "", disclaimer: "", images: [] as string[], afterPurchase: "", position: 0 };
+  const empty = { name: "", kind: "package" as Package["kind"], price: "", billing: "season" as Package["billing"], locations: "1", seats: "1", askPtins: false, features: "", stripeLink: "", softwareId: "", bankId: "", active: true, store: noStore };
+  const [uploading, setUploading] = useState(false);
+  const addImage = async (file: File) => {
+    setUploading(true);
+    try {
+      const r = await fetch("/api/website/media?site=monarch", { method: "POST", credentials: "same-origin", headers: { "content-type": file.type, "x-file-name": encodeURIComponent(file.name) }, body: file });
+      const d = (await r.json().catch(() => ({}))) as { key?: string; error?: string };
+      if (!r.ok || !d.key) throw new Error(d.error ?? "Upload failed.");
+      setF((x) => ({ ...x, store: { ...x.store, images: [...x.store.images, d.key!].slice(0, 8) } }));
+    } catch (e) { toast(e instanceof Error ? e.message : "Upload failed", "info"); }
+    setUploading(false);
+  };
   const [f, setF] = useState(empty);
   useEffect(() => {
     if (!value) return;
-    setF(value === "new" ? empty : { name: value.name, kind: value.kind, price: dollars(value.priceCents), billing: value.billing, locations: String(value.locations), seats: String(value.seats), askPtins: value.askPtins, features: value.features.join("\n"), stripeLink: value.stripeLink ?? "", softwareId: value.softwareId ?? "", bankId: value.bankId ?? "", active: value.active });
+    setF(value === "new" ? empty : { name: value.name, kind: value.kind, price: dollars(value.priceCents), billing: value.billing, locations: String(value.locations), seats: String(value.seats), askPtins: value.askPtins, features: value.features.join("\n"), stripeLink: value.stripeLink ?? "", softwareId: value.softwareId ?? "", bankId: value.bankId ?? "", active: value.active, store: value.store ?? noStore });
   }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
   const id = value && value !== "new" ? value.id : null;
   const isPkg = f.kind === "package";
@@ -67,6 +82,36 @@ function PackageDialog({ value, onClose }: { value: Package | "new" | null; onCl
         {isPkg && <div className="sm:col-span-2"><TextField label="Stripe payment link (from your website)" value={f.stripeLink} onChange={(e) => setF({ ...f, stripeLink: e.target.value.trim() })} placeholder="https://buy.stripe.com/…" hint="When someone pays through this link, they're added as an office automatically and get the welcome email." /></div>}
         {isPkg && <Checkbox label="Ask offices for preparer names & PTINs" hint="Adds a Preparers step to their upload link" checked={f.askPtins} onChange={(e) => setF({ ...f, askPtins: e.target.checked })} />}
         <Checkbox label="Available for new sales" checked={f.active} onChange={(e) => setF({ ...f, active: e.target.checked })} />
+      </div>
+      <div className="mt-5 rounded-xl border border-line p-4">
+        <Checkbox label="Show in the store" hint="Gives it its own page on your Monarch website (/store) with a Buy now button. Buyers pay by card through Stripe and are added as an office automatically." checked={f.store.listed} onChange={(e) => setF({ ...f, store: { ...f.store, listed: e.target.checked } })} />
+        {f.store.listed && (
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <TextField label="Web address" value={f.store.slug} onChange={(e) => setF({ ...f, store: { ...f.store, slug: e.target.value } })} placeholder="made from the name" hint={`/store/${f.store.slug || "…"}`} />
+            <TextField label="Order in the store" type="number" min={0} value={String(f.store.position)} onChange={(e) => setF({ ...f, store: { ...f.store, position: Number(e.target.value) || 0 } })} hint="Lower numbers show first" />
+            <div className="sm:col-span-2"><TextArea label="Short summary" rows={2} value={f.store.summary} onChange={(e) => setF({ ...f, store: { ...f.store, summary: e.target.value } })} placeholder="One or two sentences under the name" /></div>
+            <div className="sm:col-span-2"><TextArea label="Description" rows={5} value={f.store.description} onChange={(e) => setF({ ...f, store: { ...f.store, description: e.target.value } })} placeholder="A blank line starts a new paragraph" /></div>
+            <div className="sm:col-span-2"><TextArea label="Purchase terms" rows={4} value={f.store.terms} onChange={(e) => setF({ ...f, store: { ...f.store, terms: e.target.value } })} /></div>
+            <div className="sm:col-span-2"><TextArea label="Disclaimer" rows={3} value={f.store.disclaimer} onChange={(e) => setF({ ...f, store: { ...f.store, disclaimer: e.target.value } })} /></div>
+            <div className="sm:col-span-2"><TextArea label="After they pay" rows={3} value={f.store.afterPurchase} onChange={(e) => setF({ ...f, store: { ...f.store, afterPurchase: e.target.value } })} placeholder="Shown on the thank-you page and emailed to the buyer (software packages get the welcome email instead)" /></div>
+            <div className="sm:col-span-2">
+              <p className="mb-1.5 text-[13px] font-medium text-ink">Pictures</p>
+              <div className="flex flex-wrap gap-2">
+                {f.store.images.map((k) => (
+                  <span key={k} className="relative">
+                    <img src={`/site/media/${k}`} alt="" className="h-20 w-20 rounded-lg border border-line object-cover" />
+                    <button type="button" aria-label="Remove picture" onClick={() => setF({ ...f, store: { ...f.store, images: f.store.images.filter((x) => x !== k) } })} className="absolute -right-1.5 -top-1.5 grid h-6 w-6 place-items-center rounded-full bg-ink text-white"><X size={13} /></button>
+                  </span>
+                ))}
+                <label className="grid h-20 w-20 cursor-pointer place-items-center rounded-lg border border-dashed border-line text-muted hover:bg-surface-2" aria-label="Add a picture">
+                  <ImagePlus size={20} />
+                  <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="sr-only" disabled={uploading} onChange={(e) => { const file = e.target.files?.[0]; if (file) void addImage(file); e.target.value = ""; }} />
+                </label>
+              </div>
+              <p className="mt-1 text-[12px] text-muted">The first picture is the main one.</p>
+            </div>
+          </div>
+        )}
       </div>
       <p className="mt-3 text-[12px] text-muted">Price changes only affect new sales. Past sales keep the price they were sold at. Paying for an add-on adds it to the office automatically.</p>
     </Modal>

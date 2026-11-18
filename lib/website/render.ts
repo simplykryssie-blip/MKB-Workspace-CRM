@@ -12,7 +12,7 @@ const e = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(
 export function renderSectionsBody(x: { settings: SiteSettings; page: Pick<SitePage, "slug" | "title" | "hideNav">; sections: Section[]; nav: NavLink[]; base: string; site: SiteKey; legal?: NavLink[] }) {
   const { settings: st, nav, base, site } = x;
   const funnel = !!x.page.hideNav;
-  const L = (href: string) => (href.startsWith("/") && !href.startsWith("/f/") ? `${base}${href === "/" ? "" : href}` || "/" : href);
+  const L = (href: string) => (href.startsWith("/") && !/^\/(f|api|site\/media)\//.test(href) ? `${base}${href === "/" ? "" : href}` || "/" : href);
   const ext = (href: string) => (/^https?:/i.test(href) ? ' target="_blank" rel="noopener noreferrer"' : "");
   const a = (href: string, label: string, cls = "") => `<a${cls ? ` class="${cls}"` : ""} href="${e(L(href))}"${ext(href)}>${e(label)}</a>`;
   const cta = st.ctaLabel && st.ctaHref ? { label: st.ctaLabel, href: st.ctaHref } : null;
@@ -48,6 +48,8 @@ export function renderSectionsBody(x: { settings: SiteSettings; page: Pick<SiteP
         const doc = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base target="_top"></head><body style="margin:0">${fixed}</body></html>`;
         return `<section><iframe class="embed" title="${e(s.title || "Embedded content")}" style="height:${s.height ?? 900}px" sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation" srcdoc="${e(doc)}" loading="lazy"></iframe></section>`;
       }
+      case "store":
+        return `<section class="sec ${tone}"><div class="wrap">${head(s)}${lead(s)}${(s.products ?? []).length ? `<div class="cards store cols-${s.columns ?? autoCols(s.products!.length)}">${s.products!.map((p) => `<a class="card prod" href="${e(L(`/store/${p.slug}`))}">${p.image ? `<img src="${e(p.image)}" alt="" loading="lazy">` : ""}<div class="lbl">${e(p.price)}</div><h3>${e(p.name)}</h3>${p.summary ? `<p>${e(p.summary)}</p>` : ""}<span class="more">View details &rarr;</span></a>`).join("")}</div>` : `<p class="note">New products are coming soon.</p>`}${buttons(s, s.tone === "dark")}</div></section>`;
       case "document":
         return "";
       default:

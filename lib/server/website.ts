@@ -264,6 +264,19 @@ export async function getMedia(env: AppEnv, key: string) {
 /* ---------------------------------------------------------------- public */
 export type PublicSite = { settings: SiteSettings; page: { slug: string; title: string; description: string; hideNav?: boolean }; sections: Section[]; nav: { slug: string; title: string }[]; legal?: { slug: string; title: string }[] };
 /** What visitors see: published settings and page, or null (not found / never published). */
+/** The site's header/footer settings and menu for pages that aren't website pages (e.g. Monarch's store). */
+export async function siteChrome(env: AppEnv, site: SiteKey) {
+  const [s, pages] = await Promise.all([
+    one<{ published: string | null; draft: string | null }>(env.DB, "SELECT published, draft FROM website_settings WHERE id = ?", SID(site)),
+    all<{ slug: string; title: string; nav: number }>(env.DB, "SELECT slug, title, nav FROM website_pages WHERE site = ? AND deleted_at IS NULL AND published IS NOT NULL ORDER BY position, title", site),
+  ]);
+  return {
+    settings: json(s?.published ?? s?.draft ?? null, DEFAULTS(site)),
+    nav: pages.filter((x) => x.nav && x.slug).map((x) => ({ slug: x.slug, title: x.title })),
+    legal: pages.filter((x) => x.slug === "privacy" || x.slug === "text-terms").map((x) => ({ slug: x.slug, title: x.title })),
+  };
+}
+
 export async function publicPage(env: AppEnv, slug: string, site: SiteKey = "mkb"): Promise<PublicSite | null> {
   const [s, pages] = await Promise.all([
     one<{ published: string | null }>(env.DB, "SELECT published FROM website_settings WHERE id = ?", SID(site)),
