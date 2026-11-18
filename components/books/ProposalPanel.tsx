@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Copy, FileSignature, Mail, Plus, RotateCcw, Save, Trash2, XCircle } from "lucide-react";
+import { CheckCircle2, Copy, Eye, FileSignature, Info, Mail, Plus, RotateCcw, Save, Trash2, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -11,7 +11,7 @@ import { call, RemoteError } from "@/lib/sync/remote";
 import { useServiceFees } from "@/lib/fees/use-fees";
 import { money, quarterlyOf, QUARTERLY_TERMS } from "@/lib/fees/config";
 import { quoteFor } from "@/lib/books/intake";
-import { BILLING_LABEL, booksStage, isQuarterly, lineId, proposalFromQuote, proposalTotals, recurring, STAGE_LABEL, type ProposalBilling, type ProposalLine } from "@/lib/books/proposal";
+import { booksStage, isQuarterly, lineId, proposalFromQuote, proposalTotals, recurring, STAGE_LABEL, type ProposalBilling, type ProposalLine } from "@/lib/books/proposal";
 import { fmtDate, relTime } from "@/lib/format";
 import type { BooksIntake } from "@/lib/server/books-intake";
 import type { Client } from "@/lib/types";
@@ -92,50 +92,112 @@ export function ProposalPanel({ intake, client, reload }: { intake: BooksIntake;
       <div className="flex flex-wrap items-start gap-2">
         <div className="min-w-0 flex-1">
           <h3 className="flex items-center gap-2 text-[17px] font-bold text-ink"><FileSignature size={18} className="text-accent" /> Price review &amp; proposal</h3>
-          <p className="mt-0.5 text-[12.5px] text-muted">The client hasn&rsquo;t seen a price. Check it against their answers, adjust it, then send the proposal with the engagement letter to sign.</p>
+          <p className="mt-0.5 text-[12.5px] text-muted">The client hasn&rsquo;t seen any price yet. Check the price below, save it, then send it for their signature.</p>
         </div>
         <Badge tone={stage === "signed" ? "success" : stage === "proposal_sent" ? "info" : "warning"}>{STAGE_LABEL[stage]}{p && p.version > 1 ? ` · v${p.version}` : ""}</Badge>
       </div>
 
+      {/* Where you are: 1 review → 2 save → 3 send → signed. */}
+      <ol className="mt-3 grid grid-cols-3 gap-2 text-[12px]">
+        {([
+          ["1", "Review the price", true],
+          ["2", "Save it", reviewed && !dirty],
+          ["3", "Send to sign", p?.status === "sent" || p?.status === "signed"],
+        ] as const).map(([n, label, done]) => (
+          <li key={n} className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 ${done ? "bg-success-soft/60 text-success-ink" : "bg-surface-2 text-muted"}`}>
+            {done ? <CheckCircle2 size={14} /> : <span className="grid h-4 w-4 place-items-center rounded-full border border-current text-[10px] font-bold">{n}</span>}
+            <span className="font-semibold">{label}</span>
+          </li>
+        ))}
+      </ol>
+
       {auto && (
-        <div className="mt-3 rounded-xl border border-line bg-surface-2 p-3 text-[12.5px] text-ink-2">
-          <p><b>Automatic quote:</b> {auto.plan.key} · {money(auto.monthlyTotal)}/{auto.cadence === "quarterly" ? "quarter" : "mo"}{auto.oneTimeTotal ? ` + ${money(auto.oneTimeTotal)} one-time` : ""} — a starting point only.</p>
-          {!!auto.notes?.length && <ul className="mt-1 space-y-0.5 text-muted">{auto.notes.map((n) => <li key={n}>• {n}</li>)}</ul>}
-        </div>
+        <details className="mt-3 rounded-xl border border-line bg-surface-2 p-3 text-[12.5px] text-ink-2" open={!reviewed}>
+          <summary className="cursor-pointer font-semibold text-ink"><Info size={13} className="mr-1 inline" />Why the CRM suggested this price</summary>
+          <p className="mt-1.5">From their answers: <b>{auto.plan.key}</b> plan ({auto.plan.transactions.toLocaleString()} transactions, {auto.plan.accounts} accounts){auto.cadence === "quarterly" ? ", billed quarterly" : ""}. It&rsquo;s a starting point &mdash; change anything below.</p>
+          {!!auto.notes?.length && <ul className="mt-1 space-y-0.5">{auto.notes.map((n) => <li key={n}>&bull; {n}</li>)}</ul>}
+        </details>
       )}
 
-      <div className="mt-4 flex flex-wrap items-end gap-3">
-        <label className="text-[13px] font-medium text-ink-2">Plan<br /><select value={plan} onChange={(e) => pickPlan(e.target.value)} className={`${input} mt-1 min-w-[220px]`}>{plans.map((x) => <option key={x.key} value={x.key}>{x.key} — {money(x.fee)}/mo · up to {x.transactions.toLocaleString()} transactions, {x.accounts} accounts</option>)}</select></label>
-        {auto && <Button size="sm" variant="ghost" icon={RotateCcw} onClick={reset}>Start over from the automatic quote</Button>}
+      {/* Plan and how often they pay. */}
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <label className="block text-[13px] font-semibold text-ink">Plan
+          <select value={plan} onChange={(e) => pickPlan(e.target.value)} className={`${input} mt-1 h-10 w-full font-normal`}>{plans.map((x) => <option key={x.key} value={x.key}>{x.key} — {money(x.fee)}{x.startingAt ? "+" : ""}/mo · {x.transactions.toLocaleString()} transactions, {x.accounts} accounts</option>)}</select>
+        </label>
+        <div>
+          <p className="text-[13px] font-semibold text-ink">How they pay</p>
+          <div role="radiogroup" aria-label="How they pay" className="mt-1 grid grid-cols-2 gap-1 rounded-xl bg-surface-2 p-1">
+            {([["monthly", "Monthly"], ["quarterly", `Quarterly (−${disc}%)`]] as const).map(([k, l]) => {
+              const on = (k === "quarterly") === quarterly;
+              return <button key={k} type="button" role="radio" aria-checked={on} onClick={() => { if (!on) switchCadence(); }} className={`h-8 rounded-lg text-[13px] font-semibold ${on ? "bg-surface text-ink shadow-soft" : "text-muted hover:text-ink"}`}>{l}</button>;
+            })}
+          </div>
+          {quarterly && <p className="mt-1 text-[11.5px] text-warning-ink">Paid in full before any work on each quarter begins.</p>}
+        </div>
       </div>
 
-      <div className="mt-3 overflow-x-auto">
-        <table className="w-full min-w-[560px] text-[13.5px]">
-          <thead><tr className="text-left text-[12px] text-muted"><th className="py-1 font-medium">Description</th><th className="py-1 font-medium">Billing</th><th className="py-1 text-right font-medium">Amount</th><th className="py-1 text-center font-medium" title="Show as 'starting at'">From</th><th /></tr></thead>
-          <tbody>
-            {lines.map((l) => (
-              <tr key={l.id} className="border-t border-line">
-                <td className="py-1.5 pr-2"><input aria-label="Description" value={l.label} onChange={(e) => upd(l.id, { label: e.target.value })} className={`${input} w-full`} /></td>
-                <td className="py-1.5 pr-2"><select aria-label="Billing" value={l.billing} onChange={(e) => upd(l.id, { billing: e.target.value as ProposalBilling })} className={input}>{(Object.keys(BILLING_LABEL) as ProposalBilling[]).map((b) => <option key={b} value={b}>{BILLING_LABEL[b]}</option>)}</select></td>
-                <td className="py-1.5 pr-2 text-right">{l.billing === "quote" ? <span className="text-muted">—</span> : <span className="inline-flex items-center gap-1">$<input aria-label="Amount" inputMode="decimal" value={String(l.amount)} onChange={(e) => upd(l.id, { amount: Number(e.target.value.replace(/[^\d.]/g, "")) || 0 })} className={`${input} w-24 text-right tabular-nums`} /></span>}</td>
-                <td className="py-1.5 text-center"><input type="checkbox" aria-label="Starting at" checked={!!l.startingAt} onChange={() => upd(l.id, { startingAt: !l.startingAt || undefined })} className="h-4 w-4 accent-[var(--accent)]" /></td>
-                <td className="py-1.5 text-right"><button aria-label={`Remove ${l.label}`} onClick={() => setLines((x) => x.filter((y) => y.id !== l.id))} className="grid h-8 w-8 place-items-center rounded-lg text-muted hover:bg-surface-hover hover:text-danger-ink"><Trash2 size={15} /></button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* The price, in two parts. */}
+      {([
+        { key: "recurring", title: quarterly ? "Ongoing price — every quarter" : "Ongoing price — every month", help: quarterly ? "The plan and anything billed every quarter." : "The plan and anything billed every month (add-ons like A/R or extra accounts).", match: (l: ProposalLine) => l.billing === "monthly" || l.billing === "quarterly", addLabel: quarterly ? "Add an ongoing item" : "Add a monthly item", newBilling: (quarterly ? "quarterly" : "monthly") as ProposalBilling },
+        { key: "once", title: "One-time & custom-quote work", help: "Billed once (QuickBooks setup, catch-up, cleanup…). Custom quote = no price yet; you agree it with the client in writing.", match: (l: ProposalLine) => l.billing === "one_time" || l.billing === "quote", addLabel: "Add a one-time item", newBilling: "one_time" as ProposalBilling },
+      ]).map((sec) => {
+        const rows = lines.filter(sec.match);
+        return (
+          <section key={sec.key} className="mt-4">
+            <h4 className="text-[14px] font-bold text-ink">{sec.title}</h4>
+            <p className="text-[12px] text-muted">{sec.help}</p>
+            <ul className="mt-2 space-y-2">
+              {rows.length === 0 && <li className="rounded-xl border border-dashed border-line px-3 py-2.5 text-[12.5px] text-muted">Nothing here.</li>}
+              {rows.map((l) => (
+                <li key={l.id} className="rounded-xl border border-line p-3">
+                  <div className="flex items-start gap-2">
+                    <input aria-label="Description" value={l.label} placeholder="What it is (the client sees this)" onChange={(e) => upd(l.id, { label: e.target.value })} className={`${input} h-10 min-w-0 flex-1`} />
+                    <button aria-label={`Remove ${l.label || "this line"}`} onClick={() => setLines((x) => x.filter((y) => y.id !== l.id))} className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-muted hover:bg-surface-hover hover:text-danger-ink"><Trash2 size={16} /></button>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
+                    {sec.key === "once" && (
+                      <select aria-label="Billing" value={l.billing} onChange={(e) => upd(l.id, { billing: e.target.value as ProposalBilling })} className={`${input} h-10`}>
+                        <option value="one_time">One-time price</option>
+                        <option value="quote">Custom quote (no price yet)</option>
+                      </select>
+                    )}
+                    {l.billing === "quote" ? <span className="text-[12.5px] text-muted">The client sees &ldquo;custom quote&rdquo;.</span> : (
+                      <>
+                        <label className="inline-flex items-center gap-1.5 text-[13px] text-ink-2">$<input aria-label="Amount" inputMode="decimal" value={String(l.amount)} onChange={(e) => upd(l.id, { amount: Number(e.target.value.replace(/[^\d.]/g, "")) || 0 })} className={`${input} h-10 w-28 text-right tabular-nums`} /><span className="text-muted">{l.billing === "quarterly" ? "/ quarter" : l.billing === "monthly" ? "/ month" : "one-time"}</span></label>
+                        <label className="inline-flex cursor-pointer items-center gap-2 text-[13px] text-ink-2" title="Shows this price as “starting at” — use it when the final price can go up once you see the work.">
+                          <input type="checkbox" aria-label="Starting at" checked={!!l.startingAt} onChange={() => upd(l.id, { startingAt: !l.startingAt || undefined })} className="h-4 w-4 accent-[var(--accent)]" />
+                          Show as &ldquo;starting at&rdquo;
+                        </label>
+                      </>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <Button size="sm" variant="ghost" icon={Plus} className="mt-1" onClick={() => setLines((x) => [...x, { id: lineId(), label: "", billing: sec.newBilling, amount: 0 }])}>{sec.addLabel}</Button>
+          </section>
+        );
+      })}
+      <p className="mt-2 text-[12px] text-muted">&ldquo;Starting at&rdquo; means the price can go up once you see the work (Advanced, A/P, A/R, catch-up, cleanup). Leave it off for fixed prices.</p>
+      {auto && <Button size="sm" variant="ghost" icon={RotateCcw} className="mt-1" onClick={reset}>Start over from the suggested price</Button>}
+
+      {/* Exactly what the proposal will say. */}
+      <div className="mt-4 rounded-xl border border-accent/30 bg-accent-soft/30 p-3.5">
+        <p className="flex items-center gap-1.5 text-[13px] font-bold text-ink"><Eye size={14} /> What the client will see</p>
+        <p className="mt-1.5 text-[13.5px] text-ink">{quarterly ? "Quarterly" : "Monthly"} total: <b className="tabular-nums">{t.startingAt ? "from " : ""}{money(rec.amount)}/{quarterly ? "quarter" : "mo"}</b>{t.oneTime ? <> · one-time <b className="tabular-nums">{money(t.oneTime)}</b></> : null}{t.quoted.length ? ` · ${t.quoted.length} custom-quoted` : ""}</p>
+        <ul className="mt-1 space-y-0.5 text-[12.5px] text-ink-2">
+          {lines.filter((l) => l.label.trim()).map((l) => <li key={l.id}>&bull; {l.label}: {l.billing === "quote" ? "custom quote" : `${l.startingAt ? "starting at " : ""}${money(l.amount)}${l.billing === "monthly" ? "/month" : l.billing === "quarterly" ? "/quarter" : " one-time"}`}</li>)}
+        </ul>
+        {quarterly && <p className="mt-1.5 rounded-lg bg-warning-soft/50 px-2.5 py-1.5 text-[12px] text-warning-ink">Quarterly: {QUARTERLY_TERMS} The proposal and engagement letter say so.</p>}
+        {auto && rec.amount !== auto.monthlyTotal && <p className="mt-1 text-[11.5px] text-muted">The suggested price was {money(auto.monthlyTotal)}/{auto.cadence === "quarterly" ? "quarter" : "mo"}.</p>}
       </div>
-      <Button size="sm" variant="ghost" icon={Plus} className="mt-1" onClick={() => setLines((x) => [...x, { id: lineId(), label: "", billing: quarterly ? "quarterly" : "monthly", amount: 0 }])}>Add a line</Button>
-      <Button size="sm" variant="ghost" className="ml-1 mt-1" onClick={switchCadence}>{quarterly ? "Switch to monthly billing" : `Switch to quarterly billing (−${disc}%)`}</Button>
-      <p className="mt-2 text-[13.5px] text-ink">{quarterly ? "Quarterly" : "Monthly"} total: <b className="tabular-nums">{t.startingAt ? "from " : ""}{money(rec.amount)}/{quarterly ? "quarter" : "mo"}</b>{t.oneTime ? <> · one-time <b className="tabular-nums">{money(t.oneTime)}</b></> : null}{t.quoted.length ? ` · ${t.quoted.length} custom-quoted` : ""}{auto && rec.amount !== auto.monthlyTotal && <span className="text-muted"> (automatic quote {money(auto.monthlyTotal)})</span>}</p>
-      {quarterly && <p className="mt-1 rounded-lg bg-warning-soft/50 px-3 py-1.5 text-[12.5px] text-warning-ink">Quarterly: {QUARTERLY_TERMS} The proposal and engagement letter say so.</p>}
-      <label className="mt-3 block text-[13px] font-medium text-ink-2">Note to the client (optional)<textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={2} placeholder="e.g. We moved you to Growth because of your monthly volume; your catch-up months will be quoted after we see your statements." className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-[13.5px] text-ink" /></label>
+      <label className="mt-3 block text-[13px] font-semibold text-ink">Note to the client <span className="font-normal text-muted">(optional, shown above the price)</span><textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={2} placeholder="e.g. We put you on Growth because of your monthly volume." className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-[13.5px] font-normal text-ink" /></label>
 
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4">
         <Button icon={Save} disabled={busy || !dirty} onClick={save}>{dirty ? (p && p.status !== "draft" ? "Save new version" : "Save price") : "Saved"}</Button>
         <Button variant="primary" icon={Mail} disabled={busy || dirty || !reviewed || p?.status === "signed"} title={dirty ? "Save the price first" : !reviewed ? "Review and save the price first" : undefined} onClick={() => { setSentUrl(null); setSending(true); }}>{p?.status === "sent" ? "Send again" : "Send proposal & engagement letter"}</Button>
         {p?.status === "sent" && <Button icon={XCircle} variant="ghost" onClick={cancel}>Cancel link</Button>}
-        {!reviewed && <span className="text-[12px] text-muted">Save the price after reviewing it to send.</span>}
+        <span className="text-[12px] text-muted">{dirty ? "Save first — then you can send it." : !reviewed ? "Save the price to unlock Send." : p?.status === "sent" ? "Waiting for their signature." : p?.status === "signed" ? "Signed — start bookkeeping from this intake." : "Ready to send."}</span>
       </div>
       {p?.status === "sent" && <p className="mt-2 text-[12.5px] text-muted">Sent to {p.sentTo} {p.sentAt ? relTime(p.sentAt) : ""}{intake.proposalLink ? ` · ${intake.proposalLink.openedAt ? `opened ${relTime(intake.proposalLink.lastOpenedAt ?? intake.proposalLink.openedAt)}` : "not opened yet"} · expires ${fmtDate(intake.proposalLink.expiresAt)}` : ""}.</p>}
       {p?.status === "signed" && <p className="mt-2 text-[12.5px] text-success-ink">Signed by {p.signedName} on {p.signedAt ? fmtDate(p.signedAt) : ""} (drawn signature). The signed proposal and engagement letter are in the client&rsquo;s Documents.</p>}
@@ -151,7 +213,7 @@ export function ProposalPanel({ intake, client, reload }: { intake: BooksIntake;
         ) : (
           <div className="space-y-3">
             <label className="block text-[13px] font-medium text-ink-2">Client&rsquo;s email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="mt-1 h-10 w-full rounded-xl border border-line bg-surface px-3 text-[14px] text-ink" /></label>
-            <p className="text-[13px] text-ink-2">They&rsquo;ll see: <b>{plan}</b> · {t.startingAt ? "from " : ""}{money(t.monthly)}/mo{t.oneTime ? ` + ${money(t.oneTime)} one-time` : ""}.</p>
+            <p className="text-[13px] text-ink-2">They&rsquo;ll see: <b>{plan}</b> · {t.startingAt ? "from " : ""}{money(rec.amount)}/{quarterly ? "quarter (paid upfront)" : "mo"}{t.oneTime ? ` + ${money(t.oneTime)} one-time` : ""}.</p>
           </div>
         )}
       </Modal>
