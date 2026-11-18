@@ -1,4 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { decideEmbed, frameAncestors, hostFromHeader } from "@/lib/server/calc-embed";
 
 /**
  * 1. Website domains (WEBSITE_HOSTS, e.g. "mkbfinancialgroup.com,www.mkbfinancialgroup.com")
@@ -12,7 +14,7 @@ import { NextResponse, type NextRequest } from "next/server";
  */
 const ON = process.env.NEXT_PUBLIC_BACKEND === "1";
 const OLD_PATHS: Record<string, string> = { "/about-mkb": "/about", "/about-us": "/about", "/get-started": "/contact", "/mkb-financial-group": "/" };
-const STAFF_FREE = /^\/(api|login|portal(\/|$)|campaigns\/|f\/|i\/|u\/|w\/|site(\/|$)|msite(\/|$)|_next|brand|favicon|icon|apple-icon)/;
+const STAFF_FREE = /^\/(api|embed\/|login|portal(\/|$)|campaigns\/|f\/|i\/|u\/|w\/|site(\/|$)|msite(\/|$)|_next|brand|favicon|icon|apple-icon)/;
 
 // 3. The client portal's own address (PORTAL_HOSTS, e.g. "portal.mkbfinancialgroup.com") only serves
 //    the portal, client sign-in and the public links — never staff screens or staff APIs.
@@ -40,13 +42,33 @@ const CSP = [
   "frame-ancestors 'none'",
   "upgrade-insecure-requests",
 ].join("; ");
-const NO_CSP = /^\/(api\/|site(\/|$)|msite(\/|$)|campaigns\/|f\/|w\/|website(\/|$)|monarch\/website(\/|$)|_next\/)/;
+const NO_CSP = /^\/(api\/|embed\/|site(\/|$)|msite(\/|$)|campaigns\/|f\/|w\/|website(\/|$)|monarch\/website(\/|$)|_next\/)/;
 const guarded = (path: string, res: NextResponse) => {
   if (!NO_CSP.test(path)) res.headers.set("Content-Security-Policy", CSP);
   return res;
 };
 
-export function middleware(req: NextRequest) {
+/**
+ * 6. The licensed tax calculator (/embed/calculator?id=…) may only be framed by its license's authorized websites:
+ *    the browser enforces this from the frame-ancestors policy built from the license. Fails closed.
+ */
+async function embedPolicy(req: NextRequest) {
+  let policy = "frame-ancestors 'none'";
+  try {
+    const { env } = await getCloudflareContext({ async: true });
+    policy = frameAncestors(await decideEmbed((env as unknown as { DB: D1Database }).DB, req.nextUrl.searchParams.get("id"), hostFromHeader(req.headers.get("referer"))));
+  } catch {
+    // The license couldn't be checked: nothing may frame it.
+  }
+  const res = NextResponse.next();
+  res.headers.set("Content-Security-Policy", `${policy}; default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'`);
+  res.headers.set("Cache-Control", "no-store");
+  res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  return res;
+}
+
+export async function middleware(req: NextRequest) {
+  if (req.nextUrl.pathname.startsWith("/embed/")) return embedPolicy(req);
   const res = route(req);
   const host = (req.headers.get("host") ?? "").toLowerCase().split(":")[0];
   const isSite = [process.env.WEBSITE_HOSTS, process.env.MONARCH_HOSTS].join(",").toLowerCase().split(",").map((h) => h.trim()).filter(Boolean).includes(host);
@@ -73,7 +95,7 @@ function route(req: NextRequest) {
     if (!host.startsWith("www.") && monarchHosts.includes(`www.${host}`)) return NextResponse.redirect(`https://www.${host}${p}${search}`, 301);
     if (p === "/msite" || p.startsWith("/msite/")) return NextResponse.redirect(`https://${host}${p.slice(6) || "/"}${search}`, 301);
     if (p === "/favicon.ico") { const url = req.nextUrl.clone(); url.pathname = "/brand/monarch-icon-32.png"; return NextResponse.rewrite(url); }
-    if (/^\/(_next|brand|site\/media\/|i\/m\/|w\/|api\/public\/)/.test(p)) return NextResponse.next();
+    if (/^\/(_next|brand|site\/media\/|i\/m\/|w\/|embed\/|api\/public\/)/.test(p)) return NextResponse.next();
     if (p.startsWith("/api/")) return new NextResponse("Not found", { status: 404 });
     const url = req.nextUrl.clone();
     url.pathname = `/msite${p === "/" ? "" : p}`;

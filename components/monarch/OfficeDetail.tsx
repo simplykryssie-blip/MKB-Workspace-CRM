@@ -1,5 +1,6 @@
 "use client";
 
+import { CalculatorLicenseCard } from "./CalculatorLicenseCard";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -169,6 +170,7 @@ function Detail({ d, o }: { d: MonarchData; o: Office }) {
             ) : null;
           })()}
 
+          <CalculatorLicenseCard officeId={o.id} />
           <Notes o={o} />
 
           <Card className="px-5 py-4 sm:px-6">

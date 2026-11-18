@@ -38,6 +38,8 @@ export type AppEnv = Omit<CloudflareEnv, "APP_ENV" | "BACKEND_ENABLED"> & {
   STRIPE_WEBHOOK_SECRET?: string;
   /** Monarch Tax Suite's own Stripe account (store, Monarch pay links, Monarch bookings). Without it, Monarch uses STRIPE_SECRET_KEY. */
   STRIPE_MONARCH_SECRET_KEY?: string;
+  /** Address the tax calculator is served from in customers' install code (e.g. https://verexahq.com). Defaults to APP_ORIGIN. */
+  CALCULATOR_ORIGIN?: string;
   /** Signing secret of the webhook endpoint in Monarch's Stripe account (same address as MKB's). */
   STRIPE_MONARCH_WEBHOOK_SECRET?: string;
   /** Development only: password given to sample team members by the dev seed. */
