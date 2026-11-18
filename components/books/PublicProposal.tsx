@@ -9,7 +9,7 @@ import { LogoMark } from "@/components/brand/Logo";
 import { SignaturePad } from "@/components/ui/SignaturePad";
 import { LetterView } from "@/components/engagement/LetterView";
 import { money, QUARTERLY_TERMS } from "@/lib/fees/config";
-import { isQuarterly, proposalTotals, type ProposalLine } from "@/lib/books/proposal";
+import { isQuarterly, proposalTotals, SOFTWARE_REQUIRED, type ProposalLine } from "@/lib/books/proposal";
 
 /**
  * The client's proposal link: MKB's reviewed bookkeeping price and the
@@ -106,6 +106,10 @@ function Sign({ data, base, onDone, onErr }: { data: Loaded; base: string; onDon
             <ul className="mt-1 grid gap-0.5 sm:grid-cols-2">{p.planIncludes.map((x) => <li key={x} className="text-[13px] text-ink-2">• {x}</li>)}</ul>
           </div>
         )}
+        <div className="mt-4 rounded-xl border border-line bg-surface-2 px-3.5 py-3">
+          <p className="text-[13px] font-semibold text-ink">You&rsquo;ll need your own accounting software</p>
+          <p className="mt-1 text-[13px] text-ink-2">{SOFTWARE_REQUIRED}</p>
+        </div>
         <p className="mt-3 text-[12.5px] text-muted">Questions about your price? Call us at 833-379-3320 before you sign.</p>
       </Card>
       <Card className="p-5 sm:p-6">
