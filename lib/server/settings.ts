@@ -10,7 +10,9 @@ export async function loadFees(env: AppEnv): Promise<ServiceFees & { updatedAt?:
   if (!r) return DEFAULT_SERVICE_FEES;
   const s = json<Partial<ServiceFees>>(r.data, {});
   // Older saved fees: fill new plan fields (locations, lists) and add-ons from the defaults.
-  const books = { ...DEFAULT_SERVICE_FEES.books, ...s.books };
+  // Saved before the current pricing catalog: bookkeeping prices start from the catalog (once). Saving Fees again keeps them.
+  const fromCatalog = (s.books?.catalogVersion ?? 1) < (DEFAULT_SERVICE_FEES.books.catalogVersion ?? 1);
+  const books = fromCatalog ? { ...DEFAULT_SERVICE_FEES.books } : { ...DEFAULT_SERVICE_FEES.books, ...s.books };
   books.plans = books.plans.map((p) => {
     const q = p as Partial<typeof p>;
     const d = DEFAULT_SERVICE_FEES.books.plans.find((x) => x.key === p.key);
@@ -35,12 +37,13 @@ export async function saveFees(env: AppEnv, a: Actor, b: { fees?: ServiceFees })
   const clean: ServiceFees = {
     books: {
       plans: (f.books?.plans ?? []).map((p) => ({ key: String(p.key ?? "").trim().slice(0, 40), fee: Number(p.fee), startingAt: !!p.startingAt, transactions: Math.round(Number(p.transactions)), accounts: Math.round(Number(p.accounts)), locations: Math.round(Number(p.locations ?? 1)), tagline: String(p.tagline ?? "").slice(0, 200), description: String(p.description ?? "").slice(0, 1500), includes: lines(p.includes), excludes: lines(p.excludes) })),
-      addOns: (f.books?.addOns ?? []).slice(0, 40).map((x, i) => ({ key: String(x.key ?? "").trim().slice(0, 30) || `addon${i + 1}`, name: String(x.name ?? "").trim().slice(0, 120), billing: (["monthly", "one_time", "quote"] as const).includes(x.billing) ? x.billing : "monthly", price: Number(x.price) || 0, startingAt: !!x.startingAt, unit: String(x.unit ?? "").slice(0, 40), includes: lines(x.includes) })),
+      addOns: (f.books?.addOns ?? []).slice(0, 40).map((x, i) => ({ key: String(x.key ?? "").trim().slice(0, 30) || `addon${i + 1}`, name: String(x.name ?? "").trim().slice(0, 120), billing: (["monthly", "one_time", "quote"] as const).includes(x.billing) ? x.billing : "monthly", price: Number(x.price) || 0, startingAt: !!x.startingAt, unit: String(x.unit ?? "").slice(0, 40), ...(x.active === false ? { active: false } : {}), includes: lines(x.includes) })),
       overagePerTransaction: Number(f.books?.overagePerTransaction),
       overagePerAccount: Number(f.books?.overagePerAccount),
       upgradeAfterMonths: Math.round(Number(f.books?.upgradeAfterMonths)),
       quarterlyDiscountPct: Number(f.books?.quarterlyDiscountPct ?? DEFAULT_SERVICE_FEES.books.quarterlyDiscountPct),
       catchupPctOfPlan: Number(f.books?.catchupPctOfPlan ?? DEFAULT_SERVICE_FEES.books.catchupPctOfPlan),
+      catalogVersion: DEFAULT_SERVICE_FEES.books.catalogVersion,
     },
     expunge: { baseFee: Number(f.expunge?.baseFee), chargesIncluded: Math.round(Number(f.expunge?.chargesIncluded)), extraChargeFee: Number(f.expunge?.extraChargeFee) },
     taxPartners: { software: String(f.taxPartners?.software ?? "").trim().slice(0, 80), serviceBureau: String(f.taxPartners?.serviceBureau ?? "").trim().slice(0, 80), bankProduct: String(f.taxPartners?.bankProduct ?? "").trim().slice(0, 80) },

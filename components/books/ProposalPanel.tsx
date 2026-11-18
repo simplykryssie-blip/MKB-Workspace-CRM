@@ -47,7 +47,7 @@ export function ProposalPanel({ intake, client, reload }: { intake: BooksIntake;
   const dirty = !p || JSON.stringify([plan, lines.map((l) => [l.label, l.billing, l.amount, !!l.startingAt]), message.trim()]) !== JSON.stringify([p.plan, p.lines.map((l) => [l.label, l.billing, l.amount, !!l.startingAt]), p.message ?? ""]);
   const t = proposalTotals({ lines });
   const plans = F.fees.books.plans;
-  const disc = F.fees.books.quarterlyDiscountPct ?? 10;
+  const disc = F.fees.books.quarterlyDiscountPct ?? 20;
   const quarterly = isQuarterly({ lines });
   const rec = recurring({ lines });
   // Switch the recurring lines between monthly and quarterly (3 months less the quarterly discount).

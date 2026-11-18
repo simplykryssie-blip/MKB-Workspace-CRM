@@ -28,7 +28,7 @@ export function statementPeriod(a: Answers) {
   return from ? `${from} to now` : "every month the books are behind, to now";
 }
 
-export const pickableAddOns = (books: ServiceFees["books"]) => books.addOns.filter((x) => !["biweekly", "weekly", "accounts", "locations", "catchup", "cleanup", "qbo"].includes(x.key));
+export const pickableAddOns = (books: ServiceFees["books"]) => books.addOns.filter((x) => x.active !== false && !["biweekly", "weekly", "accounts", "locations", "catchup", "cleanup", "qbo", "historical", "review", "entity", "consult"].includes(x.key));
 const ADDON_OPTIONS = pickableAddOns(DEFAULT_SERVICE_FEES.books).map((x) => x.name);
 /** "••••1234" from a saved (masked) account number. */
 export const last4Of = (v?: string) => { const d = (v ?? "").replace(/\D/g, ""); return d.length >= 4 ? `••••${d.slice(-4)}` : ""; };

@@ -24,6 +24,8 @@ export type BooksAddOn = {
   startingAt: boolean;
   /** e.g. "per account", "per location". */
   unit: string;
+  /** false = "review before activation": staff can add it to a proposal, but clients don't see it in the intake. */
+  active?: boolean;
   includes: string[];
 };
 export type ServiceFees = {
@@ -38,8 +40,10 @@ export type ServiceFees = {
     upgradeAfterMonths: number;
     /** Quarterly clients: discount off 3 months of the plan and monthly add-ons (billed each quarter, paid in full before that quarter's work begins). */
     quarterlyDiscountPct: number;
-    /** Catch-up bookkeeping: price for each month behind, as a % of the client's monthly plan price. */
+    /** Catch-up bookkeeping: price for each month behind, as a % of the client's monthly plan price (0 = custom quote). */
     catchupPctOfPlan: number;
+    /** Which built-in price list these settings started from (a newer catalog replaces older saved bookkeeping prices once). */
+    catalogVersion?: number;
   };
   expunge: {
     /** MKB fee for a basic expungement… */
@@ -62,29 +66,39 @@ const EXCLUDES = ["Accounts payable (A/P)", "Accounts receivable (A/R)", "Payrol
 export const DEFAULT_SERVICE_FEES: ServiceFees = {
   books: {
     plans: [
-      { key: "Foundation", fee: 399, startingAt: false, transactions: 150, accounts: 3, locations: 1, tagline: "Build your base. Stay in control.", description: "Designed for small businesses and entrepreneurs who need reliable, accurate bookkeeping to keep their business organized and growing. We handle the numbers so you can focus on what you do best \u2014 running your business.", includes: ["Transaction categorization", "Bank and credit card reconciliation (up to 3 financial accounts)", "Monthly financial statements (P&L, Balance Sheet, Cash Flow Statement)", "Month-end close", "Basic receipt review (documents provided by you)", "Monthly reporting", "Routine clarification and document requests", "Access to a dedicated support team"], excludes: EXCLUDES },
+      { key: "Foundation", fee: 399, startingAt: false, transactions: 150, accounts: 2, locations: 1, tagline: "Build your base. Stay in control.", description: "Designed for small businesses and entrepreneurs who need reliable, accurate bookkeeping to keep their business organized and growing. We handle the numbers so you can focus on what you do best \u2014 running your business.", includes: ["Transaction categorization", "Bank and credit card reconciliation (up to 2 financial accounts)", "Monthly financial statements (P&L, Balance Sheet, Cash Flow Statement)", "Month-end close", "Basic receipt review (documents provided by you)", "Monthly reporting", "Routine clarification and document requests", "Access to a dedicated support team"], excludes: EXCLUDES },
       { key: "Essential", fee: 549, startingAt: false, transactions: 400, accounts: 5, locations: 1, tagline: "Grow with confidence.", description: "Designed for established businesses that need more support and higher capacity. With increased transaction limits and additional financial accounts, this package gives you the structure and insight to manage day-to-day operations and support your next stage of growth.", includes: ["Transaction categorization", "Bank and credit card reconciliation (up to 5 financial accounts)", "Monthly financial statements (P&L, Balance Sheet, Cash Flow Statement)", "Month-end close", "Basic receipt review (documents provided by you)", "Monthly reporting", "Routine clarification and document requests", "Access to a dedicated support team"], excludes: EXCLUDES },
       { key: "Growth", fee: 749, startingAt: false, transactions: 750, accounts: 8, locations: 1, tagline: "Expand your potential. We handle the numbers.", description: "Designed for growing businesses that need more capacity, more support, and greater financial visibility. With higher transaction limits and additional financial accounts, this package gives you the structure and insight to scale with confidence.", includes: ["Transaction categorization", "Bank and credit card reconciliation (up to 8 financial accounts)", "Monthly financial statements (P&L, Balance Sheet, Cash Flow Statement)", "Month-end close", "Basic receipt review (documents provided by you)", "Monthly reporting", "Routine clarification and document requests", "Access to a dedicated support team", "Proactive communication as your business grows"], excludes: EXCLUDES },
-      { key: "Advanced", fee: 999, startingAt: true, transactions: 1500, accounts: 12, locations: 1, tagline: "Built for more. Support for what's next.", description: "Designed for established businesses that need a higher level of support, greater capacity, and comprehensive financial oversight. With expanded transaction limits and additional accounts, we provide the structure, accuracy, and insights to help you operate efficiently and plan for what's next.", includes: ["Transaction categorization", "Bank and credit card reconciliation (up to 12 financial accounts)", "Monthly financial statements (P&L, Balance Sheet, Cash Flow Statement)", "Month-end close", "Basic receipt review (documents provided by you)", "Monthly reporting", "Routine clarification and document requests", "Access to a dedicated support team", "Proactive communication and support", "Built for higher-volume businesses"], excludes: EXCLUDES },
+      { key: "Advanced", fee: 1199, startingAt: true, transactions: 1500, accounts: 12, locations: 1, tagline: "Built for more. Support for what's next.", description: "Designed for established businesses that need a higher level of support, greater capacity, and comprehensive financial oversight. With expanded transaction limits and additional accounts, we provide the structure, accuracy, and insights to help you operate efficiently and plan for what's next.", includes: ["Transaction categorization", "Bank and credit card reconciliation (up to 12 financial accounts)", "Monthly financial statements (P&L, Balance Sheet, Cash Flow Statement)", "Month-end close", "Basic receipt review (documents provided by you)", "Monthly reporting", "Routine clarification and document requests", "Access to a dedicated support team", "Proactive communication and support", "Built for higher-volume businesses"], excludes: EXCLUDES },
     ],
     addOns: [
-      { key: "ap", name: "Accounts payable (A/P)", billing: "monthly", price: 100, startingAt: true, unit: "", includes: ["Enter and categorize vendor bills", "Maintain A/P balances", "Reconcile A/P", "Included in month-end close"] },
-      { key: "ar", name: "Accounts receivable (A/R)", billing: "monthly", price: 100, startingAt: true, unit: "", includes: ["Record customer invoices", "Apply customer payments", "Maintain A/R balances", "Reconcile A/R", "Included in month-end close"] },
+      { key: "ap", name: "Accounts payable (A/P)", billing: "monthly", price: 150, startingAt: true, unit: "", includes: ["Enter and categorize vendor bills", "Maintain A/P balances", "Reconcile A/P", "Included in month-end close"] },
+      { key: "ar", name: "Accounts receivable (A/R)", billing: "monthly", price: 150, startingAt: true, unit: "", includes: ["Record customer invoices", "Apply customer payments", "Maintain A/R balances", "Reconcile A/R", "Included in month-end close"] },
       { key: "receipts", name: "Receipt & document management", billing: "monthly", price: 100, startingAt: false, unit: "", includes: ["Receipt collection and organization", "Match receipts to transactions", "Ongoing missing receipt follow-up", "Secure document management"] },
       { key: "biweekly", name: "Biweekly bookkeeping", billing: "monthly", price: 150, startingAt: false, unit: "", includes: ["Books updated every two weeks", "Same great support and reporting"] },
       { key: "weekly", name: "Weekly bookkeeping", billing: "monthly", price: 300, startingAt: false, unit: "", includes: ["Books updated weekly", "Stay closer to your numbers"] },
       { key: "accounts", name: "Additional financial accounts", billing: "monthly", price: 50, startingAt: true, unit: "per account", includes: ["Additional bank, credit card, or standard financial accounts", "Reconciliation included", "Pricing may vary for complex accounts (e.g., Stripe, PayPal, loans, merchant processors)"] },
       { key: "locations", name: "Additional locations", billing: "monthly", price: 150, startingAt: true, unit: "per location", includes: ["Bookkeeping for additional business locations", "Includes location-specific reporting (where applicable)", "Final pricing based on transaction volume, number of accounts, and complexity"] },
+      { key: "entity", name: "Additional business entity", billing: "monthly", price: 150, startingAt: true, unit: "per entity", includes: ["Bookkeeping for an additional business entity", "Starting price; scope, transaction volume, accounts and complexity may change the quote"] },
+      { key: "payrollbooks", name: "Payroll bookkeeping & reconciliation", billing: "monthly", price: 100, startingAt: true, unit: "", active: false, includes: ["Payroll-related bookkeeping and reconciliation", "Range $100–$250+ a month, based on payroll frequency, employee count and scope", "Payroll processing and payroll tax filings are separate services"] },
       { key: "qbo", name: "QuickBooks setup & consultation", billing: "one_time", price: 350, startingAt: true, unit: "", includes: ["Complete setup and customization", "Chart of accounts", "Bank connections", "Initial configuration and training", "Pricing based on your business needs"] },
-      { key: "catchup", name: "Catch-up bookkeeping", billing: "quote", price: 0, startingAt: false, unit: "per month behind", includes: ["For months the books were never entered", "We enter and reconcile every month you're behind", "Priced per month behind, from your plan", "Get current and move forward with confidence"] },
+      { key: "catchup", name: "Catch-up bookkeeping", billing: "quote", price: 0, startingAt: false, unit: "", includes: ["For months the books were never entered", "We enter and reconcile every month you're behind", "Quoted on months behind, transaction volume, accounts and the condition of your records", "Get current and move forward with confidence"] },
       { key: "cleanup", name: "Bookkeeping cleanup", billing: "one_time", price: 500, startingAt: true, unit: "", includes: ["For books that were kept but have errors", "Fix miscategorized and duplicate transactions", "Reconcile accounts that don't match the bank", "Pricing based on scope, months and complexity"] },
+      { key: "historical", name: "Historical reconciliation", billing: "quote", price: 0, startingAt: false, unit: "", includes: ["Historical reconciliation of designated financial accounts and periods", "Custom scope and quote"] },
+      { key: "review", name: "Financial records review", billing: "quote", price: 0, startingAt: false, unit: "", includes: ["Review your bookkeeping records", "Identify discrepancies or areas needing attention", "Custom scope and quote"] },
+      { key: "salestax", name: "Sales tax filing support", billing: "one_time", price: 75, startingAt: true, unit: "per filing", active: false, includes: ["Sales tax bookkeeping and filing support", "Range $75–$150 per filing, based on jurisdiction, complexity and frequency"] },
+      { key: "f1099", name: "1099 preparation", billing: "one_time", price: 25, startingAt: true, unit: "per form", active: false, includes: ["Preparation of 1099 forms", "Range $25–$50 per form, based on form type and volume"] },
+      { key: "statements", name: "Financial statement preparation", billing: "one_time", price: 100, startingAt: true, unit: "per engagement", active: false, includes: ["Preparation of financial statements", "Range $100–$200, based on reporting period and scope"] },
+      { key: "consult", name: "Financial consultation", billing: "one_time", price: 150, startingAt: false, unit: "per hour", includes: ["Financial consultation", "$150 per hour; scope defined before the engagement"] },
       { key: "custom", name: "Custom solutions", billing: "quote", price: 0, startingAt: false, unit: "", includes: ["We create tailored solutions for your business", "Flexible pricing based on scope", "Get the exact support you need"] },
     ],
-    overagePerTransaction: 0.5,
+    overagePerTransaction: 0,
     overagePerAccount: 50,
     upgradeAfterMonths: 2,
-    quarterlyDiscountPct: 10,
-    catchupPctOfPlan: 75,
+    quarterlyDiscountPct: 20,
+    /** 0 = catch-up is a custom quote (the pricing catalog: quoted on months behind, volume, accounts and records). */
+    catchupPctOfPlan: 0,
+    catalogVersion: 2,
   },
   expunge: { baseFee: 550, chargesIncluded: 2, extraChargeFee: 550 },
   taxPartners: { software: "TaxWise", serviceBureau: "MKB Financial Group (in-house)", bankProduct: "Santa Barbara Tax Products Group (TPG)" },
@@ -178,7 +192,7 @@ export function booksQuote(b: ServiceFees["books"], need: { transactions: number
     if (cadence === "quarterly" && (k === "weekly" || k === "biweekly")) continue;
     if (k === "catchup") {
       const months = Math.max(0, Math.round(need.catchupMonths ?? 0));
-      const perMonth = Math.round(plan.fee * ((b.catchupPctOfPlan ?? 75) / 100));
+      const perMonth = Math.round(plan.fee * ((b.catchupPctOfPlan ?? 0) / 100));
       if (months && perMonth) oneTime.push({ label: `${x.name}: ${months} month${months === 1 ? "" : "s"} × ${money(perMonth)}`, amount: months * perMonth, billing: "one_time", startingAt: plan.startingAt });
       else quoted.push({ label: x.name, amount: 0, billing: "quote" });
       continue;
@@ -187,7 +201,7 @@ export function booksQuote(b: ServiceFees["books"], need: { transactions: number
     (x.billing === "monthly" ? monthly : x.billing === "one_time" ? oneTime : quoted).push(line);
   }
   if (cadence === "quarterly") {
-    const d = b.quarterlyDiscountPct ?? 0;
+    const d = b.quarterlyDiscountPct ?? 20;
     monthly = monthly.map((l) => ({ ...l, label: l.label, amount: quarterlyOf(l.amount, d), billing: "quarterly" as const }));
   }
   return { plan, cadence, monthly, oneTime, quoted, monthlyTotal: monthly.reduce((s, l) => s + l.amount, 0), oneTimeTotal: oneTime.reduce((s, l) => s + l.amount, 0), extraAccounts, extraLocations };

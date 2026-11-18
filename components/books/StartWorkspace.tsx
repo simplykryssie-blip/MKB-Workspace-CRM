@@ -20,10 +20,10 @@ import type { BooksIntake } from "@/lib/server/books-intake";
 
 /** MKB's bookkeeping packages (defaults; the live prices come from Settings → Fees). Fees can be adjusted per client. */
 export const BOOKS_PLANS = [
-  { key: "Foundation", fee: 399, detail: "Up to 150 transactions • 3 financial accounts" },
+  { key: "Foundation", fee: 399, detail: "Up to 150 transactions • 2 financial accounts" },
   { key: "Essential", fee: 549, detail: "Up to 400 transactions • 5 financial accounts" },
   { key: "Growth", fee: 749, detail: "Up to 750 transactions • 8 financial accounts" },
-  { key: "Advanced", fee: 999, detail: "Up to 1,500 transactions • 12 financial accounts" },
+  { key: "Advanced", fee: 1199, detail: "Up to 1,500 transactions • 12 financial accounts" },
 ] as const;
 const INCLUDES = ["Monthly bookkeeping review", "Account reconciliations", "P&L, Balance Sheet and Cash Flow", "Month-end close", "Financial record organization", "Standard bookkeeping support"];
 const DEFAULT_REPORTS: ReportType[] = ["Profit and Loss", "Balance Sheet", "Cash Flow Statement"];
@@ -131,13 +131,13 @@ export function StartWorkspace({ open, onClose, onCreated, intake, clientId: pre
           <span className="mb-1.5 block text-[13px] font-medium text-ink-2">Plan</span>
           <div className="grid gap-2 sm:grid-cols-2">
             {plans.map((p) => (
-              <button key={p.key} type="button" onClick={() => { setPlan(p.key); setFee(cadence === "quarterly" ? quarterlyOf(p.fee, F.fees?.books.quarterlyDiscountPct ?? 10) : p.fee); }} className={`rounded-xl border p-3 text-left ${plan === p.key ? "border-accent bg-accent-soft/50" : "border-line hover:bg-surface-hover"}`}>
+              <button key={p.key} type="button" onClick={() => { setPlan(p.key); setFee(cadence === "quarterly" ? quarterlyOf(p.fee, F.fees?.books.quarterlyDiscountPct ?? 20) : p.fee); }} className={`rounded-xl border p-3 text-left ${plan === p.key ? "border-accent bg-accent-soft/50" : "border-line hover:bg-surface-hover"}`}>
                 <span className="block text-[14px] font-semibold text-ink">{p.key} · ${p.fee}{p.plus ? "+" : ""}/mo</span>
                 <span className="block text-[12.5px] text-muted">{p.detail}</span>
               </button>
             ))}
           </div>
-          <div className="mt-3 flex flex-wrap items-end gap-3"><div className="max-w-[220px]"><TextField label={cadence === "quarterly" ? "Quarterly fee ($)" : "Monthly fee ($)"} type="number" min={0} value={fee} onChange={(e) => setFee(Number(e.target.value))} /></div><label className="text-[13px] font-medium text-ink-2">Billing<br /><select value={cadence} onChange={(e) => { const c = e.target.value === "quarterly" ? "quarterly" : "monthly"; const d = F.fees?.books.quarterlyDiscountPct ?? 10; setFee((f) => (c === cadence ? f : c === "quarterly" ? quarterlyOf(f, d) : Math.round(f / (3 * (1 - d / 100))))); setCadence(c); }} className="mt-1 h-11 rounded-xl border border-line bg-surface px-3 text-[14px]"><option value="monthly">Monthly</option><option value="quarterly">Quarterly (paid upfront each quarter)</option></select></label></div>
+          <div className="mt-3 flex flex-wrap items-end gap-3"><div className="max-w-[220px]"><TextField label={cadence === "quarterly" ? "Quarterly fee ($)" : "Monthly fee ($)"} type="number" min={0} value={fee} onChange={(e) => setFee(Number(e.target.value))} /></div><label className="text-[13px] font-medium text-ink-2">Billing<br /><select value={cadence} onChange={(e) => { const c = e.target.value === "quarterly" ? "quarterly" : "monthly"; const d = F.fees?.books.quarterlyDiscountPct ?? 20; setFee((f) => (c === cadence ? f : c === "quarterly" ? quarterlyOf(f, d) : Math.round(f / (3 * (1 - d / 100))))); setCadence(c); }} className="mt-1 h-11 rounded-xl border border-line bg-surface px-3 text-[14px]"><option value="monthly">Monthly</option><option value="quarterly">Quarterly (paid upfront each quarter)</option></select></label></div>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-3">

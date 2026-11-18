@@ -74,10 +74,10 @@ const ALL_PAGES: SitePage[] = [
       { label: "03", title: "Financial Statements", body: "P&L, Balance Sheet, and Cash Flow as standard statements." },
     ]),
     { id: id(), type: "pricing", tone: "warm", eyebrow: "Bookkeeping packages", body: "Includes: Monthly bookkeeping, account reconciliations, P&L, Balance Sheet, Cash Flow, month-end close, financial record organization, and standard bookkeeping support.", items: [
-      { label: "Foundation", title: "Foundation", price: "$399", unit: "/mo", body: "Up to 150 transactions • 3 financial accounts" },
+      { label: "Foundation", title: "Foundation", price: "$399", unit: "/mo", body: "Up to 150 transactions • 2 financial accounts" },
       { label: "Essential", title: "Essential", price: "$549", unit: "/mo", body: "Up to 400 transactions • 5 financial accounts", featured: true },
       { label: "Growth", title: "Growth", price: "$749", unit: "/mo", body: "Up to 750 transactions • 8 financial accounts" },
-      { label: "Advanced", title: "Advanced", price: "$999+", unit: "/mo", body: "Up to 1,500 transactions • 12 financial accounts" },
+      { label: "Advanced", title: "Advanced", price: "$1,199+", unit: "/mo", body: "Up to 1,500 transactions • 12 financial accounts" },
     ], note: "Internal bank transfers are excluded from transaction counts. Monthly completion is within 10 days; statements are delivered by the 5th day after the 10-day completion period." },
     cards("light", "Add-ons", [
       { label: "+$50/mo", title: "Additional Financial Account", body: "Per additional account." },
