@@ -95,7 +95,7 @@ function route(req: NextRequest) {
     if (!host.startsWith("www.") && monarchHosts.includes(`www.${host}`)) return NextResponse.redirect(`https://www.${host}${p}${search}`, 301);
     if (p === "/msite" || p.startsWith("/msite/")) return NextResponse.redirect(`https://${host}${p.slice(6) || "/"}${search}`, 301);
     if (p === "/favicon.ico") { const url = req.nextUrl.clone(); url.pathname = "/brand/monarch-icon-32.png"; return NextResponse.rewrite(url); }
-    if (/^\/(_next|brand|site\/media\/|i\/m\/|w\/|embed\/|api\/public\/)/.test(p)) return NextResponse.next();
+    if (/^\/(_next|brand|site\/media\/|i\/m\/|w\/|embed\/|api\/public\/|api\/license\/)/.test(p)) return NextResponse.next();
     if (p.startsWith("/api/")) return new NextResponse("Not found", { status: 404 });
     const url = req.nextUrl.clone();
     url.pathname = `/msite${p === "/" ? "" : p}`;

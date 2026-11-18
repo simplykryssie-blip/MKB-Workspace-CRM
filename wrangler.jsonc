@@ -85,7 +85,8 @@
         "WEBSITE_HOSTS": "mkbfinancialgroup.com,www.mkbfinancialgroup.com",
         "MONARCH_HOSTS": "monarchtaxsuite.com,www.monarchtaxsuite.com",
         "PORTAL_HOSTS": "portal.mkbfinancialgroup.com",
-        "PORTAL_ORIGIN": "https://portal.mkbfinancialgroup.com"
+        "PORTAL_ORIGIN": "https://portal.mkbfinancialgroup.com",
+        "CALCULATOR_ORIGIN": "https://www.monarchtaxsuite.com"
       }
     }
   }
