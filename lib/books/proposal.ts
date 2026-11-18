@@ -7,7 +7,8 @@ import { money, QUARTERLY_TERMS, type BooksQuote } from "@/lib/fees/config";
 
 /** quarterly = recurring each quarter, paid in full before that quarter's work begins. */
 export type ProposalBilling = "monthly" | "quarterly" | "one_time" | "quote";
-export type ProposalLine = { id: string; label: string; billing: ProposalBilling; amount: number; startingAt?: boolean };
+/** optional: the client can switch it off before signing (add-ons only, never the plan). */
+export type ProposalLine = { id: string; label: string; billing: ProposalBilling; amount: number; startingAt?: boolean; optional?: boolean };
 export type ProposalStatus = "draft" | "sent" | "signed";
 export type Proposal = {
   version: number;
@@ -26,6 +27,14 @@ export type Proposal = {
   signedName?: string;
   signature?: { key: string; sha256: string; bytes: number };
   letter?: { version: number; termsVersion: number };
+  /** Optional add-ons the client switched off when signing (not billed). */
+  declinedLines?: ProposalLine[];
+  /** The first invoice, created when they signed (first month/quarter + project deposits). */
+  firstInvoice?: { id: string; number: string; amount: number };
+  /** One-time project amounts still to bill when the work is done (the rest after the deposit). */
+  balance?: { label: string; amount: number }[];
+  /** The invoice for that balance, once billed. */
+  balanceInvoice?: { id: string; number: string; amount: number };
   /** Earlier signed versions (kept when a signed proposal is revised). */
   previous?: { version: number; signedAt: string; signedName: string; monthlyTotal: number; oneTimeTotal: number }[];
 };
@@ -60,7 +69,7 @@ export function proposalFromQuote(q: BooksQuote, at: string): Proposal {
   return { version: 1, status: "draft", plan: q.plan.key, lines, suggested: { plan: q.plan.key, monthlyTotal: q.monthlyTotal, oneTimeTotal: q.oneTimeTotal }, updatedAt: at };
 }
 
-const amt = (l: ProposalLine) => (l.billing === "quote" ? "custom quote" : `${l.startingAt ? "starting at " : ""}${money(l.amount)}${l.billing === "monthly" ? "/month" : l.billing === "quarterly" ? "/quarter" : " one-time"}`);
+const amt = (l: Omit<ProposalLine, "id">) => (l.billing === "quote" ? "custom quote" : `${l.startingAt ? "starting at " : ""}${money(l.amount)}${l.billing === "monthly" ? "/month" : l.billing === "quarterly" ? "/quarter" : " one-time"}`);
 
 /**
  * A saved bookkeeping letter written before quarterly billing said "Your monthly fee is {{fee}},
@@ -73,7 +82,7 @@ export const booksLetterBody = (body: string) => body
   .replace("- Keep your own accounting software subscription (such as QuickBooks Online). You own your books and your data.", "- Have your own accounting software subscription in the business's name once this letter is signed. We recommend QuickBooks Online; if you already use Wave, Xero or FreshBooks, we can work in it. You pay the subscription directly to the software company. You own your books and your data.");
 
 /** Words for the engagement letter's fill-ins, from the reviewed proposal. */
-export function proposalLetterVars(p: Proposal, planIncludes: string[]) {
+export function proposalLetterVars(p: Pick<Proposal, "plan"> & { lines: Omit<ProposalLine, "id">[] }, planIncludes: string[]) {
   const t = proposalTotals(p);
   const extra = p.lines.filter((l) => !((l.billing === "monthly" || l.billing === "quarterly") && l.label === `${p.plan} plan`));
   const r = recurring(p);
@@ -115,3 +124,23 @@ export function booksStage(i: { status: string; workspaceId?: string; proposal?:
   return "in_review";
 }
 export const STAGE_LABEL: Record<BooksStage, string> = { in_progress: "In progress", in_review: "In review", proposal_sent: "Proposal sent", signed: "Signed — ready to start", started: "Bookkeeping started" };
+
+/** Share of one-time project work due at signing (the rest is billed when the project is done). */
+export const DEPOSIT_PCT = 50;
+const c2 = (n: number) => Math.round(n * 100);
+/**
+ * The first invoice, created when the client signs: the first month (or quarter) of the
+ * ongoing price, plus a deposit on one-time project work. Custom-quoted work isn't billed yet.
+ */
+export function startInvoiceLines(p: { lines: Omit<ProposalLine, "id">[] }) {
+  const q = isQuarterly(p);
+  const lines: { label: string; amount: number; kind: "service" }[] = [];
+  for (const l of p.lines.filter((x) => x.billing === (q ? "quarterly" : "monthly") && x.amount > 0)) lines.push({ label: `${l.label} — ${q ? "first quarter (paid before work begins)" : "first month"}`, amount: c2(l.amount) / 100, kind: "service" });
+  const balance: { label: string; amount: number }[] = [];
+  for (const l of p.lines.filter((x) => x.billing === "one_time" && x.amount > 0)) {
+    const dep = Math.round((c2(l.amount) * DEPOSIT_PCT) / 100);
+    lines.push({ label: `${l.label} — ${DEPOSIT_PCT}% deposit`, amount: dep / 100, kind: "service" });
+    balance.push({ label: l.label, amount: (c2(l.amount) - dep) / 100 });
+  }
+  return { lines, balance, total: lines.reduce((t, l) => t + c2(l.amount), 0) / 100 };
+}

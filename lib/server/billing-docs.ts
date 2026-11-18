@@ -54,11 +54,13 @@ export async function sendInvoice(env: AppEnv, a: Actor, id: string) {
 }
 
 /** Emails the invoice (PDF + a fresh pay link). `by` is a team member id, or "system" for automatic billing. */
-export async function deliverInvoice(env: AppEnv, r: InvoiceRow, by: string) {
+/** `to`: send to this address instead of the client's email on file (e.g. the person who just signed). */
+export async function deliverInvoice(env: AppEnv, r: InvoiceRow, by: string, opts: { to?: string } = {}) {
   const id = r.id;
   if (r.status === "void") throw badRequest("This invoice is void.");
   const c = await one<{ name: string; contact_name: string | null; email: string | null }>(env.DB, "SELECT name, contact_name, email FROM clients WHERE id = ?", r.client_id);
-  if (!c?.email) throw badRequest("This client has no email address on file.");
+  const to = opts.to || c?.email;
+  if (!c || !to) throw badRequest("This client has no email address on file.");
   if (!(await rateLimit(env.DB, `invmail:${id}`, 6, 60))) throw new HttpError(429, "Too many emails for this invoice in the last hour.", "rate_limited");
   const owed = r.amount_cents - r.paid_cents;
   // A new link each time; older links stop working.
@@ -71,9 +73,9 @@ export async function deliverInvoice(env: AppEnv, r: InvoiceRow, by: string) {
   const pdf = await pdfFor(env, fresh, payUrl);
   const first = (c.contact_name || c.name).trim().split(/\s+/)[0];
   const payNote = r.payment_mode === "bank_product" ? "These fees will be taken out of your refund — no payment is due now unless your refund can't cover them." : owed > 0 ? `It's due ${longDate(r.due_at)}. You can pay securely online with the button below.` : "It's paid in full — thank you.";
-  const out = await sendTemplate(env, "invoice_sent", { to: c.email, vars: { firstName: first, number: r.number, amount: usd(r.amount_cents), dueDate: longDate(r.due_at), payNote }, attachments: [{ filename: fileName(r), content: pdf }], buttonUrl: payUrl });
-  await run(env.DB, "INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'invoice', ?, ?, ?, ?)", randomId("x"), r.client_id, `${r.sent_at ? "Resent" : "Sent"} invoice ${r.number} to ${c.email}${out.sent ? "" : " (queued)"}`, by === "system" ? "system" : "staff", by === "system" ? null : by, t);
-  return { invoice: toInvoice(fresh), sent: out.sent, payLink: !!payUrl, stripe: stripeReady(env) };
+  const out = await sendTemplate(env, "invoice_sent", { to, vars: { firstName: first, number: r.number, amount: usd(r.amount_cents), dueDate: longDate(r.due_at), payNote }, attachments: [{ filename: fileName(r), content: pdf }], buttonUrl: payUrl });
+  await run(env.DB, "INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'invoice', ?, ?, ?, ?)", randomId("x"), r.client_id, `${r.sent_at ? "Resent" : "Sent"} invoice ${r.number} to ${to}${out.sent ? "" : " (queued)"}`, by === "system" ? "system" : "staff", by === "system" ? null : by, t);
+  return { invoice: toInvoice(fresh), sent: out.sent, payLink: !!payUrl, payUrl, stripe: stripeReady(env) };
 }
 
 /* ---------------------------------------------------------------- client pay link */

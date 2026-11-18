@@ -11,7 +11,7 @@ import { call, RemoteError } from "@/lib/sync/remote";
 import { useServiceFees } from "@/lib/fees/use-fees";
 import { money, quarterlyOf, QUARTERLY_TERMS } from "@/lib/fees/config";
 import { quoteFor } from "@/lib/books/intake";
-import { booksStage, isQuarterly, lineId, proposalFromQuote, proposalTotals, recurring, STAGE_LABEL, type ProposalBilling, type ProposalLine } from "@/lib/books/proposal";
+import { booksStage, DEPOSIT_PCT, isQuarterly, startInvoiceLines, lineId, proposalFromQuote, proposalTotals, recurring, STAGE_LABEL, type ProposalBilling, type ProposalLine } from "@/lib/books/proposal";
 import { fmtDate, relTime } from "@/lib/format";
 import type { BooksIntake } from "@/lib/server/books-intake";
 import type { Client } from "@/lib/types";
@@ -44,12 +44,13 @@ export function ProposalPanel({ intake, client, reload }: { intake: BooksIntake;
   const p = intake.proposal;
   const stage = booksStage(intake);
   const reviewed = !!p?.updatedBy;
-  const dirty = !p || JSON.stringify([plan, lines.map((l) => [l.label, l.billing, l.amount, !!l.startingAt]), message.trim()]) !== JSON.stringify([p.plan, p.lines.map((l) => [l.label, l.billing, l.amount, !!l.startingAt]), p.message ?? ""]);
+  const dirty = !p || JSON.stringify([plan, lines.map((l) => [l.label, l.billing, l.amount, !!l.startingAt, !!l.optional]), message.trim()]) !== JSON.stringify([p.plan, p.lines.map((l) => [l.label, l.billing, l.amount, !!l.startingAt, !!l.optional]), p.message ?? ""]);
   const t = proposalTotals({ lines });
   const plans = F.fees.books.plans;
   const disc = F.fees.books.quarterlyDiscountPct ?? 20;
   const quarterly = isQuarterly({ lines });
   const rec = recurring({ lines });
+  const startDue = startInvoiceLines({ lines });
   // Switch the recurring lines between monthly and quarterly (3 months less the quarterly discount).
   const switchCadence = () => setLines((x) => x.map((l) => quarterly
     ? (l.billing === "quarterly" ? { ...l, billing: "monthly" as const, amount: Math.round(l.amount / (3 * (1 - disc / 100))) } : l)
@@ -84,6 +85,12 @@ export function ProposalPanel({ intake, client, reload }: { intake: BooksIntake;
   const cancel = async () => {
     if (!window.confirm("Cancel the proposal link? It stops working right away and the proposal goes back to draft.")) return;
     try { await call("POST", `/api/books/intakes/${intake.id}/proposal/cancel`); toast("Proposal link cancelled"); reload(); } catch (e) { toast(e instanceof Error ? e.message : "Couldn't cancel", "info"); }
+  };
+  const billRest = async () => {
+    if (!window.confirm("Is the project work done? This emails the client an invoice for the remaining balance.")) return;
+    setBusy(true);
+    try { const r = await call<{ number: string; amount: number }>("POST", `/api/books/intakes/${intake.id}/balance`); toast(`Invoice ${r.number} (${money(r.amount)}) sent`); reload(); } catch (e) { toast(e instanceof Error ? e.message : "Couldn't bill the balance", "info"); }
+    setBusy(false);
   };
   const reset = () => { if (!auto) return; const d = proposalFromQuote(auto, ""); setPlan(d.plan); setLines(d.lines); };
   const input = "h-9 rounded-lg border border-line bg-surface px-2 text-[13.5px] text-ink";
@@ -170,6 +177,12 @@ export function ProposalPanel({ intake, client, reload }: { intake: BooksIntake;
                         </label>
                       </>
                     )}
+                    {!(sec.key === "recurring" && l.label === `${plan} plan`) && l.billing !== "quote" && (
+                      <label className="inline-flex cursor-pointer items-center gap-2 text-[13px] text-ink-2" title="The client can switch this add-on off before signing. What they sign is what you bill.">
+                        <input type="checkbox" aria-label="Optional" checked={!!l.optional} onChange={() => upd(l.id, { optional: !l.optional || undefined })} className="h-4 w-4 accent-[var(--accent)]" />
+                        Optional (client can switch it off)
+                      </label>
+                    )}
                   </div>
                 </li>
               ))}
@@ -178,7 +191,7 @@ export function ProposalPanel({ intake, client, reload }: { intake: BooksIntake;
           </section>
         );
       })}
-      <p className="mt-2 text-[12px] text-muted">&ldquo;Starting at&rdquo; means the price can go up once you see the work (Advanced, A/P, A/R, catch-up, cleanup). Leave it off for fixed prices.</p>
+      <p className="mt-2 text-[12px] text-muted">&ldquo;Starting at&rdquo; means the price can go up once you see the work (Advanced, A/P, A/R, catch-up, cleanup). <b>Optional</b> add-ons get an on/off switch on the client&rsquo;s proposal &mdash; what they sign is exactly what gets billed. The plan is always included.</p>
       {auto && <Button size="sm" variant="ghost" icon={RotateCcw} className="mt-1" onClick={reset}>Start over from the suggested price</Button>}
 
       {/* Exactly what the proposal will say. */}
@@ -186,8 +199,9 @@ export function ProposalPanel({ intake, client, reload }: { intake: BooksIntake;
         <p className="flex items-center gap-1.5 text-[13px] font-bold text-ink"><Eye size={14} /> What the client will see</p>
         <p className="mt-1.5 text-[13.5px] text-ink">{quarterly ? "Quarterly" : "Monthly"} total: <b className="tabular-nums">{t.startingAt ? "from " : ""}{money(rec.amount)}/{quarterly ? "quarter" : "mo"}</b>{t.oneTime ? <> · one-time <b className="tabular-nums">{money(t.oneTime)}</b></> : null}{t.quoted.length ? ` · ${t.quoted.length} custom-quoted` : ""}</p>
         <ul className="mt-1 space-y-0.5 text-[12.5px] text-ink-2">
-          {lines.filter((l) => l.label.trim()).map((l) => <li key={l.id}>&bull; {l.label}: {l.billing === "quote" ? "custom quote" : `${l.startingAt ? "starting at " : ""}${money(l.amount)}${l.billing === "monthly" ? "/month" : l.billing === "quarterly" ? "/quarter" : " one-time"}`}</li>)}
+          {lines.filter((l) => l.label.trim()).map((l) => <li key={l.id}>&bull; {l.label}: {l.billing === "quote" ? "custom quote" : `${l.startingAt ? "starting at " : ""}${money(l.amount)}${l.billing === "monthly" ? "/month" : l.billing === "quarterly" ? "/quarter" : " one-time"}`}{l.optional ? " (optional — they can switch it off)" : ""}</li>)}
         </ul>
+        {startDue.total > 0 && <p className="mt-1.5 text-[12.5px] text-ink-2">Due when they sign (if they keep every add-on): <b>{money(startDue.total)}</b> &mdash; the first {quarterly ? "quarter" : "month"}{startDue.balance.length ? ` + ${DEPOSIT_PCT}% deposit on one-time work` : ""}. They pay online right after signing.</p>}
         {quarterly && <p className="mt-1.5 rounded-lg bg-warning-soft/50 px-2.5 py-1.5 text-[12px] text-warning-ink">Quarterly: {QUARTERLY_TERMS} The proposal and engagement letter say so.</p>}
         {auto && rec.amount !== auto.monthlyTotal && <p className="mt-1 text-[11.5px] text-muted">The suggested price was {money(auto.monthlyTotal)}/{auto.cadence === "quarterly" ? "quarter" : "mo"}.</p>}
       </div>
@@ -200,6 +214,16 @@ export function ProposalPanel({ intake, client, reload }: { intake: BooksIntake;
         <span className="text-[12px] text-muted">{dirty ? "Save first — then you can send it." : !reviewed ? "Save the price to unlock Send." : p?.status === "sent" ? "Waiting for their signature." : p?.status === "signed" ? "Signed — start bookkeeping from this intake." : "Ready to send."}</span>
       </div>
       {p?.status === "sent" && <p className="mt-2 text-[12.5px] text-muted">Sent to {p.sentTo} {p.sentAt ? relTime(p.sentAt) : ""}{intake.proposalLink ? ` · ${intake.proposalLink.openedAt ? `opened ${relTime(intake.proposalLink.lastOpenedAt ?? intake.proposalLink.openedAt)}` : "not opened yet"} · expires ${fmtDate(intake.proposalLink.expiresAt)}` : ""}.</p>}
+      {p?.status === "signed" && (
+        <div className="mt-3 rounded-xl border border-line p-3.5 text-[13px] text-ink-2">
+          <p className="font-semibold text-ink">Billing</p>
+          {p.firstInvoice ? <p className="mt-1">First invoice <b>{p.firstInvoice.number}</b> ({money(p.firstInvoice.amount)}) was emailed with a Pay online link when they signed. <a href="/billing" className="font-semibold text-accent hover:underline">See it in Billing</a></p> : <p className="mt-1">No first invoice was created (nothing due at signing).</p>}
+          {!!p.declinedLines?.length && <p className="mt-1">They switched off: {p.declinedLines.map((x) => x.label).join(", ")} (not billed).</p>}
+          {!!p.balance?.length && (p.balanceInvoice
+            ? <p className="mt-1">Project balance billed: invoice <b>{p.balanceInvoice.number}</b> ({money(p.balanceInvoice.amount)}).</p>
+            : <div className="mt-2 flex flex-wrap items-center gap-2"><span>Still to bill when the project is done: {p.balance.map((x) => `${x.label} ${money(x.amount)}`).join(", ")}.</span><Button size="sm" variant="primary" disabled={busy} onClick={billRest}>Bill the balance now</Button></div>)}
+        </div>
+      )}
       {p?.status === "signed" && <p className="mt-2 text-[12.5px] text-success-ink">Signed by {p.signedName} on {p.signedAt ? fmtDate(p.signedAt) : ""} (drawn signature). The signed proposal and engagement letter are in the client&rsquo;s Documents.</p>}
       {!!p?.previous?.length && <p className="mt-1 text-[12px] text-muted">Earlier signed versions: {p.previous.map((x) => `v${x.version} ${money(x.monthlyTotal)}, signed ${fmtDate(x.signedAt)} by ${x.signedName}`).join("; ")}.</p>}
 

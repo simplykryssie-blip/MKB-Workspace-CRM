@@ -10,6 +10,7 @@ import { fillLetter } from "@/lib/engagement/letters";
 import { feeWords, money } from "@/lib/fees/config";
 import { docsFor, type Answers } from "@/lib/tax/interview/engine";
 import { all, badRequest, HttpError, json, notFound, now, one, run, type AppEnv } from "./core";
+import { billBalance, createStartInvoice, linkStartInvoice } from "./books-start-billing";
 import { decryptField, encryptField, randomId } from "./crypto";
 
 import { sha256Bytes, signatureFrom } from "./signature";
@@ -112,6 +113,8 @@ export async function saveIntake(env: AppEnv, a: Actor, id: string, b: { answers
   const res = await run(env.DB, "UPDATE books_intakes SET answers = ?, step = ?, workspace_id = ?, history = ?, updated_at = ?, rev = rev + 1 WHERE id = ? AND rev = ?", JSON.stringify(answers), step, ws, note ? hist(r.history, a.member.id, note) : r.history, now(), id, r.rev);
   if (!res.meta.changes) throw new HttpError(409, "Someone else updated this intake. Reloading the latest version.", "conflict");
   if (note) await audit(env.DB, a, { action: "Record update", resource: `Bookkeeping intake ${id}`, meta: note });
+  const first = proposalOf(r)?.firstInvoice;
+  if (ws && ws !== r.workspace_id && first) await linkStartInvoice(env, first.id, ws).catch((e) => console.error("link start invoice", e));
   return { intake: toIntake((await one<Row>(env.DB, `${SQL} WHERE i.id = ?`, id))!) };
 }
 
@@ -394,14 +397,15 @@ function cleanProposal(b: { plan?: unknown; lines?: unknown; message?: unknown }
     if (!label) throw badRequest(`Line ${i + 1} needs a description.`);
     if (!billing) throw badRequest(`Line ${i + 1}: choose monthly, quarterly, one-time or custom quote.`);
     if (!Number.isFinite(amount) || amount < 0 || amount > 1_000_000) throw badRequest(`Line ${i + 1}: enter an amount between $0 and $1,000,000.`);
-    return { id: typeof l.id === "string" && /^[\w-]{1,40}$/.test(l.id) ? l.id : randomId("pl"), label, billing, amount, startingAt: l.startingAt === true || undefined };
+    const isPlan = (billing === "monthly" || billing === "quarterly") && label === `${plan} plan`;
+    return { id: typeof l.id === "string" && /^[\w-]{1,40}$/.test(l.id) ? l.id : randomId("pl"), label, billing, amount, startingAt: l.startingAt === true || undefined, optional: (!isPlan && l.optional === true) || undefined };
   });
   if (!lines.some((l) => (l.billing === "monthly" || l.billing === "quarterly") && l.amount > 0)) throw badRequest("The proposal needs a monthly or quarterly price.");
   if (lines.some((l) => l.billing === "monthly") && lines.some((l) => l.billing === "quarterly")) throw badRequest("Use either monthly or quarterly prices, not both.");
   const message = typeof b.message === "string" ? b.message.trim().slice(0, 1500) : "";
   return { plan, lines, message: message || undefined };
 }
-const sameTerms = (x: Pick<Proposal, "plan" | "lines" | "message">, y: Pick<Proposal, "plan" | "lines" | "message">) => JSON.stringify([x.plan, x.lines.map((l) => [l.label, l.billing, l.amount, !!l.startingAt]), x.message ?? ""]) === JSON.stringify([y.plan, y.lines.map((l) => [l.label, l.billing, l.amount, !!l.startingAt]), y.message ?? ""]);
+const sameTerms = (x: Pick<Proposal, "plan" | "lines" | "message">, y: Pick<Proposal, "plan" | "lines" | "message">) => JSON.stringify([x.plan, x.lines.map((l) => [l.label, l.billing, l.amount, !!l.startingAt, !!l.optional]), x.message ?? ""]) === JSON.stringify([y.plan, y.lines.map((l) => [l.label, l.billing, l.amount, !!l.startingAt, !!l.optional]), y.message ?? ""]);
 
 /** { plan, lines, message, rev } — saves MKB's reviewed price. Changing a sent or signed proposal starts a new version. */
 export async function saveProposal(env: AppEnv, a: Actor, id: string, b: { plan?: unknown; lines?: unknown; message?: unknown; rev?: unknown }) {
@@ -504,17 +508,23 @@ export async function publicProposal(env: AppEnv, token: string, ip: string) {
   const bizName = (typeof answers.legalName === "string" && answers.legalName.trim()) || c.name;
   const firstName = ((answers.owners as { name?: string }[] | undefined)?.[0]?.name || c.contact_name || c.name).trim().split(/\s+/)[0];
   const plan = fees.books.plans.find((x) => x.key === p.plan);
-  const vars = { ...feeWords(fees), clientName: bizName, date: longDate(now()), taxYear: "", ...proposalLetterVars(p, plan?.includes ?? []) };
+  // {{service}}, {{fee}}, {{planIncludes}} and {{addOns}} stay as placeholders: the page fills them from the add-ons the client keeps.
+  const keep = { service: "{{service}}", fee: "{{fee}}", planIncludes: "{{planIncludes}}", addOns: "{{addOns}}" };
+  const vars = { ...feeWords(fees), clientName: bizName, date: longDate(now()), taxYear: "", ...keep };
   return {
     businessName: bizName, firstName, expiresAt: l.expiresAt,
-    proposal: { version: p.version, plan: p.plan, lines: p.lines.map(({ label, billing, amount, startingAt }) => ({ label, billing, amount, startingAt })), message: p.message, planIncludes: plan?.includes ?? [] },
+    proposal: { version: p.version, plan: p.plan, lines: p.lines.map(({ label, billing, amount, startingAt, optional }) => ({ label, billing, amount, startingAt, optional })), message: p.message, planIncludes: plan?.includes ?? [] },
     letters: { books: { ...letters.books, title: fillLetter(letters.books.title, vars), body: fillLetter(booksLetterBody(letters.books.body), vars) }, terms: { ...letters.terms, title: fillLetter(letters.terms.title, vars), body: fillLetter(letters.terms.body, vars) } },
   };
 }
 
 /** { name, signature, version, engagement: { version, termsVersion } } — the client signs the proposal and engagement letter. */
-export async function publicSignProposal(env: AppEnv, token: string, ip: string, b: { name?: unknown; signature?: unknown; version?: unknown; engagement?: { version?: unknown; termsVersion?: unknown } }) {
-  const { l, r, p, actor } = await fromProposalLink(env, token, ip);
+export async function publicSignProposal(env: AppEnv, token: string, ip: string, b: { name?: unknown; signature?: unknown; version?: unknown; engagement?: { version?: unknown; termsVersion?: unknown }; declined?: unknown }) {
+  const { l, r, p: offered, actor } = await fromProposalLink(env, token, ip);
+  // Optional add-ons the client switched off (by position on their page). Only optional lines can be dropped.
+  const off = new Set(Array.isArray(b.declined) ? b.declined.filter((i): i is number => Number.isInteger(i) && i >= 0 && i < offered.lines.length && !!offered.lines[i].optional) : []);
+  const p: Proposal = { ...offered, lines: offered.lines.filter((_, i) => !off.has(i)), declinedLines: offered.lines.filter((_, i) => off.has(i)) };
+  if (!p.declinedLines?.length) delete p.declinedLines;
   if (Number(b.version) !== p.version) throw new HttpError(409, "MKB updated this proposal. Please reload to see the latest version.", "conflict");
   const name = typeof b.name === "string" ? b.name.trim().slice(0, 120) : "";
   if (name.length < 2) throw badRequest("Type your full name to sign.");
@@ -532,7 +542,7 @@ export async function publicSignProposal(env: AppEnv, token: string, ip: string,
   const sigKey = `clients/${c.id}/signatures/${r.id}-proposal-v${p.version}.png`;
   const signed: Proposal = { ...p, status: "signed", signedAt: t, signedName: name, signature: { key: sigKey, sha256: await sha256Bytes(sigPng), bytes: sigPng.length }, letter: { version: lt.version, termsVersion: terms.version } };
   const engagement = { version: lt.version, termsVersion: terms.version, acceptedName: name, acceptedAt: t, method: "online", signature: signed.signature, proposalVersion: p.version };
-  const res = await run(env.DB, "UPDATE books_intakes SET proposal = ?, engagement = ?, history = ?, updated_at = ?, rev = rev + 1 WHERE id = ? AND proposal = ?", JSON.stringify(signed), JSON.stringify(engagement), hist(r.history, "client (secure link)", `Proposal v${p.version} and engagement letter signed by ${name} (drawn signature)`), t, r.id, r.proposal);
+  const res = await run(env.DB, "UPDATE books_intakes SET proposal = ?, engagement = ?, history = ?, updated_at = ?, rev = rev + 1 WHERE id = ? AND proposal = ?", JSON.stringify(signed), JSON.stringify(engagement), hist(r.history, "client (secure link)", `${p.declinedLines?.length ? `Declined optional: ${p.declinedLines.map((x) => x.label).join(", ")}. ` : ""}Proposal v${p.version} and engagement letter signed by ${name} (drawn signature)`), t, r.id, r.proposal);
   if (!res.meta.changes) throw new HttpError(409, "MKB updated this proposal. Please reload to see the latest version.", "conflict");
   await env.FILES.put(sigKey, sigPng, { httpMetadata: { contentType: "image/png" }, customMetadata: { intake: r.id, proposalVersion: String(p.version), signedBy: name, signedAt: t } });
   await useLink(env, l.id);
@@ -551,7 +561,16 @@ export async function publicSignProposal(env: AppEnv, token: string, ip: string,
   await run(env.DB, "INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'intake', ?, 'client', NULL, ?)", randomId("x"), c.id, `Signed the bookkeeping proposal (${p.plan}) and engagement letter online`, t);
   await notify(env, { module: "books" }, { kind: "intake", title: `${bizName} signed their bookkeeping proposal`, body: `${p.plan} · ${per(p)} — ready to start bookkeeping`, href: `/services/bookkeeping/intake/${r.id}` });
   await audit(env.DB, actor, { action: "Record update", resource: `Bookkeeping intake ${r.id}`, meta: `Proposal v${p.version} + engagement letter v${lt.version} signed (drawn) by ${name}${emailed ? "; copy emailed" : ""}` });
-  return { signed: true, emailed, next: await nextStop(env, c.id) };
+  // Pay right after signing: the first month/quarter and the deposit on one-time project work.
+  let pay: { url: string | null; amount: number; number: string } | null = null;
+  try {
+    const start = await createStartInvoice(env, c.id, bizName, signed, to || undefined);
+    if (start.invoice) {
+      await run(env.DB, "UPDATE books_intakes SET proposal = ? WHERE id = ?", JSON.stringify({ ...signed, firstInvoice: start.invoice, balance: start.balance.length ? start.balance : undefined }), r.id);
+      pay = { url: start.payUrl, amount: start.invoice.amount, number: start.invoice.number };
+    }
+  } catch (e) { console.error("start invoice", e instanceof Error ? e.message : e); }
+  return { signed: true, emailed, next: await nextStop(env, c.id), pay };
 }
 
 /** A client's (or prospect's) intakes with their link status — for the lead page. */
@@ -561,4 +580,14 @@ export async function intakesForClient(env: AppEnv, a: Actor, clientId: string) 
   const out: BooksIntake[] = [];
   for (const r of rows) out.push({ ...toIntake(r), link: await latestLink(env, "books_intake", r.id), proposalLink: await latestLink(env, "books_proposal", r.id), ...(await intakeFiles(env, r)) });
   return out;
+}
+
+/** Staff: bill the rest of the one-time project work (after the deposit) once it's done. */
+export async function billIntakeBalance(env: AppEnv, a: Actor, id: string) {
+  const r = await row(env, a, id);
+  const c = await one<{ name: string }>(env.DB, "SELECT name FROM clients WHERE id = ?", r.client_id);
+  const answers = json<Answers>(r.answers, {});
+  const bizName = (typeof answers.legalName === "string" && answers.legalName.trim()) || c?.name || "Client";
+  const out = await billBalance(env, a, { id: r.id, client_id: r.client_id, proposal: r.proposal }, bizName);
+  return { ...out, intake: { ...toIntake((await one<Row>(env.DB, `${SQL} WHERE i.id = ?`, id))!), ...(await intakeFiles(env, r)) } };
 }
