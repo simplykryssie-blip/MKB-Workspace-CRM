@@ -18,7 +18,7 @@ import { DEPOSIT_PCT, isQuarterly, proposalLetterVars, proposalTotals, SOFTWARE_
  */
 type Letter = { title: string; body: string; version: number };
 type Done = { emailed: boolean; next?: NextStop; pay?: { url: string | null; amount: number; number: string } | null };
-type Loaded = {
+export type Loaded = {
   businessName: string; firstName: string; expiresAt: string;
   proposal: { version: number; plan: string; lines: Omit<ProposalLine, "id">[]; message?: string; planIncludes: string[] };
   letters: { books: Letter; terms: Letter };
@@ -70,7 +70,8 @@ export function PublicProposal({ token }: { token: string }) {
 
 const amount = (l: Omit<ProposalLine, "id">) => (l.billing === "quote" ? "Custom quote" : `${l.startingAt ? "from " : ""}${money(l.amount)}`);
 
-function Sign({ data, base, onDone, onErr }: { data: Loaded; base: string; onDone: (d: Done) => void; onErr: (e: { status: number; message: string }) => void }) {
+/** The proposal + letter + signature screen. `preview`: MKB's look at it before sending (nothing can be signed). */
+export function Sign({ data, base, onDone, onErr, preview }: { data: Loaded; base: string; onDone: (d: Done) => void; onErr: (e: { status: number; message: string }) => void; preview?: boolean }) {
   const offered = data.proposal;
   // Optional add-ons the client switched off (by position).
   const [off, setOff] = useState<Set<number>>(new Set());
@@ -162,7 +163,8 @@ function Sign({ data, base, onDone, onErr }: { data: Loaded; base: string; onDon
       <Card className="space-y-3 p-5 sm:p-6">
         <div className="max-w-sm"><label htmlFor="pp-name" className="mb-1 block text-[13px] font-medium text-ink-2">Your full name (printed)</label><input id="pp-name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} className="h-11 w-full rounded-xl border border-line bg-surface px-3 text-[15px] text-ink" /></div>
         <div className="max-w-lg"><SignaturePad label="Sign here with your finger or mouse" onChange={setDrawn} /></div>
-        <Button variant="primary" icon={Send} disabled={busy || !accepted || name.trim().length < 3 || !drawn} onClick={sign}>{busy ? "Signing…" : "Sign and accept"}</Button>
+        {preview && <p className="rounded-xl bg-warning-soft/60 px-3 py-2 text-[13px] font-medium text-warning-ink">Preview only &mdash; the client signs here. Nothing is saved or sent from this preview.</p>}
+        <Button variant="primary" icon={Send} disabled={preview || busy || !accepted || name.trim().length < 3 || !drawn} onClick={sign}>{busy ? "Signing…" : "Sign and accept"}</Button>
         {msg && <p role="alert" className="text-[13px] text-danger-ink">{msg}</p>}
         <p className="text-[12px] text-muted">Once you sign, this link closes, we email you a signed copy{due.total > 0 ? `, and you pay the first invoice (${money(due.total)}) online` : ""}.</p>
       </Card>

@@ -128,7 +128,13 @@ export function Workspace({ id }: { id: string }) {
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-[22px] font-bold tracking-tight text-ink sm:text-[24px]">{w.businessName}</h1>
                 <QboBadge status={w.qbo.status} />
+                {w.awaitingPayment && <span className="rounded-full bg-warning-soft px-2.5 py-0.5 text-[12px] font-semibold text-warning-ink">Waiting for payment</span>}
               </div>
+              {w.awaitingPayment && (
+                <p role="status" className="mt-2 rounded-xl border border-warning/40 bg-warning-soft/60 px-3 py-2 text-[13px] text-warning-ink">
+                  <b>On hold &mdash; waiting for payment.</b> First invoice {w.awaitingPayment.number} still has ${w.awaitingPayment.owed.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} owed. Don&rsquo;t start the work until it&rsquo;s paid; this clears on its own when the payment is recorded.
+                </p>
+              )}
               <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-muted">
                 <span className="inline-flex items-center gap-1.5"><Building2 size={14} /> {w.entityType}</span>
                 <span>Client: <Link href={`/clients/${client.id}`} className="font-medium text-accent hover:underline">{client.name}</Link></span>

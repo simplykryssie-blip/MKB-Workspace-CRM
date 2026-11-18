@@ -204,6 +204,8 @@ export type BooksWorkspace = {
   extras: ExtraCharge[];
   /** Automatic monthly invoice: on `day` of each month, bill that month's fee (plus uninvoiced charges). */
   billing?: WorkspaceBilling;
+  /** Server-filled: the first invoice from signing isn't paid yet — hold work until it is. */
+  awaitingPayment?: { number: string; owed: number } | null;
   qbo: {
     status: QboStatus;
     companyName: string;

@@ -9,10 +9,13 @@ import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { call, RemoteError } from "@/lib/sync/remote";
 import { useServiceFees } from "@/lib/fees/use-fees";
-import { money, quarterlyOf, QUARTERLY_TERMS } from "@/lib/fees/config";
+import { useLetters } from "@/lib/engagement/use-letters";
+import { Sign, type Loaded } from "@/components/books/PublicProposal";
+import { feeWords, money, quarterlyOf, QUARTERLY_TERMS } from "@/lib/fees/config";
 import { quoteFor } from "@/lib/books/intake";
-import { booksStage, DEPOSIT_PCT, isQuarterly, startInvoiceLines, lineId, proposalFromQuote, proposalTotals, recurring, STAGE_LABEL, type ProposalBilling, type ProposalLine } from "@/lib/books/proposal";
+import { booksLetterBody, booksStage, DEPOSIT_PCT, isQuarterly, startInvoiceLines, lineId, proposalFromQuote, proposalTotals, recurring, STAGE_LABEL, type ProposalBilling, type ProposalLine } from "@/lib/books/proposal";
 import { fmtDate, relTime } from "@/lib/format";
+import { fillLetter } from "@/lib/engagement/letters";
 import type { BooksIntake } from "@/lib/server/books-intake";
 import type { Client } from "@/lib/types";
 
@@ -34,6 +37,8 @@ export function ProposalPanel({ intake, client, reload }: { intake: BooksIntake;
   const [sending, setSending] = useState(false);
   const [email, setEmail] = useState((typeof intake.answers.email === "string" && intake.answers.email) || client.email || "");
   const [sentUrl, setSentUrl] = useState<string | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  const L = useLetters();
   // Fees can arrive after the first render: start from the quote once it exists (only if nothing is filled in yet).
   const startKey = start ? `${start.plan}|${start.version}|${start.updatedAt}` : "";
   useEffect(() => {
@@ -208,6 +213,7 @@ export function ProposalPanel({ intake, client, reload }: { intake: BooksIntake;
       <label className="mt-3 block text-[13px] font-semibold text-ink">Note to the client <span className="font-normal text-muted">(optional, shown above the price)</span><textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={2} placeholder="e.g. We put you on Growth because of your monthly volume." className="mt-1 w-full rounded-xl border border-line bg-surface px-3 py-2 text-[13.5px] font-normal text-ink" /></label>
 
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4">
+        <Button icon={Eye} onClick={() => setPreviewing(true)} disabled={!lines.length}>Preview as client</Button>
         <Button icon={Save} disabled={busy || !dirty} onClick={save}>{dirty ? (p && p.status !== "draft" ? "Save new version" : "Save price") : "Saved"}</Button>
         <Button variant="primary" icon={Mail} disabled={busy || dirty || !reviewed || p?.status === "signed"} title={dirty ? "Save the price first" : !reviewed ? "Review and save the price first" : undefined} onClick={() => { setSentUrl(null); setSending(true); }}>{p?.status === "sent" ? "Send again" : "Send proposal & engagement letter"}</Button>
         {p?.status === "sent" && <Button icon={XCircle} variant="ghost" onClick={cancel}>Cancel link</Button>}
@@ -227,6 +233,23 @@ export function ProposalPanel({ intake, client, reload }: { intake: BooksIntake;
       {p?.status === "signed" && <p className="mt-2 text-[12.5px] text-success-ink">Signed by {p.signedName} on {p.signedAt ? fmtDate(p.signedAt) : ""} (drawn signature). The signed proposal and engagement letter are in the client&rsquo;s Documents.</p>}
       {!!p?.previous?.length && <p className="mt-1 text-[12px] text-muted">Earlier signed versions: {p.previous.map((x) => `v${x.version} ${money(x.monthlyTotal)}, signed ${fmtDate(x.signedAt)} by ${x.signedName}`).join("; ")}.</p>}
 
+      {previewing && (() => {
+        const bizName = (typeof intake.answers.legalName === "string" && intake.answers.legalName) || client.name;
+        const firstName = (client.contactName || client.name).trim().split(/\s+/)[0];
+        const planRow = plans.find((x) => x.key === plan);
+        const vars = { ...feeWords(F.fees!), clientName: bizName, date: new Date().toLocaleDateString("en-US", { dateStyle: "long" }), taxYear: "", service: "{{service}}", fee: "{{fee}}", planIncludes: "{{planIncludes}}", addOns: "{{addOns}}" };
+        const letters = L.letters;
+        const data: Loaded | null = letters ? {
+          businessName: bizName, firstName, expiresAt: new Date(Date.now() + 14 * 86400000).toISOString(),
+          proposal: { version: (p?.version ?? 1), plan, lines: lines.map(({ label, billing, amount, startingAt, optional }) => ({ label, billing, amount, startingAt, optional })), message: message.trim() || undefined, planIncludes: planRow?.includes ?? [] },
+          letters: { books: { ...letters.books, title: fillLetter(letters.books.title, vars), body: fillLetter(booksLetterBody(letters.books.body), vars) }, terms: { ...letters.terms, title: fillLetter(letters.terms.title, vars), body: fillLetter(letters.terms.body, vars) } },
+        } : null;
+        return (
+          <Modal open size="lg" onClose={() => setPreviewing(false)} title="Preview: what the client will see" description={dirty ? "This includes changes you haven't saved yet. Save before sending." : "Exactly what the client sees when they open the link."} footer={<Button variant="primary" onClick={() => setPreviewing(false)}>Close preview</Button>}>
+            {data ? <div className="-mx-1"><Sign preview data={data} base="" onDone={() => {}} onErr={() => {}} /></div> : <p className="text-[13px] text-muted">Loading the engagement letter…</p>}
+          </Modal>
+        );
+      })()}
       <Modal open={sending} onClose={() => { setSending(false); if (sentUrl) reload(); }} title="Send proposal & engagement letter" description="The client opens a private link (no login) to see this price, read the engagement letter and sign with a drawn signature."
         footer={sentUrl ? <Button variant="primary" onClick={() => { setSending(false); reload(); }}>Done</Button> : <><Button onClick={() => setSending(false)}>Cancel</Button><Button variant="primary" icon={Mail} disabled={busy || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())} onClick={send}>{busy ? "Sending…" : "Email the proposal"}</Button></>}>
         {sentUrl ? (

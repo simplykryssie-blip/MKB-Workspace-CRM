@@ -179,7 +179,7 @@ function Overview({ byId, go }: { byId: Map<string, Client>; go: (t: Tab) => voi
                     const late = new Date(closeTarget(m.period)) < SAMPLE_NOW;
                     return (
                       <tr key={m.id} onClick={() => router.push(wsHref(w, m))} className="cursor-pointer border-b border-line last:border-0 hover:bg-surface-hover">
-                        <td className="px-5 py-3"><Link href={wsHref(w, m)} onClick={(e) => e.stopPropagation()} className="font-semibold text-ink hover:text-accent">{w.businessName}</Link><div className="text-[12px] text-muted">{byId.get(w.clientId)?.name}</div></td>
+                        <td className="px-5 py-3"><Link href={wsHref(w, m)} onClick={(e) => e.stopPropagation()} className="font-semibold text-ink hover:text-accent">{w.businessName}</Link>{w.awaitingPayment && <span className="ml-2 rounded-full bg-warning-soft px-2 py-0.5 text-[11px] font-semibold text-warning-ink">Waiting for payment</span>}<div className="text-[12px] text-muted">{byId.get(w.clientId)?.name}</div></td>
                         <td className="px-3 py-3 font-medium text-ink tabular-nums">{periodLabel(m.period, true)}</td>
                         <td className="px-3 py-3"><StageBadge stage={m.stage} /></td>
                         <td className="px-3 py-3 text-ink-2">{next.text}</td>
@@ -198,7 +198,7 @@ function Overview({ byId, go }: { byId: Map<string, Client>; go: (t: Tab) => voi
                   <Link href={wsHref(w, m)} className="block px-4 py-3.5 hover:bg-surface-hover">
                     <div className="flex items-start gap-2">
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[14.5px] font-semibold text-ink">{w.businessName}</span>
+                        <span className="block truncate text-[14.5px] font-semibold text-ink">{w.businessName}{w.awaitingPayment && <span className="ml-2 rounded-full bg-warning-soft px-2 py-0.5 align-middle text-[11px] font-semibold text-warning-ink">Waiting for payment</span>}</span>
                         <span className="block text-[12.5px] text-muted">{periodLabel(m.period)} · {staffById(m.assignedTo).name}</span>
                       </span>
                       <OwnerBadge owner={next.owner} />

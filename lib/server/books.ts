@@ -49,7 +49,24 @@ export async function listBooks(env: AppEnv, a: Actor) {
   if (a.kind !== "staff") throw forbidden();
   const rows = await all<Row>(env.DB, "SELECT * FROM books_workspaces ORDER BY business_name");
   const ok = await accessibleClients(env, a, [...new Set(rows.map((r) => r.client_id))]);
-  return { workspaces: rows.filter((r) => ok.has(r.client_id)).map(toWorkspace) };
+  const list = rows.filter((r) => ok.has(r.client_id)).map(toWorkspace);
+  // Hold: a workspace started from a signed proposal waits until that first invoice is paid.
+  const held = await awaitingPayment(env, list.map((w) => w.id));
+  return { workspaces: list.map((w) => ({ ...w, awaitingPayment: held.get(w.id) ?? null })) };
+}
+
+/** Workspaces whose first invoice (created when the client signed) still has money owed. */
+export async function awaitingPayment(env: AppEnv, ids: string[]) {
+  const out = new Map<string, { number: string; owed: number }>();
+  if (!ids.length) return out;
+  const intakes = await all<{ workspace_id: string; proposal: string | null }>(env.DB, `SELECT workspace_id, proposal FROM books_intakes WHERE workspace_id IN (${ids.map(() => "?").join(",")})`, ...ids);
+  for (const i of intakes) {
+    const first = json<{ firstInvoice?: { id: string } } | null>(i.proposal, null)?.firstInvoice;
+    if (!first) continue;
+    const inv = await one<{ number: string; amount_cents: number; paid_cents: number; status: string }>(env.DB, "SELECT number, amount_cents, paid_cents, status FROM invoices WHERE id = ?", first.id);
+    if (inv && inv.status !== "void" && inv.paid_cents < inv.amount_cents) out.set(i.workspace_id, { number: inv.number, owed: (inv.amount_cents - inv.paid_cents) / 100 });
+  }
+  return out;
 }
 
 async function load(env: AppEnv, a: Staff, id: string) {
