@@ -83,6 +83,9 @@ export function FullCalculator({ leadCapture }: { leadCapture?: LeadCaptureConfi
   }, []);
 
   const kidCount = Math.floor(num(kids));
+  // The no-child EITC questions matter only when the visitor said "0 children" and earns little enough for that credit.
+  const NO_CHILD_EITC_LIMIT: Record<FullStatus, number> = { single: 19540, hoh: 19540, mfs: 19540, mfj: 26820 };
+  const askNoChildEitc = kids.trim() !== "" && kidCount === 0 && num(wages) + num(netProfit) > 0 && num(wages) + num(netProfit) < NO_CHILD_EITC_LIMIT[status];
   const joint = status === "mfj";
 
   function gather(): FullInputs {
@@ -103,6 +106,7 @@ export function FullCalculator({ leadCapture }: { leadCapture?: LeadCaptureConfi
       if (email.trim() && !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(email.trim())) return (setBad(["fc_email"]), setWarn("Enter a valid email address."));
       if (!consent) return setWarn("Please agree to be contacted so your results can be sent.");
     }
+    if (kids.trim() === "") return (setBad(["fc_kids"]), setWarn("Enter the number of qualifying children (0 if none)."));
     const inputs = gather();
     const r = computeFull(inputs);
     if (!r) {
@@ -185,10 +189,10 @@ export function FullCalculator({ leadCapture }: { leadCapture?: LeadCaptureConfi
               </div>
               <div className="fc-row">
                 <Num id="fc_inv" label="Investment Income ($)" value={investment} set={setInvestment} />
-                <Num id="fc_kids" label="Qualifying Children Under 17" value={kids} set={setKids} help="Count only children who were under 17 on Dec. 31, 2026, lived with you more than half the year, have a Social Security number, and will be claimed as your dependent." />
+                <Num id="fc_kids" label="Qualifying Children Under 17 (enter 0 if none)" value={kids} set={setKids} error={err("fc_kids")} help="Count only children who were under 17 on Dec. 31, 2026, lived with you more than half the year, have a Social Security number, and will be claimed as your dependent." />
               </div>
 
-              {kidCount === 0 && (
+              {askNoChildEitc && (
                 <div className="fc-section" style={{ marginTop: 14 }}>
                   <div className="fc-section-title">EITC — No Qualifying Child</div>
                   <div className="fc-row">
