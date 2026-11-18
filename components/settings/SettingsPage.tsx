@@ -7,6 +7,7 @@ import { DollarSign, FileSignature, History, Mail, Megaphone, Plus, RotateCcw, S
 import { ImportIdentifiers } from "./ImportIdentifiers";
 import { ImportContacts } from "./ImportContacts";
 import { BackupsCard } from "./BackupsCard";
+import { FirmCard } from "./FirmCard";
 import { FunnelsCard } from "./FunnelsCard";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -47,7 +48,7 @@ export function SettingsPage() {
           <button key={k} role="tab" aria-selected={tab === k} onClick={() => { setTab(k); history.replaceState(null, "", `#${k}`); }} className={`inline-flex h-10 items-center gap-2 rounded-xl border px-4 text-[14px] font-semibold ${tab === k ? "border-accent bg-accent-soft text-accent-ink" : "border-line bg-surface text-ink-2 hover:bg-surface-hover"}`}><Icon size={16} />{l}</button>
         ))}
       </div>
-      {tab === "import" && owner ? <div className="space-y-5"><BackupsCard /><ImportContacts /><ImportIdentifiers /></div> : tab === "campaigns" ? <FunnelsCard /> : tab === "letters" ? <LettersEditor /> : tab === "emails" ? <div className="space-y-5"><EmailRepliesCard /><EmailsEditor /></div> : tab === "fees" ? <FeesEditor /> : <div className="space-y-5"><TaxRulesCard /><DesigneeEditor /></div>}
+      {tab === "import" && owner ? <div className="space-y-5"><BackupsCard /><ImportContacts /><ImportIdentifiers /></div> : tab === "campaigns" ? <FunnelsCard /> : tab === "letters" ? <LettersEditor /> : tab === "emails" ? <div className="space-y-5"><EmailRepliesCard /><EmailsEditor /></div> : tab === "fees" ? <FeesEditor /> : <div className="space-y-5"><FirmCard /><TaxRulesCard /><DesigneeEditor /></div>}
     </div>
   );
 }

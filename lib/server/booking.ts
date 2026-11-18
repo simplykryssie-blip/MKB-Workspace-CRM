@@ -14,6 +14,7 @@
  * - Every 15 minutes the cron frees unpaid holds and sends reminders.
  * Server-only.
  */
+import { closedDays } from "./firm";
 import { DAYS, LOCATIONS, usd, type BookingSettings, type DayKey, type Hours, type MyHours } from "@/lib/calendar/config";
 import { FIRM, type TemplateKey, renderEmail } from "@/lib/email/templates";
 import { canDo } from "@/lib/team/policy";
@@ -168,12 +169,14 @@ async function openTimes(env: AppEnv, t: TypeRow, people: Booker[], exceptId = "
   const start = Date.now() + r.minNotice * 3600e3, end = Date.now() + r.windowDays * 864e5;
   const dur = t.duration_min * 60e3, buf = t.buffer_min * 60e3, step = r.step * 60e3;
   const taken = await busy(env, people.map((p) => p.id), start - 864e5, end + 864e5, exceptId);
+  // Office closed days (holidays) block everyone.
+  const closed = await closedDays(env, new Date(start - 864e5).toISOString().slice(0, 10), new Date(end + 864e5).toISOString().slice(0, 10));
   const out = new Map<string, number[]>();
   for (const p of people) {
     const list: number[] = [];
     const b = taken.get(p.id) ?? [];
     for (let day = dayIn(start, p.tz); day <= dayIn(end, p.tz); day = addDay(day, 1)) {
-      if (p.daysOff.includes(day)) continue;
+      if (p.daysOff.includes(day) || closed.has(day)) continue;
       for (const [from, to] of p.hours[weekday(day)] ?? []) {
         const close = zoned(day, to, p.tz);
         for (let at = zoned(day, from, p.tz); at + dur <= close; at += step) {
