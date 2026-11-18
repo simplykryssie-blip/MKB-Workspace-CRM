@@ -11,8 +11,7 @@ import { notify } from "./notifications";
 import { audit, requirePermission, type Actor } from "./identity";
 import {
   checklistFor, DEFAULT_SETTINGS, isDone, itemState, stageIndex,
-  type Bank, type BankStatus, type BankUpload, type Commission, type ItemState, type Location, type MonarchData, type MonarchSettings, type Office, type OfficeFile, type Package, type Preparer, type Reseller, type Sale, type Software, type Stage, type UnmatchedRow,
-} from "@/lib/monarch/types";
+  type Bank, type BankStatus, type BankUpload, type Commission, type ItemState, type Location, type MonarchData, type MonarchSettings, type Office, type OfficeFile, type Package, type Preparer, type Reseller, type Sale, type Software, type Stage, type UnmatchedRow, type StoreInfo } from "@/lib/monarch/types";
 import type { ActionKey } from "@/lib/team/config";
 
 export const need = (a: Actor, action: ActionKey = "view") => requirePermission(a, "monarch", action);
@@ -27,15 +26,20 @@ export type OfficeRow = {
   agreement: string | null; link_hash: string | null; link_sent_at: string | null; link_last_used: string | null; link_expires_at: string | null; link_off_at: string | null;
   created_at: string; created_by: string | null; updated_at: string; rev: number; welcome_sent_at?: string | null;
 };
-type PackageRow = { id: string; name: string; kind: Package["kind"]; price_cents: number; billing: Package["billing"]; locations: number; seats: number; ask_ptins: number; features: string; active: number; stripe_link?: string; software_id?: string | null; bank_id?: string | null; slug?: string | null; store?: number; summary?: string; description?: string; terms?: string; disclaimer?: string; images?: string; after_purchase?: string; position?: number };
+type PackageRow = { id: string; name: string; kind: Package["kind"]; price_cents: number; billing: Package["billing"]; locations: number; seats: number; ask_ptins: number; features: string; active: number; stripe_link?: string; software_id?: string | null; bank_id?: string | null; slug?: string | null; store?: number; summary?: string; description?: string; terms?: string; disclaimer?: string; images?: string; after_purchase?: string; position?: number; delivery?: string; tax_year?: number | null };
 type SoftwareRow = { id: string; name: string; sb_fee_cents: number; download_url: string; welcome_subject: string; welcome_body: string; active: number; application_url?: string };
 type BankRow = { id: string; name: string; addon_fee_cents: number; application_url: string; layouts: string; active: number };
 type ResellerRow = { id: string; name: string; contact: string; email: string; phone: string; rate_bp: number; notes: string; active: number };
 type FileRow = { id: string; office_id: string; item: string; name: string; size_bytes: number; uploaded_by: string; created_at: string };
 
 export const slugify = (v: string) => v.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+/** Download products: their files (names and sizes only). */
+async function withFiles(env: AppEnv, list: Package[]) {
+  const files = await all<{ id: string; package_id: string; name: string; size: number }>(env.DB, "SELECT id, package_id, name, size FROM mon_package_files WHERE deleted_at IS NULL ORDER BY created_at").catch(() => []);
+  return list.map((p) => ({ ...p, store: { ...p.store, files: files.filter((f) => f.package_id === p.id).map((f) => ({ id: f.id, name: f.name, size: f.size })) } }));
+}
 export const toPackage = (r: PackageRow): Package => ({ id: r.id, name: r.name, kind: r.kind, priceCents: r.price_cents, billing: r.billing, locations: r.locations, seats: r.seats, askPtins: !!r.ask_ptins, features: json(r.features, []), stripeLink: r.stripe_link ?? "", softwareId: r.software_id ?? undefined, bankId: r.bank_id ?? undefined, active: !!r.active,
-  store: { listed: !!r.store, slug: r.slug ?? "", summary: r.summary ?? "", description: r.description ?? "", terms: r.terms ?? "", disclaimer: r.disclaimer ?? "", images: json(r.images ?? "[]", [] as string[]), afterPurchase: r.after_purchase ?? "", position: r.position ?? 0 } });
+  store: { listed: !!r.store, slug: r.slug ?? "", summary: r.summary ?? "", description: r.description ?? "", terms: r.terms ?? "", disclaimer: r.disclaimer ?? "", images: json(r.images ?? "[]", [] as string[]), afterPurchase: r.after_purchase ?? "", position: r.position ?? 0, delivery: (["calculator_license", "calculator_update", "download"].includes(r.delivery ?? "") ? r.delivery : "none") as StoreInfo["delivery"], taxYear: r.tax_year ?? undefined, files: [] } });
 export const toSoftware = (r: SoftwareRow): Software => ({ id: r.id, name: r.name, sbFeeCents: r.sb_fee_cents, downloadUrl: r.download_url, applicationUrl: r.application_url ?? "", welcomeSubject: r.welcome_subject, welcomeBody: r.welcome_body, active: !!r.active });
 export const toBank = (r: BankRow): Bank => ({ id: r.id, name: r.name, addonFeeCents: r.addon_fee_cents, applicationUrl: r.application_url, layouts: json(r.layouts, {}), active: !!r.active });
 export const toReseller = (r: ResellerRow): Reseller => ({ id: r.id, name: r.name, contact: r.contact, email: r.email, phone: r.phone, rateBp: r.rate_bp, notes: r.notes, active: !!r.active });
@@ -122,7 +126,7 @@ export async function loadAll(env: AppEnv, a: Actor): Promise<MonarchData> {
   const { byOffice, unmatched } = await bankSummary(env, up);
   return {
     settings,
-    packages: pk.map(toPackage), software: sw.map(toSoftware), banks: bk.map(toBank), resellers: rs.map(toReseller),
+    packages: await withFiles(env, pk.map(toPackage)), software: sw.map(toSoftware), banks: bk.map(toBank), resellers: rs.map(toReseller),
     offices: of.map((r) => toOffice(r, fl, byOffice[r.id])),
     sales: sl.map(toSale), commissions: cm.map(toCommission),
     uploads: up.map((u): BankUpload => ({ id: u.id, bankId: u.bank_id, reportType: u.report_type, fileName: u.file_name, rows: u.rows, matched: u.matched, createdAt: u.created_at })),
@@ -205,18 +209,21 @@ export async function saveCatalog(env: AppEnv, a: Actor, kind: CatalogKind, id: 
     // Store fields (all optional; older clients that don't send `store` keep what's saved).
     const st = b.store && typeof b.store === "object" ? (b.store as Record<string, unknown>) : null;
     const long = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/\r/g, "").trim().slice(0, max) : "");
-    let storeVals: [string | null, number, string, string, string, string, string, string, number] | null = null;
+    let storeVals: [string | null, number, string, string, string, string, string, string, number, string, number | null] | null = null;
     if (st) {
       const slug = slugify(str(st.slug, 80) || name);
       if (!slug) throw badRequest("Give the product a web address (letters and numbers).");
       if (await one(env.DB, "SELECT 1 FROM mon_packages WHERE slug = ? AND id != ?", slug, id)) throw badRequest(`Another product already uses the address /store/${slug}.`);
       const imgs = Array.isArray(st.images) ? st.images.map((x) => str(x, 80)).filter((x) => /^[A-Za-z0-9_-]+\.(png|jpg|webp|gif)$/.test(x)).slice(0, 8) : [];
-      storeVals = [slug, st.listed ? 1 : 0, long(st.summary, 400), long(st.description, 8000), long(st.terms, 8000), long(st.disclaimer, 3000), JSON.stringify(imgs), long(st.afterPurchase, 1500), n(st.position, 999)];
+      const delivery = ["calculator_license", "calculator_update", "download"].includes(String(st.delivery)) ? String(st.delivery) : "none";
+      const taxYear = delivery.startsWith("calculator") ? Math.round(Number(st.taxYear) || 0) : 0;
+      if (delivery.startsWith("calculator") && (taxYear < 2024 || taxYear > 2100)) throw badRequest("Enter the tax year this product delivers (for example 2026).");
+      storeVals = [slug, st.listed ? 1 : 0, long(st.summary, 400), long(st.description, 8000), long(st.terms, 8000), long(st.disclaimer, 3000), JSON.stringify(imgs), long(st.afterPurchase, 1500), n(st.position, 999), delivery, taxYear || null];
     }
     await run(env.DB, `INSERT INTO mon_packages (id, name, kind, price_cents, billing, locations, seats, ask_ptins, features, active, created_at, updated_at, stripe_link, software_id, bank_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET name = excluded.name, kind = excluded.kind, price_cents = excluded.price_cents, billing = excluded.billing, locations = excluded.locations, seats = excluded.seats, ask_ptins = excluded.ask_ptins, features = excluded.features, stripe_link = excluded.stripe_link, software_id = excluded.software_id, bank_id = excluded.bank_id, active = excluded.active, updated_at = excluded.updated_at`,
       id, name, k, cents(b.price, "Price"), billing, n(b.locations, 500), n(b.seats, 5000), b.askPtins ? 1 : 0, JSON.stringify(features), active, t, t, link, swId, bkId);
-    if (storeVals) await run(env.DB, "UPDATE mon_packages SET slug = ?, store = ?, summary = ?, description = ?, terms = ?, disclaimer = ?, images = ?, after_purchase = ?, position = ? WHERE id = ?", ...storeVals, id);
+    if (storeVals) await run(env.DB, "UPDATE mon_packages SET slug = ?, store = ?, summary = ?, description = ?, terms = ?, disclaimer = ?, images = ?, after_purchase = ?, position = ?, delivery = ?, tax_year = ? WHERE id = ?", ...storeVals, id);
   } else if (kind === "software") {
     await run(env.DB, `INSERT INTO mon_software (id, name, sb_fee_cents, download_url, welcome_subject, welcome_body, active, created_at, updated_at, application_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET name = excluded.name, sb_fee_cents = excluded.sb_fee_cents, download_url = excluded.download_url, application_url = excluded.application_url, welcome_subject = excluded.welcome_subject, welcome_body = excluded.welcome_body, active = excluded.active, updated_at = excluded.updated_at`,

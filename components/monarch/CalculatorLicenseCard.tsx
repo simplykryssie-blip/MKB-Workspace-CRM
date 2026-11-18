@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Calculator, Copy, Plus, Save, Send, Trash2 } from "lucide-react";
+import { Calculator, Copy, Mail, Plus, Save, Send, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -10,7 +10,7 @@ import { useTeam } from "@/lib/store/team-store";
 import { BACKEND, call } from "@/lib/sync/remote";
 
 type Leads = { enabled: boolean; businessName: string; leadSource: string; includeSummary: boolean; tags: string[]; webhookHost: string; webhookSaved: boolean; lastSuccessAt: string | null; lastError: string | null; lastErrorAt: string | null };
-type License = { id: string; embedId: string; keyPrefix: string; taxYears: number[]; status: "active" | "suspended" | "revoked"; source: string; lastSeenAt: string | null; lastSeenHost: string | null; createdAt: string; domains: string[]; installUrl: string; snippet: string; leads: Leads; last30: Record<string, number> };
+type License = { id: string; maxDomains: number; embedId: string; keyPrefix: string; taxYears: number[]; status: "active" | "suspended" | "revoked"; source: string; lastSeenAt: string | null; lastSeenHost: string | null; createdAt: string; domains: string[]; installUrl: string; snippet: string; leads: Leads; last30: Record<string, number> };
 const input = "h-9 w-full rounded-xl border border-line bg-surface px-3 text-[13.5px] text-ink disabled:opacity-60";
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : "never");
 
@@ -65,6 +65,15 @@ function LicenseBlock({ l, canEdit, busy, act }: { l: License; canEdit: boolean;
         </div>
         {canEdit && <div className="mt-2 flex gap-2"><input aria-label="Website to authorize" value={domain} placeholder="e.g. securefiletaxes.net" onChange={(e) => setDomain(e.target.value)} className={input} /><Button size="sm" icon={Plus} disabled={busy || !domain.trim()} onClick={() => void act({ action: "addDomain", licenseId: l.id, domain }, "Website added").then((ok) => ok && setDomain(""))}>Add</Button></div>}
       </div>
+
+      {canEdit && (
+        <div className="flex flex-wrap items-end gap-2">
+          <Button size="sm" icon={Mail} disabled={busy} onClick={() => { if (confirm("Email the customer a new private setup link? Any older link stops working.")) void act({ action: "emailSetup", licenseId: l.id }, "Setup link emailed"); }}>Email setup link</Button>
+          <label className="flex items-center gap-1.5 text-[12.5px] text-muted">Websites they can add
+            <input type="number" min={1} max={50} defaultValue={l.maxDomains} key={l.maxDomains} aria-label="Websites the customer can add" onBlur={(e) => Number(e.target.value) !== l.maxDomains && void act({ action: "maxDomains", licenseId: l.id, maxDomains: Number(e.target.value) }, "Website limit saved")} className="h-8 w-16 rounded-lg border border-line bg-surface px-2 text-[13px] text-ink" />
+          </label>
+        </div>
+      )}
 
       <div>
         <p className="mb-1 font-medium text-ink">Install code</p>

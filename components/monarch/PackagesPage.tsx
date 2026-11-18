@@ -10,7 +10,7 @@ import { Checkbox, SelectField, TextArea, TextField } from "@/components/ui/Fiel
 import { Modal } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { newId, useMonarch } from "@/lib/store/monarch-store";
-import { BILLING_LABEL, KIND_LABEL, usd, type MonarchData, type Package } from "@/lib/monarch/types";
+import { BILLING_LABEL, DELIVERY_LABEL, KIND_LABEL, usd, type Delivery, type MonarchData, type Package, type StoreInfo } from "@/lib/monarch/types";
 import { dollars, Empty, MonarchGate, useAct } from "./MonarchBits";
 
 export function PackagesPage() {
@@ -46,9 +46,21 @@ function PackageDialog({ value, onClose }: { value: Package | "new" | null; onCl
   const m = useMonarch();
   const { busy, run } = useAct();
   const toast = useToast();
-  const noStore = { listed: false, slug: "", summary: "", description: "", terms: "", disclaimer: "", images: [] as string[], afterPurchase: "", position: 0 };
+  const noStore: StoreInfo = { listed: false, slug: "", summary: "", description: "", terms: "", disclaimer: "", images: [], afterPurchase: "", position: 0, delivery: "none", files: [] };
   const empty = { name: "", kind: "package" as Package["kind"], price: "", billing: "season" as Package["billing"], locations: "1", seats: "1", askPtins: false, features: "", stripeLink: "", softwareId: "", bankId: "", active: true, store: noStore };
   const [uploading, setUploading] = useState(false);
+  const fileOp = async (method: "POST" | "DELETE", path: string, file?: File) => {
+    setUploading(true);
+    try {
+      const r = await fetch(path, { method, credentials: "same-origin", headers: file ? { "content-type": file.type || "application/octet-stream", "x-file-name": encodeURIComponent(file.name) } : {}, body: file });
+      const d = (await r.json().catch(() => ({}))) as { error?: string; packages?: Package[] };
+      if (!r.ok) throw new Error(d.error ?? "That didn't work.");
+      const p = d.packages?.find((x) => x.id === id);
+      if (p) setF((x) => ({ ...x, store: { ...x.store, files: p.store.files } }));
+      await m.reload();
+    } catch (e) { toast(e instanceof Error ? e.message : "That didn't work.", "info"); }
+    setUploading(false);
+  };
   const addImage = async (file: File) => {
     setUploading(true);
     try {
@@ -93,6 +105,21 @@ function PackageDialog({ value, onClose }: { value: Package | "new" | null; onCl
             <div className="sm:col-span-2"><TextArea label="Description" rows={5} value={f.store.description} onChange={(e) => setF({ ...f, store: { ...f.store, description: e.target.value } })} placeholder="A blank line starts a new paragraph" /></div>
             <div className="sm:col-span-2"><TextArea label="Purchase terms" rows={4} value={f.store.terms} onChange={(e) => setF({ ...f, store: { ...f.store, terms: e.target.value } })} /></div>
             <div className="sm:col-span-2"><TextArea label="Disclaimer" rows={3} value={f.store.disclaimer} onChange={(e) => setF({ ...f, store: { ...f.store, disclaimer: e.target.value } })} /></div>
+            <div className="sm:col-span-2 grid gap-3 sm:grid-cols-2">
+              <SelectField label="What the buyer gets automatically" value={f.store.delivery} onChange={(e) => setF({ ...f, store: { ...f.store, delivery: e.target.value as Delivery } })} options={(Object.keys(DELIVERY_LABEL) as Delivery[]).map((k) => [k, DELIVERY_LABEL[k]] as [string, string])} />
+              {f.store.delivery.startsWith("calculator") && <TextField label="Tax year it delivers" inputMode="numeric" value={String(f.store.taxYear ?? "")} onChange={(e) => setF({ ...f, store: { ...f.store, taxYear: Number(e.target.value) || undefined } })} placeholder="2026" hint={f.store.delivery === "calculator_license" ? "A new license for this year + setup link email" : "Added to the buyer's existing license"} />}
+            </div>
+            {f.store.delivery === "download" && (
+              <div className="sm:col-span-2">
+                <p className="mb-1.5 text-[13px] font-medium text-ink">Files the buyer downloads</p>
+                {id ? (
+                  <>
+                    <ul className="space-y-1.5">{f.store.files.map((x) => <li key={x.id} className="flex items-center justify-between rounded-lg border border-line px-3 py-2 text-[13px] text-ink"><span className="truncate">{x.name}</span><button type="button" aria-label={`Remove ${x.name}`} disabled={uploading} onClick={() => { if (confirm(`Remove ${x.name}? New buyers won't get it.`)) void fileOp("DELETE", `/api/monarch/catalog/packages/${id}/files/${x.id}`); }}><X size={14} className="text-muted" /></button></li>)}</ul>
+                    <label className="mt-2 inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-dashed border-line px-3 py-2 text-[13px] text-ink-2 hover:bg-surface-2"><Plus size={14} /> Add a file (up to 25 MB)<input type="file" className="sr-only" disabled={uploading} onChange={(e) => { const file = e.target.files?.[0]; if (file) void fileOp("POST", `/api/monarch/catalog/packages/${id}/files`, file); e.target.value = ""; }} /></label>
+                  </>
+                ) : <p className="text-[12.5px] text-muted">Save the package first, then add its files.</p>}
+              </div>
+            )}
             <div className="sm:col-span-2"><TextArea label="After they pay" rows={3} value={f.store.afterPurchase} onChange={(e) => setF({ ...f, store: { ...f.store, afterPurchase: e.target.value } })} placeholder="Shown on the thank-you page and emailed to the buyer (software packages get the welcome email instead)" /></div>
             <div className="sm:col-span-2">
               <p className="mb-1.5 text-[13px] font-medium text-ink">Pictures</p>

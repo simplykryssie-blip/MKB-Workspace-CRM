@@ -10,8 +10,9 @@
  * Server-only.
  */
 import { all, badRequest, HttpError, isDev, notFound, now, one, rateLimit, run, str, type AppEnv } from "./core";
-import { b64, decryptField, encryptField, randomId, safeEqual, sha256 } from "./crypto";
-import { need, note } from "./monarch";
+import { b64, decryptField, encryptField, randomId, randomToken, safeEqual, sha256 } from "./crypto";
+import { loadSettings, need, note } from "./monarch";
+import { sendMonarch } from "./monarch-email";
 import type { Actor } from "./identity";
 import { allowedHosts, EMBED_ID_PATTERN } from "./calc-embed";
 import { computeFull, fullEstimateForLead, fullEstimateText, FULL_TAX_YEAR, NEEDS_INCOME_MESSAGE, sanitizeFullInputs, type FullLeadEstimate } from "@/lib/calculator/full";
@@ -71,7 +72,7 @@ export async function getCalc(env: AppEnv, a: Actor, officeId: string) {
       all<{ outcome: string; n: number }>(env.DB, "SELECT outcome, count(*) n FROM calc_deliveries WHERE license_id = ? AND created_at >= ? GROUP BY outcome", l.id, since),
     ]);
     licenses.push({
-      id: l.id, embedId: l.embed_id, keyPrefix: l.key_prefix, taxYears: jsonArr<number>(l.tax_years), status: l.status, source: l.source, notes: l.notes,
+      id: l.id, embedId: l.embed_id, keyPrefix: l.key_prefix, maxDomains: (l as LicRow & { max_domains?: number }).max_domains ?? 3, taxYears: jsonArr<number>(l.tax_years), status: l.status, source: l.source, notes: l.notes,
       lastSeenAt: l.last_seen_at, lastSeenHost: l.last_seen_host, createdAt: l.created_at,
       domains: domains.map((d) => d.domain), installUrl: embedUrl(env, l.embed_id), snippet: embedSnippet(env, l.embed_id),
       leads: { enabled: !!s?.enabled, businessName: s?.business_name ?? "", leadSource: s?.lead_source ?? "", includeSummary: s ? !!s.include_summary : true, tags: jsonArr<string>(s?.tags), webhookHost: s?.webhook_host ?? "", webhookSaved: !!s?.webhook_enc, lastSuccessAt: s?.last_success_at ?? null, lastError: s?.last_error ?? null, lastErrorAt: s?.last_error_at ?? null },
@@ -117,8 +118,7 @@ export async function calcAction(env: AppEnv, a: Actor, officeId: string, b: Rec
   };
   const action = String(b.action ?? "");
   if (action === "create") {
-    const id = randomId("cal");
-    await run(env.DB, "INSERT INTO calc_licenses (id, office_id, embed_id, tax_years, status, source, created_at, updated_at) VALUES (?, ?, ?, ?, 'active', 'mkb', ?, ?)", id, officeId, newEmbedId(), JSON.stringify([FULL_TAX_YEAR]), t, t);
+    await createLicense(env, officeId, { taxYear: FULL_TAX_YEAR });
     await note(a, "Calculator license", `Created a calculator license for ${office.name}`, env);
   } else if (action === "status") {
     const l = await lic();
@@ -128,45 +128,176 @@ export async function calcAction(env: AppEnv, a: Actor, officeId: string, b: Rec
     await note(a, "Calculator license", `${office.name}: license ${st === "active" ? "turned back on" : st}`, env);
   } else if (action === "addDomain") {
     const l = await lic();
-    const d = cleanDomain(b.domain);
-    await run(env.DB, "INSERT INTO calc_domains (license_id, domain, created_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING", l.id, d, t);
+    const d = await addDomain(env, l.id, b.domain, null);
     await note(a, "Calculator license", `${office.name}: authorized ${d}`, env);
   } else if (action === "removeDomain") {
     const l = await lic();
-    const d = String(b.domain ?? "");
-    await run(env.DB, "DELETE FROM calc_domains WHERE license_id = ? AND domain = ?", l.id, d);
-    await note(a, "Calculator license", `${office.name}: removed ${d}`, env);
+    await removeDomain(env, l.id, String(b.domain ?? ""));
+    await note(a, "Calculator license", `${office.name}: removed ${String(b.domain ?? "")}`, env);
+  } else if (action === "maxDomains") {
+    const l = await lic();
+    const n = Math.max(1, Math.min(50, Math.round(Number(b.maxDomains) || 1)));
+    await run(env.DB, "UPDATE calc_licenses SET max_domains = ?, updated_at = ? WHERE id = ?", n, t, l.id);
+    await note(a, "Calculator license", `${office.name}: customer may add up to ${n} website(s)`, env);
   } else if (action === "leads") {
     const l = await lic();
-    const cur = await one<SetRow>(env.DB, "SELECT * FROM calc_lead_settings WHERE license_id = ?", l.id);
-    const tags = Array.isArray(b.tags) ? b.tags.map((x) => str(x, 40)).filter(Boolean).slice(0, 10) : jsonArr<string>(cur?.tags);
-    let webhookEnc = cur?.webhook_enc ?? null, host = cur?.webhook_host ?? "";
-    if (typeof b.webhookUrl === "string" && b.webhookUrl.trim()) {
-      const u = cleanWebhook(b.webhookUrl, isDev(env));
-      const secret = b64url(b64(crypto.getRandomValues(new Uint8Array(24))));
-      webhookEnc = JSON.stringify(await encryptField(vault(env), JSON.stringify({ url: u.toString(), secret }), aad(l.id)));
-      host = u.hostname;
-    }
-    const enabled = b.enabled === true;
-    const businessName = str(b.businessName, 80);
-    if (enabled && !businessName) throw badRequest("Enter the business name shown on the calculator.");
-    if (enabled && !webhookEnc) throw badRequest("Paste the GoHighLevel webhook URL first.");
-    await run(env.DB, `INSERT INTO calc_lead_settings (license_id, enabled, business_name, lead_source, include_summary, tags, webhook_enc, webhook_host, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(license_id) DO UPDATE SET enabled = excluded.enabled, business_name = excluded.business_name, lead_source = excluded.lead_source, include_summary = excluded.include_summary, tags = excluded.tags, webhook_enc = excluded.webhook_enc, webhook_host = excluded.webhook_host, updated_at = excluded.updated_at`,
-      l.id, enabled ? 1 : 0, businessName, str(b.leadSource, 80) || businessName, b.includeSummary === false ? 0 : 1, JSON.stringify(tags), webhookEnc, host, t);
-    await note(a, "Calculator license", `${office.name}: lead delivery ${enabled ? "on" : "off"}${typeof b.webhookUrl === "string" && b.webhookUrl.trim() ? ` (webhook ${host})` : ""}`, env);
+    const host = await saveLeads(env, l.id, b);
+    await note(a, "Calculator license", `${office.name}: lead delivery ${b.enabled === true ? "on" : "off"}${host ? ` (webhook ${host})` : ""}`, env);
   } else if (action === "testLead") {
     const l = await lic();
-    const s = await one<SetRow>(env.DB, "SELECT * FROM calc_lead_settings WHERE license_id = ?", l.id);
-    if (!s?.webhook_enc) throw badRequest("Save the GoHighLevel webhook URL first.");
-    const id = crypto.randomUUID();
-    const p: Lead = { submissionId: id, firstName: "Test", lastName: "Lead", email: "test.lead@example.com", phone: "+15555550100", estimate: sampleEstimate(), submittedAt: t };
-    const r = await sendWebhook(env, l.id, s, { ...webhookBody(p, s, "test"), test: true }, id);
-    await logDelivery(env, l.id, r.ok ? "test" : "failed", r.ok ? "test" : r.reason, r.status);
-    if (!r.ok) throw badRequest(`The test lead didn't go through: ${r.reason}${r.status ? ` (HTTP ${r.status})` : ""}.`);
-    await run(env.DB, "UPDATE calc_lead_settings SET last_success_at = ?, last_error = NULL WHERE license_id = ?", now(), l.id);
+    await testLead(env, l.id);
+  } else if (action === "emailSetup") {
+    const l = await lic();
+    const to = await emailSetupLink(env, l.id);
+    await note(a, "Calculator license", `${office.name}: setup link emailed to ${to}`, env);
   } else throw badRequest("Unknown action.");
   return getCalc(env, a, officeId);
+}
+
+/* ---------------------------------------------------------------- shared license actions (staff and customer) */
+type LicLite = { id: string; office_id: string; status: string; max_domains: number; tax_years: string };
+
+export async function createLicense(env: AppEnv, officeId: string, o: { taxYear: number; packageId?: string | null }) {
+  const t = now();
+  const id = randomId("cal");
+  await run(env.DB, "INSERT INTO calc_licenses (id, office_id, embed_id, tax_years, status, package_id, source, created_at, updated_at) VALUES (?, ?, ?, ?, 'active', ?, 'mkb', ?, ?)", id, officeId, newEmbedId(), JSON.stringify([o.taxYear]), o.packageId ?? null, t, t);
+  const office = await one<{ name: string }>(env.DB, "SELECT name FROM mon_offices WHERE id = ?", officeId);
+  await run(env.DB, "INSERT INTO calc_lead_settings (license_id, enabled, business_name, lead_source, include_summary, tags, updated_at) VALUES (?, 0, ?, ?, 1, '[]', ?) ON CONFLICT(license_id) DO NOTHING", id, office?.name ?? "", office?.name ?? "", t);
+  return id;
+}
+
+/** Adds a tax year to an office's licenses (the annual update). Returns how many licenses got it. */
+export async function addTaxYear(env: AppEnv, officeId: string, year: number) {
+  const lics = await all<LicLite>(env.DB, "SELECT id, office_id, status, max_domains, tax_years FROM calc_licenses WHERE office_id = ? AND status != 'revoked'", officeId);
+  for (const l of lics) {
+    const years = [...new Set([...jsonArr<number>(l.tax_years), year])].sort();
+    await run(env.DB, "UPDATE calc_licenses SET tax_years = ?, updated_at = ? WHERE id = ?", JSON.stringify(years), now(), l.id);
+  }
+  return lics.length;
+}
+
+/** `limit`: the customer's own limit (max_domains); null = staff (no limit). */
+async function addDomain(env: AppEnv, licenseId: string, raw: unknown, limit: number | null) {
+  const d = cleanDomain(raw);
+  const have = (await all<{ domain: string }>(env.DB, "SELECT domain FROM calc_domains WHERE license_id = ?", licenseId)).map((x) => x.domain);
+  if (have.includes(d)) return d;
+  if (limit !== null && have.length >= limit) throw badRequest(`Your license covers ${limit} website${limit === 1 ? "" : "s"}. Remove one first, or contact Monarch Tax Suite to add more.`);
+  await run(env.DB, "INSERT INTO calc_domains (license_id, domain, created_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING", licenseId, d, now());
+  return d;
+}
+async function removeDomain(env: AppEnv, licenseId: string, domain: string) {
+  await run(env.DB, "DELETE FROM calc_domains WHERE license_id = ? AND domain = ?", licenseId, domain);
+}
+
+/** Saves lead delivery; returns the new webhook's host when one was pasted. */
+async function saveLeads(env: AppEnv, licenseId: string, b: Record<string, unknown>) {
+  const cur = await one<SetRow>(env.DB, "SELECT * FROM calc_lead_settings WHERE license_id = ?", licenseId);
+  const tags = Array.isArray(b.tags) ? b.tags.map((x) => str(x, 40)).filter(Boolean).slice(0, 10) : jsonArr<string>(cur?.tags);
+  let webhookEnc = cur?.webhook_enc ?? null, host = cur?.webhook_host ?? "", pasted = "";
+  if (typeof b.webhookUrl === "string" && b.webhookUrl.trim()) {
+    const u = cleanWebhook(b.webhookUrl, isDev(env));
+    const secret = b64url(b64(crypto.getRandomValues(new Uint8Array(24))));
+    webhookEnc = JSON.stringify(await encryptField(vault(env), JSON.stringify({ url: u.toString(), secret }), aad(licenseId)));
+    host = pasted = u.hostname;
+  }
+  const enabled = b.enabled === true;
+  const businessName = str(b.businessName, 80);
+  if (enabled && !businessName) throw badRequest("Enter the business name shown on the calculator.");
+  if (enabled && !webhookEnc) throw badRequest("Paste the GoHighLevel webhook URL first.");
+  await run(env.DB, `INSERT INTO calc_lead_settings (license_id, enabled, business_name, lead_source, include_summary, tags, webhook_enc, webhook_host, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(license_id) DO UPDATE SET enabled = excluded.enabled, business_name = excluded.business_name, lead_source = excluded.lead_source, include_summary = excluded.include_summary, tags = excluded.tags, webhook_enc = excluded.webhook_enc, webhook_host = excluded.webhook_host, updated_at = excluded.updated_at`,
+    licenseId, enabled ? 1 : 0, businessName, str(b.leadSource, 80) || cur?.lead_source || businessName, b.includeSummary === false ? 0 : 1, JSON.stringify(tags), webhookEnc, host, now());
+  return pasted;
+}
+
+async function testLead(env: AppEnv, licenseId: string) {
+  const s = await one<SetRow>(env.DB, "SELECT * FROM calc_lead_settings WHERE license_id = ?", licenseId);
+  if (!s?.webhook_enc) throw badRequest("Save the GoHighLevel webhook URL first.");
+  const id = crypto.randomUUID();
+  const p: Lead = { submissionId: id, firstName: "Test", lastName: "Lead", email: "test.lead@example.com", phone: "+15555550100", estimate: sampleEstimate(), submittedAt: now() };
+  const r = await sendWebhook(env, licenseId, s, { ...webhookBody(p, s, "test"), test: true }, id);
+  await logDelivery(env, licenseId, r.ok ? "test" : "failed", r.ok ? "test" : r.reason, r.status);
+  if (!r.ok) throw badRequest(`The test lead didn't go through: ${r.reason}${r.status ? ` (HTTP ${r.status})` : ""}. Check the webhook URL in your GoHighLevel workflow.`);
+  await run(env.DB, "UPDATE calc_lead_settings SET last_success_at = ?, last_error = NULL WHERE license_id = ?", now(), licenseId);
+}
+
+/* ---------------------------------------------------------------- customer setup link (/i/m/c/<token>) */
+const SETUP_DAYS = 365;
+export const setupUrl = (env: AppEnv, token: string) => `${calcOrigin(env)}/i/m/c/${token}`;
+
+/** A new private setup link for a license (the previous one stops working). */
+export async function issueSetupLink(env: AppEnv, licenseId: string) {
+  const token = randomToken(32);
+  const t = now();
+  await run(env.DB, "UPDATE calc_setup_links SET revoked_at = ? WHERE license_id = ? AND revoked_at IS NULL", t, licenseId);
+  await run(env.DB, "INSERT INTO calc_setup_links (token_hash, license_id, created_at, expires_at) VALUES (?, ?, ?, ?)", await sha256(token), licenseId, t, new Date(Date.now() + SETUP_DAYS * 864e5).toISOString());
+  return token;
+}
+
+/** Emails the license holder their setup link. Returns the address used. */
+export async function emailSetupLink(env: AppEnv, licenseId: string, opts: { intro?: string; heading?: string; subject?: string } = {}) {
+  const l = await one<{ office_id: string; tax_years: string }>(env.DB, "SELECT office_id, tax_years FROM calc_licenses WHERE id = ?", licenseId);
+  if (!l) throw notFound("License not found.");
+  const o = await one<{ name: string; contact_name: string; email: string }>(env.DB, "SELECT name, contact_name, email FROM mon_offices WHERE id = ?", l.office_id);
+  if (!o?.email) throw badRequest("This office has no email address. Add one to the office first.");
+  const token = await issueSetupLink(env, licenseId);
+  const st = await loadSettings(env);
+  await sendMonarch(env, st, {
+    to: o.email, template: "monarch_calculator_setup", subject: opts.subject ?? "Set up your Monarch Basic Tax Calculator",
+    heading: opts.heading ?? "Your tax calculator is ready",
+    paragraphs: [`Hi ${o.contact_name || o.name},`, opts.intro ?? "Your Monarch Basic Tax Calculator license is active. Use your private setup page to add your website, copy your install code, and connect your GoHighLevel so new leads go straight to you.", "Keep this email: the link is your key to your setup page for the next year."],
+    button: { label: "Set up my calculator", url: setupUrl(env, token) },
+    list: { title: "Your license", items: [`Tax year${jsonArr<number>(l.tax_years).length === 1 ? "" : "s"}: ${jsonArr<number>(l.tax_years).join(", ")}`, "Works on the websites you add on your setup page"] },
+    after: ["Questions? Just reply to this email."],
+  });
+  return o.email;
+}
+
+async function setupLicense(env: AppEnv, token: string, ip: string) {
+  if (!(await rateLimit(env.DB, `calc-setup:${ip}`, 120, 10))) throw new HttpError(429, "Too many requests. Please wait a few minutes.");
+  if (typeof token !== "string" || token.length < 20 || token.length > 100) throw notFound("This link isn't valid.");
+  const link = await one<{ license_id: string; expires_at: string; revoked_at: string | null }>(env.DB, "SELECT license_id, expires_at, revoked_at FROM calc_setup_links WHERE token_hash = ?", await sha256(token));
+  if (!link) throw notFound("This link isn't valid. Ask Monarch Tax Suite for a new one.");
+  if (link.revoked_at) throw new HttpError(410, "This link was replaced by a newer one. Use the most recent email from Monarch Tax Suite.");
+  if (link.expires_at < now()) throw new HttpError(410, "This link has expired. Ask Monarch Tax Suite for a new one.");
+  const l = await one<LicRow & { max_domains: number }>(env.DB, "SELECT * FROM calc_licenses WHERE id = ?", link.license_id);
+  if (!l) throw notFound("This link isn't valid.");
+  await run(env.DB, "UPDATE calc_setup_links SET last_used_at = ? WHERE token_hash = ?", now(), await sha256(token)).catch(() => undefined);
+  return l;
+}
+
+/** What the customer sees on their setup page (no secrets: the webhook shows only its host). */
+export async function setupView(env: AppEnv, token: string, ip: string) {
+  const l = await setupLicense(env, token, ip);
+  const [o, domains, s] = await Promise.all([
+    one<{ name: string; contact_name: string }>(env.DB, "SELECT name, contact_name FROM mon_offices WHERE id = ?", l.office_id),
+    all<{ domain: string }>(env.DB, "SELECT domain FROM calc_domains WHERE license_id = ? ORDER BY domain", l.id),
+    one<SetRow>(env.DB, "SELECT * FROM calc_lead_settings WHERE license_id = ?", l.id),
+  ]);
+  const st = await loadSettings(env);
+  return {
+    office: { name: o?.name ?? "", contactName: o?.contact_name ?? "" },
+    license: { status: l.status, taxYears: jsonArr<number>(l.tax_years), maxDomains: l.max_domains, lastSeenAt: l.last_seen_at, lastSeenHost: l.last_seen_host },
+    domains: domains.map((d) => d.domain), installUrl: embedUrl(env, l.embed_id), snippet: embedSnippet(env, l.embed_id),
+    leads: { enabled: !!s?.enabled, businessName: s?.business_name ?? "", webhookHost: s?.webhook_host ?? "", webhookSaved: !!s?.webhook_enc, lastSuccessAt: s?.last_success_at ?? null, lastError: s?.last_error ?? null },
+    contact: { phone: st.phone, email: st.email },
+  };
+}
+
+export async function setupAction(env: AppEnv, token: string, ip: string, b: Record<string, unknown>) {
+  const l = await setupLicense(env, token, ip);
+  if (l.status !== "active") throw badRequest("This license isn't active. Please contact Monarch Tax Suite.");
+  if (!(await rateLimit(env.DB, `calc-setup-write:${l.id}`, 40, 60))) throw new HttpError(429, "Too many changes. Please wait a few minutes.");
+  const action = String(b.action ?? "");
+  if (action === "addDomain") await addDomain(env, l.id, b.domain, l.max_domains);
+  else if (action === "removeDomain") await removeDomain(env, l.id, String(b.domain ?? ""));
+  else if (action === "leads") await saveLeads(env, l.id, { enabled: b.enabled, businessName: b.businessName, webhookUrl: b.webhookUrl });
+  else if (action === "testLead") {
+    if (!(await rateLimit(env.DB, `calc-setup-test:${l.id}`, 5, 60))) throw new HttpError(429, "Too many test leads. Please wait an hour.");
+    await testLead(env, l.id);
+  } else throw badRequest("Unknown action.");
+  await run(env.DB, "INSERT INTO audit_events (id, at, actor_user_id, actor_member_id, actor_client_id, action, resource, department, meta, success, ip) VALUES (?, ?, NULL, NULL, NULL, 'Record update', 'Monarch — Calculator license', NULL, ?, 1, ?)", randomId("au"), now(), `Customer setup page: ${action} on license ${l.id}`, ip).catch(() => undefined);
+  return setupView(env, token, ip);
 }
 
 /* ---------------------------------------------------------------- public lead endpoint */

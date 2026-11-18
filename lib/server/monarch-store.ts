@@ -6,9 +6,14 @@
  * run (welcome email for software packages), and the buyer gets a confirmation email
  * with the product's "after purchase" message. Server-only.
  */
-import { all, HttpError, one, rateLimit, stripeKey, type AppEnv } from "./core";
+import { all, badRequest, HttpError, notFound, now, one, rateLimit, run, stripeKey, type AppEnv } from "./core";
+import { randomId, randomToken, sha256 } from "./crypto";
+import { notify } from "./notifications";
+import { addTaxYear, calcOrigin, createLicense, emailSetupLink } from "./calculator";
+import { FULL_TAX_YEAR } from "@/lib/calculator/full";
 import { sendMonarch } from "./monarch-email";
-import { loadSettings, toPackage } from "./monarch";
+import { loadSettings, toPackage, loadAll, need, note } from "./monarch";
+import type { Actor } from "./identity";
 import { recordWebsiteSale, type CheckoutSession } from "./monarch-sales";
 import { BILLING_LABEL, usd, type Package } from "@/lib/monarch/types";
 import type { Section, StoreCard } from "@/lib/website/types";
@@ -115,15 +120,103 @@ export async function monarchStorePurchase(env: AppEnv, s: CheckoutSession & { m
   const done = await recordWebsiteSale(env, s, pk, "store");
   if (!done || "duplicate" in done) return done;
   const pkg = toPackage(pk);
-  // Software packages get the usual welcome; everything else gets a purchase confirmation.
   const email = String(s.customer_details?.email ?? "").trim().toLowerCase();
-  if (pkg.kind !== "package" && email) {
-    const st = await loadSettings(env);
-    await sendMonarch(env, st, {
-      to: email, template: "monarch_store_purchase", subject: `Your purchase: ${pkg.name}`, heading: "Thank you for your purchase",
-      paragraphs: [`You bought ${pkg.name} for ${usd(Math.max(0, Math.round(s.amount_total ?? pkg.priceCents)))}. Stripe is emailing your receipt separately.`, pkg.store.afterPurchase || "We'll email you the next steps shortly."],
-      after: ["Questions? Just reply to this email."],
-    }).catch((e) => console.error("store confirmation", e instanceof Error ? e.message : e));
+  const officeId = done.office;
+  const st = await loadSettings(env);
+  const paid = usd(Math.max(0, Math.round(s.amount_total ?? pkg.priceCents)));
+  const confirm = (paragraphs: string[], extra: Partial<Parameters<typeof sendMonarch>[2]> = {}) => email ? sendMonarch(env, st, { to: email, template: "monarch_store_purchase", subject: `Your purchase: ${pkg.name}`, heading: "Thank you for your purchase", paragraphs, after: ["Questions? Just reply to this email."], ...extra }).catch((e) => console.error("store confirmation", e instanceof Error ? e.message : e)) : Promise.resolve();
+  try {
+    const d = pkg.store.delivery;
+    if (d === "calculator_license") {
+      // A new license for this office, and the private setup link by email.
+      const licenseId = await createLicense(env, officeId, { taxYear: pkg.store.taxYear ?? FULL_TAX_YEAR, packageId: pkg.id });
+      await emailSetupLink(env, licenseId, { subject: `Your purchase: ${pkg.name} — set it up`, intro: `Thank you for buying ${pkg.name} (${paid}). Your license is active. Use your private setup page to add your website, copy your install code, and connect your GoHighLevel so new leads go straight to you.` });
+      return done;
+    }
+    if (d === "calculator_update") {
+      const year = pkg.store.taxYear ?? FULL_TAX_YEAR + 1;
+      const n = await addTaxYear(env, officeId, year);
+      if (n) {
+        const lic = await one<{ id: string }>(env.DB, "SELECT id FROM calc_licenses WHERE office_id = ? AND status != 'revoked' ORDER BY created_at LIMIT 1", officeId);
+        if (lic) await emailSetupLink(env, lic.id, { subject: `Your purchase: ${pkg.name}`, heading: "Your calculator update is ready", intro: `Thank you for buying ${pkg.name} (${paid}). Your calculator license now includes the ${year} tax year. Nothing changes on your website; your setup page is below if you need it.` });
+        return done;
+      }
+      await notify(env, { module: "monarch" }, { kind: "text", title: `Calculator update bought, but no license found`, body: `${pkg.name} was bought by ${email || "a customer"}, who has no calculator license on file. Check the office and add the ${year} tax year by hand.`, href: `/monarch/offices/${officeId}` });
+      await confirm([`You bought ${pkg.name} for ${paid}. Stripe is emailing your receipt separately.`, "We'll match it to your calculator license and email you shortly."]);
+      return done;
+    }
+    if (d === "download") {
+      const token = await issueDownloadLink(env, s.payment_intent ?? s.id, pkg.id, officeId);
+      await confirm([`You bought ${pkg.name} for ${paid}. Stripe is emailing your receipt separately.`, pkg.store.afterPurchase || "Your files are ready to download. The link works for 30 days."], { button: { label: "Download my files", url: `${calcOrigin(env)}/i/m/d/${token}` } });
+      return done;
+    }
+  } catch (e) {
+    // The sale is recorded; delivery problems go to the owner instead of failing the payment.
+    console.error("store delivery", e instanceof Error ? e.message : e);
+    await notify(env, { module: "monarch" }, { kind: "text", title: `Store delivery needs a hand: ${pkg.name}`, body: `The payment went through, but the automatic delivery didn't (${e instanceof Error ? e.message.slice(0, 160) : "error"}). Open the office and finish it by hand.`, href: `/monarch/offices/${officeId}` }).catch(() => undefined);
+    return done;
   }
+  // Software packages get the usual welcome; everything else gets a purchase confirmation.
+  if (pkg.kind !== "package") await confirm([`You bought ${pkg.name} for ${paid}. Stripe is emailing your receipt separately.`, pkg.store.afterPurchase || "We'll email you the next steps shortly."]);
   return done;
+}
+
+
+/* ---------------------------------------------------------------- downloads (/i/m/d/<token>) */
+const DOWNLOAD_DAYS = 30;
+export async function issueDownloadLink(env: AppEnv, saleRef: string, packageId: string, officeId: string) {
+  const token = randomToken(32);
+  await run(env.DB, "INSERT INTO mon_download_links (token_hash, sale_id, package_id, office_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)", await sha256(token), saleRef, packageId, officeId, now(), new Date(Date.now() + DOWNLOAD_DAYS * 864e5).toISOString());
+  return token;
+}
+async function downloadLink(env: AppEnv, token: string, ip: string) {
+  if (!(await rateLimit(env.DB, `dl:${ip}`, 60, 10))) throw new HttpError(429, "Too many requests. Please wait a few minutes.");
+  if (typeof token !== "string" || token.length < 20 || token.length > 100) throw notFound("This link isn't valid.");
+  const l = await one<{ token_hash: string; package_id: string; expires_at: string }>(env.DB, "SELECT token_hash, package_id, expires_at FROM mon_download_links WHERE token_hash = ?", await sha256(token));
+  if (!l) throw notFound("This link isn't valid.");
+  if (l.expires_at < now()) throw new HttpError(410, "This download link has expired. Reply to your purchase email and we'll send a new one.");
+  return l;
+}
+export async function downloadView(env: AppEnv, token: string, ip: string) {
+  const l = await downloadLink(env, token, ip);
+  const pk = await one<{ name: string }>(env.DB, "SELECT name FROM mon_packages WHERE id = ?", l.package_id);
+  const files = await all<{ id: string; name: string; size: number }>(env.DB, "SELECT id, name, size FROM mon_package_files WHERE package_id = ? AND deleted_at IS NULL ORDER BY created_at", l.package_id);
+  return { product: pk?.name ?? "Your purchase", expiresAt: l.expires_at, files };
+}
+export async function downloadFile(env: AppEnv, token: string, fileId: string, ip: string) {
+  const l = await downloadLink(env, token, ip);
+  const f = await one<{ name: string; r2_key: string; content_type: string }>(env.DB, "SELECT name, r2_key, content_type FROM mon_package_files WHERE id = ? AND package_id = ? AND deleted_at IS NULL", fileId, l.package_id);
+  if (!f) throw notFound("File not found.");
+  const obj = await env.FILES.get(f.r2_key);
+  if (!obj) throw notFound("File not found.");
+  await run(env.DB, "UPDATE mon_download_links SET downloads = downloads + 1 WHERE token_hash = ?", l.token_hash);
+  const safe = f.name.replace(/[^A-Za-z0-9._ -]+/g, "-");
+  return new Response(obj.body, { headers: { "content-type": f.content_type, "content-disposition": `attachment; filename="${safe}"`, "cache-control": "private, no-store", "x-content-type-options": "nosniff" } });
+}
+
+/* ---------------------------------------------------------------- staff: a download product's files */
+const MAX_FILE = 25 * 1024 * 1024;
+export async function uploadPackageFile(env: AppEnv, a: Actor, req: Request, packageId: string) {
+  need(a, "settings");
+  if (!(await one(env.DB, "SELECT 1 FROM mon_packages WHERE id = ?", packageId))) throw notFound("Package not found.");
+  const name = (decodeURIComponent(req.headers.get("x-file-name") ?? "") || "file").replace(/[\r\n\\/]+/g, " ").trim().slice(0, 160);
+  const type = (req.headers.get("content-type") ?? "application/octet-stream").split(";")[0].trim().slice(0, 100) || "application/octet-stream";
+  if (/html|javascript|svg/i.test(type) || /\.(html?|js|svg)$/i.test(name)) throw badRequest("That file type can't be sold as a download. Use PDF, Word, Excel, ZIP or images.");
+  const buf = await req.arrayBuffer();
+  if (!buf.byteLength) throw badRequest("The file is empty.");
+  if (buf.byteLength > MAX_FILE) throw badRequest("Files can be up to 25 MB.");
+  const id = randomId("pf");
+  const key = `monarch/products/${packageId}/${id}`;
+  await env.FILES.put(key, buf, { httpMetadata: { contentType: type } });
+  await run(env.DB, "INSERT INTO mon_package_files (id, package_id, name, r2_key, size, content_type, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", id, packageId, name, key, buf.byteLength, type, now());
+  await note(a, "Package", `Added download file ${name}`, env);
+  return loadAll(env, a);
+}
+export async function deletePackageFile(env: AppEnv, a: Actor, packageId: string, fileId: string) {
+  need(a, "settings");
+  const f = await one<{ name: string }>(env.DB, "SELECT name FROM mon_package_files WHERE id = ? AND package_id = ? AND deleted_at IS NULL", fileId, packageId);
+  if (!f) throw notFound("File not found.");
+  await run(env.DB, "UPDATE mon_package_files SET deleted_at = ? WHERE id = ?", now(), fileId);
+  await note(a, "Package", `Removed download file ${f.name}`, env);
+  return loadAll(env, a);
 }

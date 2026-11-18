@@ -30,7 +30,11 @@ export type Preparer = { id: string; name: string; ptin: string; locationId: str
 export type Package = { id: string; name: string; kind: "package" | "seat" | "location" | "other"; priceCents: number; billing: "season" | "once" | "monthly"; locations: number; seats: number; askPtins: boolean; features: string[]; /** Stripe payment link on the website (buy.stripe.com/…); a purchase through it adds the office. */ stripeLink: string; /** Sets the office's software / bank when bought. */ softwareId?: string; bankId?: string; active: boolean;
   /** Store (Monarch website /store): listed when `store` is on; its page lives at /store/<slug>. */
   store: StoreInfo };
-export type StoreInfo = { listed: boolean; slug: string; summary: string; description: string; terms: string; disclaimer: string; images: string[]; afterPurchase: string; position: number };
+export type StoreInfo = { listed: boolean; slug: string; summary: string; description: string; terms: string; disclaimer: string; images: string[]; afterPurchase: string; position: number;
+  /** What a paid purchase delivers automatically. */
+  delivery: Delivery; taxYear?: number; files: { id: string; name: string; size: number }[] };
+export type Delivery = "none" | "calculator_license" | "calculator_update" | "download";
+export const DELIVERY_LABEL: Record<Delivery, string> = { none: "Nothing automatic (you follow up)", calculator_license: "Tax calculator license + setup link", calculator_update: "Adds a tax year to their calculator license", download: "Files to download" };
 export type Software = { id: string; name: string; sbFeeCents: number; downloadUrl: string; /** The software company's onboarding application for a new office. */ applicationUrl: string; welcomeSubject: string; welcomeBody: string; active: boolean };
 export type Bank = { id: string; name: string; addonFeeCents: number; applicationUrl: string; layouts: Partial<Record<ReportType, Layout>>; active: boolean };
 export type Reseller = { id: string; name: string; contact: string; email: string; phone: string; rateBp: number; notes: string; active: boolean };
