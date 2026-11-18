@@ -100,9 +100,14 @@ export async function inboundEmail(env: AppEnv, req: Request) {
   if (await one(env.DB, "SELECT 1 FROM email_inbox WHERE provider_id = ?", providerId)) return { duplicate: true };
   // The webhook carries metadata only — fetch the message itself.
   let text = "", fromName: string | null = null, subject = String(ev.data.subject ?? "").slice(0, 300);
-  if (env.RESEND_API_KEY) {
-    const res = await fetch(`https://api.resend.com/emails/receiving/${encodeURIComponent(providerId)}`, { headers: { authorization: `Bearer ${env.RESEND_API_KEY}` } });
-    const m = (await res.json().catch(() => ({}))) as { text?: string; html?: string; subject?: string; headers?: Record<string, string> };
+  // Reading a received email needs a key that may read (a sending-only key can't): RESEND_RECEIVE_KEY,
+  // else the sending key (works only if that one has full access).
+  const readKey = env.RESEND_RECEIVE_KEY || env.RESEND_API_KEY;
+  let unreadable = false;
+  if (readKey) {
+    const res = await fetch(`https://api.resend.com/emails/receiving/${encodeURIComponent(providerId)}`, { headers: { authorization: `Bearer ${readKey}` } });
+    if (!res.ok) { unreadable = true; console.error("inbound email: couldn't read the message", res.status); }
+    const m = (res.ok ? await res.json().catch(() => ({})) : {}) as { text?: string; html?: string; subject?: string; headers?: Record<string, string> };
     text = m.text || (m.html ? m.html.replace(/<br\s*\/?>/gi, "\n").replace(/<\/p>/gi, "\n\n").replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">") : "");
     subject = (m.subject ?? subject).slice(0, 300);
     const hf = m.headers?.from ?? m.headers?.From;
@@ -112,7 +117,7 @@ export async function inboundEmail(env: AppEnv, req: Request) {
   if (!EMAIL_RE.test(from)) return { ignored: true };
   const client = await one<{ id: string; name: string }>(env.DB, "SELECT id, name FROM clients WHERE lower(email) = ? AND status NOT IN ('prospect', 'declined') LIMIT 1", from);
   const id = randomId("ein");
-  const body = stripQuoted(text) || "(no message text)";
+  const body = stripQuoted(text) || (unreadable || !readKey ? "(This reply arrived, but its text couldn't be loaded: the Resend key for replies is missing or can't read emails. Open it in Resend → Receiving.)" : "(no message text)");
   const enc = await encryptField(key(env), body, `email_inbox:${id}`);
   const t = now();
   await run(env.DB, "INSERT INTO email_inbox (id, provider_id, from_email, from_name, subject, body_enc, client_id, received_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", id, providerId, from, fromName, subject, JSON.stringify(enc), client?.id ?? null, t);

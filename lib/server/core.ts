@@ -13,6 +13,8 @@ export type AppEnv = Omit<CloudflareEnv, "APP_ENV" | "BACKEND_ENABLED"> & {
   ENCRYPTION_KEY_VERSION?: string;
   /** Resend API key. Without it, emails are written to the outbox table instead of being sent. */
   RESEND_API_KEY?: string;
+  /** Resend key that can read received emails (full access), used only to load client replies. Optional: falls back to RESEND_API_KEY. */
+  RESEND_RECEIVE_KEY?: string;
   EMAIL_FROM?: string;
   /** Receive-only reply address (Resend inbound); used as Reply-To once email replies are connected. */
   INBOUND_REPLY_TO?: string;
