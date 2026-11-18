@@ -16,7 +16,8 @@ import { roleOf } from "@/lib/team/policy";
 import { col, parseCsv } from "./import-identifiers";
 
 export type ContactDest = "lead" | "monarch" | "skip";
-export type ContactRow = { row: number; name: string; email: string; phone: string; tags: string[]; suggested: ContactDest; why: string; duplicate: string | null };
+/** interests: services named in an "Interested in" column (e.g. Verexa's export); extra: other details kept in the lead's note. */
+export type ContactRow = { row: number; name: string; email: string; phone: string; tags: string[]; interests: string[]; value: number; extra: string[]; suggested: ContactDest; why: string; duplicate: string | null };
 
 const MAX = 1_000_000;
 const SOURCE = "Old CRM";
@@ -48,6 +49,8 @@ async function read(env: AppEnv, a: Extract<Actor, { kind: "staff" }>, csv: stri
   if (hi < 0) throw badRequest("Couldn't find the header row — the file needs Name and Email columns.");
   const h = rows[hi];
   const iN = col(h, /^name$/i), iE = col(h, /e-?mail/i), iP = col(h, /phone/i), iT = col(h, /^tags?$/i);
+  // Also understood: a CRM lead export (Interested in, Source, Stage, Est. value), e.g. Verexa's Leads → Export.
+  const iI = col(h, /^interest(ed)?( in)?$|^services?$/i), iSrc = col(h, /^source$/i), iSd = col(h, /^source detail$/i), iStg = col(h, /^stage$/i), iV = col(h, /^est\.? ?value$|^value$/i);
   const me = (a.member.name ?? "").trim().toLowerCase();
   const myEmail = (await one<{ email: string }>(env.DB, "SELECT lower(email) AS email FROM users WHERE id = ?", a.userId))?.email ?? "";
   const clients = new Set((await all<{ e: string }>(env.DB, "SELECT lower(email) AS e FROM clients WHERE email != ''")).map((x) => x.e));
@@ -66,9 +69,12 @@ async function read(env: AppEnv, a: Extract<Actor, { kind: "staff" }>, csv: stri
     if (!name && !email) return;
     const phone = iP >= 0 ? fmtPhone(r[iP] ?? "") : "";
     const tags = iT >= 0 ? (r[iT] ?? "").split(";").map((t) => t.trim()).filter(Boolean).slice(0, 20) : [];
-    const tagText = tags.join(" ").toLowerCase();
+    const interests = iI >= 0 ? (r[iI] ?? "").split(/[;,|]/).map((t) => t.trim()).filter(Boolean).slice(0, 10) : [];
+    const value = iV >= 0 ? Math.max(0, Math.min(10_000_000, Number(String(r[iV] ?? "").replace(/[^\d.]/g, "")) || 0)) : 0;
+    const extra = [iSrc >= 0 && r[iSrc]?.trim() ? `Source: ${r[iSrc].trim()}${iSd >= 0 && r[iSd]?.trim() ? ` (${r[iSd].trim()})` : ""}` : "", iStg >= 0 && r[iStg]?.trim() ? `Stage there: ${r[iStg].trim()}` : ""].filter(Boolean).map((x) => x.slice(0, 160));
+    const tagText = [...tags, ...interests].join(" ").toLowerCase();
     let suggested: ContactDest = "lead", why = "Default: MKB lead";
-    if (/\bqb-/.test(tagText)) { suggested = "lead"; why = "QuickBooks tags → MKB bookkeeping lead"; }
+    if (/\bqb-|bookkeeping/.test(tagText)) { suggested = "lead"; why = "QuickBooks / bookkeeping → MKB bookkeeping lead"; }
     else if (/tax ?prep|tax return|tax client/.test(tagText)) { suggested = "lead"; why = "Tax prep tags → MKB tax preparation lead"; }
     else if (/tax pro|verexa/.test(tagText)) { suggested = "monarch"; why = "Tax-pro tags → Monarch office"; }
     const d = digits(phone);
@@ -79,7 +85,7 @@ async function read(env: AppEnv, a: Extract<Actor, { kind: "staff" }>, csv: stri
     const badEmail = !!email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
     const duplicate = badEmail ? "Email doesn't look right" : seen.has(email) && email ? "Twice in this file" : clients.has(email) ? "Already a client" : leads.has(email) ? "Already a lead" : offices.has(email) ? "Already a Monarch office" : null;
     if (email) seen.add(email);
-    out.push({ row: hi + k + 2, name: name || email, email, phone, tags, suggested: duplicate ? "skip" : suggested, why: duplicate ?? why, duplicate });
+    out.push({ row: hi + k + 2, name: name || email, email, phone, tags, interests, value, extra, suggested: duplicate ? "skip" : suggested, why: duplicate ?? why, duplicate });
   });
   if (!out.length) throw badRequest("No contacts found under the header row.");
   if (out.length > 2000) throw badRequest("That's more than 2,000 contacts — split the file.");
@@ -112,13 +118,15 @@ export async function applyContacts(env: AppEnv, a: Actor, b: { csv?: unknown; c
     const tagLine = r.tags.length ? `Tags in the old CRM: ${r.tags.join("; ")}` : "No tags in the old CRM";
     if (dest === "lead") {
       const id = `L-${randomId("w").slice(2)}`;
-      const books = r.tags.some((x) => /^qb-/i.test(x));
-      const tax = r.tags.some((x) => /tax ?prep|tax return|tax client/i.test(x));
+      const all = [...r.tags, ...r.interests];
+      const books = all.some((x) => /^qb-|bookkeeping/i.test(x));
+      const tax = all.some((x) => /tax ?prep|tax return|tax client/i.test(x));
+      const biz = all.some((x) => /business (services|solutions)/i.test(x));
       const intakeDone = r.tags.some((x) => /intake-submitted/i.test(x));
       await env.DB.batch([
-        env.DB.prepare("INSERT INTO leads (id, type, name, contact_name, email, phone, address, business, source, source_detail, interests, est_value, owner_id, stage_id, status, priority, tags, created_at, last_activity_at) VALUES (?, 'individual', ?, NULL, ?, ?, NULL, NULL, ?, 'Imported contacts', ?, 0, ?, ?, 'open', 'medium', ?, ?, ?)")
-          .bind(id, r.name, r.email, r.phone, SOURCE, JSON.stringify([...(books ? ["books"] : []), ...(tax ? ["tax"] : [])]), s.member.id, stage.id, JSON.stringify([...new Set([...r.tags.map((x) => x.slice(0, 40)), "Imported"])].slice(0, 12)), t, t),
-        env.DB.prepare("INSERT INTO lead_notes (id, lead_id, author_id, body, at) VALUES (?, ?, ?, ?, ?)").bind(randomId("n"), id, s.member.id, `Imported from the old CRM.\n${tagLine}${intakeDone ? "\nThe old CRM shows their QuickBooks intake as submitted — it isn't in this CRM; send a new bookkeeping intake if needed." : ""}`, t),
+        env.DB.prepare("INSERT INTO leads (id, type, name, contact_name, email, phone, address, business, source, source_detail, interests, est_value, owner_id, stage_id, status, priority, tags, created_at, last_activity_at) VALUES (?, 'individual', ?, NULL, ?, ?, NULL, NULL, ?, 'Imported contacts', ?, ?, ?, ?, 'open', 'medium', ?, ?, ?)")
+          .bind(id, r.name, r.email, r.phone, SOURCE, JSON.stringify([...(books ? ["books"] : []), ...(tax ? ["tax"] : []), ...(biz ? ["biz"] : [])]), r.value, s.member.id, stage.id, JSON.stringify([...new Set([...r.tags.map((x) => x.slice(0, 40)), "Imported"])].slice(0, 12)), t, t),
+        env.DB.prepare("INSERT INTO lead_notes (id, lead_id, author_id, body, at) VALUES (?, ?, ?, ?, ?)").bind(randomId("n"), id, s.member.id, `Imported from the old CRM.\n${tagLine}${r.interests.length ? `\nInterested in: ${r.interests.join(", ")}` : ""}${r.extra.length ? `\n${r.extra.join("\n")}` : ""}${intakeDone ? "\nThe old CRM shows their QuickBooks intake as submitted — it isn't in this CRM; send a new bookkeeping intake if needed." : ""}`, t),
         env.DB.prepare("INSERT INTO lead_activity (id, lead_id, kind, text, actor, at) VALUES (?, ?, 'lead', ?, 'system', ?)").bind(randomId("x"), id, "Lead imported from the old CRM", t),
       ]);
       done.lead++;

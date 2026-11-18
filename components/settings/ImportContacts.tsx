@@ -8,7 +8,7 @@ import { useToast } from "@/components/ui/Toast";
 import { call } from "@/lib/sync/remote";
 
 type Dest = "lead" | "monarch" | "skip";
-type Row = { row: number; name: string; email: string; phone: string; tags: string[]; suggested: Dest; why: string; duplicate: string | null };
+type Row = { row: number; name: string; email: string; phone: string; tags: string[]; interests?: string[]; value?: number; suggested: Dest; why: string; duplicate: string | null };
 const DEST: Record<Dest, string> = { lead: "MKB lead", monarch: "Monarch office", skip: "Skip" };
 
 /**
@@ -51,7 +51,7 @@ export function ImportContacts() {
 
   return (
     <Card>
-      <CardHeader icon={Users} title="Import contacts from your old CRM" subtitle="CSV with Name, Email, Phone and Tags columns. Preview first — nothing is saved until you import. Owner only." />
+      <CardHeader icon={Users} title="Import contacts from your old CRM" subtitle="CSV with Name, Email, Phone and Tags (or a CRM lead export, e.g. Verexa → Leads → Export). Preview first — nothing is saved until you import. Owner only." />
       <div className="space-y-3 px-5 pb-5 text-[13.5px] text-ink-2 sm:px-6">
         <input ref={ref} type="file" accept=".csv,text/csv" className="sr-only" aria-label="Contacts CSV file" onChange={(e) => { const f = e.target.files?.[0]; if (f) void load(f); e.target.value = ""; }} />
         <Button icon={FileUp} disabled={busy} onClick={() => ref.current?.click()}>{rows ? "Choose a different file" : "Choose CSV file"}</Button>
@@ -65,7 +65,7 @@ export function ImportContacts() {
                   <span className="min-w-[180px] flex-1">
                     <span className="block truncate font-medium text-ink">{r.name}</span>
                     <span className="block truncate text-[12px] text-muted">{[r.email, r.phone].filter(Boolean).join(" · ") || "No email or phone"}</span>
-                    <span className={`block text-[11.5px] ${r.duplicate ? "text-warning-ink" : "text-faint"}`}>{r.why}{r.tags.length ? ` · ${r.tags.join("; ")}` : ""}</span>
+                    <span className={`block text-[11.5px] ${r.duplicate ? "text-warning-ink" : "text-faint"}`}>{r.why}{r.interests?.length ? ` · Interested in: ${r.interests.join(", ")}` : ""}{r.value ? ` · est. $${r.value.toLocaleString("en-US")}` : ""}{r.tags.length ? ` · ${r.tags.join("; ")}` : ""}</span>
                   </span>
                   <select aria-label={`Where ${r.name} goes`} disabled={!!r.duplicate} value={dest(r)} onChange={(e) => setPick((x) => ({ ...x, [r.row]: e.target.value as Dest }))} className="h-9 rounded-lg border border-line bg-surface px-2 text-[13px] text-ink disabled:opacity-60">
                     {(Object.keys(DEST) as Dest[]).map((k) => <option key={k} value={k}>{DEST[k]}</option>)}
