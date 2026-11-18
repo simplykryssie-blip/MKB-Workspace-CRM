@@ -12,7 +12,7 @@ import { vaultStatements } from "./client-records";
 const MAX = 1_000_000;
 
 /** Minimal RFC 4180 CSV reader (quoted fields, commas and newlines inside quotes). */
-function parseCsv(text: string): string[][] {
+export function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [], f = "", q = false;
   for (let i = 0; i < text.length; i++) {
@@ -27,7 +27,7 @@ function parseCsv(text: string): string[][] {
   return rows.filter((r) => r.some((c) => c.trim()));
 }
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z]/g, "");
-const col = (hdr: string[], ...names: RegExp[]) => hdr.findIndex((h) => names.some((n) => n.test(h.trim())));
+export const col = (hdr: string[], ...names: RegExp[]) => hdr.findIndex((h) => names.some((n) => n.test(h.trim())));
 
 /** M/D/YYYY, MM/DD/YY, YYYY-MM-DD → YYYY-MM-DD (or null). */
 function isoDate(v: string): string | null {
