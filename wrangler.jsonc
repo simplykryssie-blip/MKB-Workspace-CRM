@@ -25,7 +25,8 @@
     {
       "binding": "FILES",
       "bucket_name": "mkb-crm-files-dev"
-    }
+    },
+        { "binding": "BACKUP", "bucket_name": "mkb-crm-backup-dev" }
   ],
   "vars": {
     "APP_ENV": "development",
@@ -46,7 +47,8 @@
         {
           "binding": "FILES",
           "bucket_name": "mkb-crm-files-preview"
-        }
+        },
+        { "binding": "BACKUP", "bucket_name": "mkb-crm-backup-preview" }
       ],
       "vars": {
         "APP_ENV": "production",
@@ -71,7 +73,8 @@
         {
           "binding": "FILES",
           "bucket_name": "mkb-crm-files-production"
-        }
+        },
+        { "binding": "BACKUP", "bucket_name": "mkb-crm-backup-production" }
       ],
       "vars": {
         "APP_ENV": "production",

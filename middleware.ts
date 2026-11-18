@@ -18,7 +18,44 @@ const STAFF_FREE = /^\/(api|login|portal(\/|$)|campaigns\/|f\/|i\/|u\/|w\/|site(
 //    the portal, client sign-in and the public links — never staff screens or staff APIs.
 const PORTAL_OK = /^\/(portal(\/|$)|u\/|api\/portal\/|api\/public\/|api\/auth\/(logout|session|password\/forgot|password\/reset|invite\/accept)$|i\/|_next|brand|favicon|icon|apple-icon)/;
 
+// 5. Script blocker (Content-Security-Policy) for the CRM, the client portal and private client links:
+//    scripts, styles, fonts, images and connections may only come from MKB's own address — never another
+//    site — and plugins, <base> tricks and posting forms elsewhere are blocked. Next.js's own page scripts are
+//    inline, so inline scripts stay allowed; eval() is not. Not applied to the public websites, campaign pages,
+//    embeddable forms/widgets or the website editor (they carry the owner's own embeds, pixels and analytics).
+const CSP = [
+  "default-src 'self'",
+  // (next dev needs eval for hot reload; production builds never get it)
+  `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}`,
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "font-src 'self' data:",
+  "connect-src 'self'",
+  "media-src 'self' blob:",
+  "frame-src 'self' blob:",
+  "worker-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+  "upgrade-insecure-requests",
+].join("; ");
+const NO_CSP = /^\/(api\/|site(\/|$)|msite(\/|$)|campaigns\/|f\/|w\/|website(\/|$)|monarch\/website(\/|$)|_next\/)/;
+const guarded = (path: string, res: NextResponse) => {
+  if (!NO_CSP.test(path)) res.headers.set("Content-Security-Policy", CSP);
+  return res;
+};
+
 export function middleware(req: NextRequest) {
+  const res = route(req);
+  const host = (req.headers.get("host") ?? "").toLowerCase().split(":")[0];
+  const isSite = [process.env.WEBSITE_HOSTS, process.env.MONARCH_HOSTS].join(",").toLowerCase().split(",").map((h) => h.trim()).filter(Boolean).includes(host);
+  const path = req.nextUrl.pathname;
+  // On the website's domains only the private client links (/i/…, /u/…) are guarded.
+  return isSite && !/^\/(i|u)\//.test(path) ? res : guarded(path, res);
+}
+
+function route(req: NextRequest) {
   const host = (req.headers.get("host") ?? "").toLowerCase().split(":")[0];
   const portalHosts = (process.env.PORTAL_HOSTS ?? "").toLowerCase().split(",").map((h) => h.trim()).filter(Boolean);
   if (portalHosts.includes(host)) {

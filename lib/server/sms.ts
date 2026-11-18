@@ -13,7 +13,7 @@
  */
 import { fmtPhone, type Brand } from "@/lib/campaigns/config";
 import { all, badRequest, HttpError, isDev, json, notFound, now, one, run, type AppEnv } from "./core";
-import { b64, decryptField, encryptField, randomId } from "./crypto";
+import { b64, decryptField, encryptField, randomId, safeEqual } from "./crypto";
 import { audit, requirePermission, requireStaff, type Actor } from "./identity";
 import { linkOrigin } from "./books-intake";
 import { notify } from "./notifications";
@@ -170,7 +170,7 @@ async function verified(env: AppEnv, req: Request, url: string, params: URLSearc
   const sig = req.headers.get("x-twilio-signature") ?? "";
   const data = url + [...params.keys()].sort().map((k) => k + params.get(k)).join("");
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(tw.token), { name: "HMAC", hash: "SHA-1" }, false, ["sign"]);
-  return b64(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(data))) === sig;
+  return !!sig && safeEqual(b64(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(data))), sig);
 }
 const twiml = () => new Response('<?xml version="1.0" encoding="UTF-8"?><Response></Response>', { headers: { "content-type": "text/xml" } });
 

@@ -132,9 +132,25 @@ Run inside Cloudflare's actual runtime: `npx opennextjs-cloudflare build && npx 
    retention policy, and the IRS safeguards expected of a tax preparer (written information
    security plan).
 
+## Backups and restore
+
+- **Database, short term:** D1 Time Travel restores the database to any minute in the last 30 days:
+  `npx wrangler d1 time-travel restore DB --env production --timestamp <ISO time>` (overwrites the live database — export first).
+- **Daily backup (cron, 12:23 UTC):** `lib/server/backup.ts` writes a full SQL snapshot to the private
+  `mkb-crm-backup-<env>` bucket at `db/YYYY-MM-DD.sql.gz` (daily copies kept 90 days, the 1st of each month
+  kept 7 years) and copies every new or changed object of the files bucket to `files/<same key>` (copies of
+  deleted files are removed after 90 days). Status: Settings → Import & backups (Owner), `meta/last-run.json`,
+  and a "Backup" entry in the audit log. Encrypted fields stay encrypted; the key is never in the backup.
+- **Restore a snapshot:** `npx wrangler r2 object get mkb-crm-backup-production/db/<day>.sql.gz --remote --file snap.sql.gz`,
+  `gunzip snap.sql.gz`, then `npx wrangler d1 execute <empty database> --remote --file snap.sql`.
+  Restore files with `wrangler r2 object get … files/<key>` / `put` back into the files bucket.
+- A restore is tested every 6 months (last: 2026-11-18, all tables and rows matched).
+
 ## Known follow-ups
 
 - Dependency advisories reported by `npm audit` are in build tooling (OpenNext's minifier and
   Next.js's bundled PostCSS), not in code that runs in production; update when patched versions
   are released.
-- A Content-Security-Policy for scripts is not yet set (only framing is restricted).
+- Script-blocking Content-Security-Policy is set by `middleware.ts` for the CRM, portal and private links;
+  inline scripts are still allowed (Next.js needs them without nonces). The public websites, campaign pages,
+  embeddable widgets and the website editor are exempt (they carry the owner's own embeds and analytics).

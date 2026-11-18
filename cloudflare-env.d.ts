@@ -3,6 +3,7 @@
 // Runtime types generated with workerd@1.20261104.1 2025-04-01 nodejs_compat
 interface __BaseEnv_CloudflareEnv {
 	FILES: R2Bucket;
+	BACKUP?: R2Bucket;
 	DB: D1Database;
 	ASSETS: Fetcher;
 	APP_ENV: "development";
