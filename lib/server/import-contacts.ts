@@ -36,7 +36,7 @@ export function tidyName(n: string) {
   return w.filter((x, i) => i === 0 || x.toLowerCase() !== w[i - 1].toLowerCase()).join(" ");
 }
 /** Common misspellings of big email domains (likely typos). */
-const TYPO_DOMAINS = /@(gmsil|gmial|gmai|gamil|gnail|gmail\.co|gmail\.con|yaho|yahooo|yahoo\.co|hotmial|icloud\.co|iclod|outlok)\.?[a-z]*$/i;
+const TYPO_DOMAINS = /@(?:(?:gmsil|gmial|gmai|gamil|gnail|yaho|yahooo|hotmial|hotmal|iclod|icoud|outlok|outloo)\.com|(?:gmail|yahoo|icloud|hotmail|outlook|aol)\.(?:co|con|cm|om|comm))$/i;
 
 const digits = (s: string) => s.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
 const fmtPhone = (s: string) => { const d = digits(s); return d.length === 10 ? `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` : s.trim().slice(0, 40); };
