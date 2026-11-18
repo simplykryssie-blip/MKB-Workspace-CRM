@@ -382,7 +382,13 @@ export function quoteFor(a: Answers, books: ServiceFees["books"]) {
   if (keys.includes("ar") && !chosen.has(name("ar"))) notes.push(`${name("ar")} added because you invoice customers or want the A/R aging report.`);
   if (keys.includes("ap") && !chosen.has(name("ap"))) notes.push(`${name("ap")} added because you have vendor bills or want the A/P aging report.`);
   if (cadence === "quarterly") notes.push(`Quarterly bookkeeping: 3 months of the plan less ${books.quarterlyDiscountPct}%, per quarter. ${QUARTERLY_TERMS}`);
-  if (keys.includes("catchup")) notes.push(catchupMonths ? `Catch-up: ${catchupMonths} month${catchupMonths === 1 ? "" : "s"} behind${a.catchUpFrom ? ` (from ${a.catchUpFrom})` : ""}, priced per month at ${books.catchupPctOfPlan}% of the ${q.plan.key} plan.` : "Catch-up is a custom quote — the number of months behind wasn't given. Confirm the months, then price it.");
+  if (keys.includes("catchup")) {
+    const cu = books.addOns.find((x) => x.key === "catchup");
+    const per = cu?.price ? `$${cu.price.toLocaleString("en-US")}` : "";
+    notes.push(catchupMonths ? `Catch-up: ${catchupMonths} month${catchupMonths === 1 ? "" : "s"} of backlog${a.catchUpFrom ? ` (from ${a.catchUpFrom})` : ""}${per ? ` × ${per} starting price` : ""}.` : `Catch-up: the number of months behind wasn't given — confirm the months, then price it${per ? ` (${per} per month of backlog)` : ""}.`);
+    // The catch-up starting price covers up to 150 transactions and 2 accounts per backlog month.
+    if (tx.count > 150 || acc.count > 2) notes.push(`The catch-up starting price covers up to 150 transactions and 2 accounts per month; this client reported ${[tx.count > 150 ? "more transactions" : "", acc.count > 2 ? `${acc.count} accounts` : ""].filter(Boolean).join(" and ")} — raise the catch-up quote to match.`);
+  }
   if (keys.includes("cleanup")) notes.push("Cleanup is a starting price — confirm the scope (months and accounts with errors) before sending.");
   if (a.hasEmployees === "Yes") notes.push("Payroll processing and payroll tax filings aren't part of bookkeeping plans — we'll talk with you about payroll separately.");
   return { ...q, notes };

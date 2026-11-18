@@ -365,10 +365,7 @@ function FeesEditor() {
               <Num id="bo-qtr" label="Quarterly discount" suffix="% off 3 months" value={f.books.quarterlyDiscountPct ?? 20} disabled={ro} onChange={(n) => setF({ ...f, books: { ...f.books, quarterlyDiscountPct: n } })} />
               <p className="mt-1 text-[12px] text-muted">Quarterly clients pay 3 months of their plan and monthly add-ons, less this discount, once per quarter &mdash; paid in full before any work on that quarter begins.</p>
             </div>
-            <div>
-              <Num id="bo-catch" label="Catch-up price per month behind" suffix="% of the monthly plan price" value={f.books.catchupPctOfPlan ?? 0} disabled={ro} onChange={(n) => setF({ ...f, books: { ...f.books, catchupPctOfPlan: n } })} />
-              <p className="mt-1 text-[12px] text-muted">Catch-up = months that were never entered. Set 0 to quote catch-up by hand (your catalog: based on months behind, volume, accounts and records). Cleanup (books kept with errors) uses the Bookkeeping cleanup add-on price.</p>
-            </div>
+            <p className="self-center text-[12px] text-muted">Catch-up is priced by the <b>Catch-up bookkeeping</b> add-on, per month of backlog (starting at). Cleanup, historical reconciliation and records review use their own add-on prices.</p>
           </div>
           {!f.books.overagePerTransaction && <p className="text-[12.5px] text-muted">No per-transaction overage set — set one if you bill for transactions over a plan&rsquo;s limit.</p>}
         </div>

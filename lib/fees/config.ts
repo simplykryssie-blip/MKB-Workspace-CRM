@@ -82,23 +82,23 @@ export const DEFAULT_SERVICE_FEES: ServiceFees = {
       { key: "entity", name: "Additional business entity", billing: "monthly", price: 150, startingAt: true, unit: "per entity", includes: ["Bookkeeping for an additional business entity", "Starting price; scope, transaction volume, accounts and complexity may change the quote"] },
       { key: "payrollbooks", name: "Payroll bookkeeping & reconciliation", billing: "monthly", price: 100, startingAt: true, unit: "", active: false, includes: ["Payroll-related bookkeeping and reconciliation", "Range $100–$250+ a month, based on payroll frequency, employee count and scope", "Payroll processing and payroll tax filings are separate services"] },
       { key: "qbo", name: "QuickBooks setup & consultation", billing: "one_time", price: 350, startingAt: true, unit: "", includes: ["Complete setup and customization", "Chart of accounts", "Bank connections", "Initial configuration and training", "Pricing based on your business needs"] },
-      { key: "catchup", name: "Catch-up bookkeeping", billing: "quote", price: 0, startingAt: false, unit: "", includes: ["For months the books were never entered", "We enter and reconcile every month you're behind", "Quoted on months behind, transaction volume, accounts and the condition of your records", "Get current and move forward with confidence"] },
+      { key: "catchup", name: "Catch-up bookkeeping", billing: "one_time", price: 250, startingAt: true, unit: "per month of backlog", includes: ["Brings overdue books current, one backlog month at a time", "Starting price covers one month with up to 150 transactions and 2 financial accounts", "More transactions or accounts, missing records or complex corrections increase the quote", "Project work, quoted in writing before it starts"] },
       { key: "cleanup", name: "Bookkeeping cleanup", billing: "one_time", price: 500, startingAt: true, unit: "", includes: ["For books that were kept but have errors", "Fix miscategorized and duplicate transactions", "Reconcile accounts that don't match the bank", "Pricing based on scope, months and complexity"] },
-      { key: "historical", name: "Historical reconciliation", billing: "quote", price: 0, startingAt: false, unit: "", includes: ["Historical reconciliation of designated financial accounts and periods", "Custom scope and quote"] },
-      { key: "review", name: "Financial records review", billing: "quote", price: 0, startingAt: false, unit: "", includes: ["Review your bookkeeping records", "Identify discrepancies or areas needing attention", "Custom scope and quote"] },
-      { key: "salestax", name: "Sales tax filing support", billing: "one_time", price: 75, startingAt: true, unit: "per filing", active: false, includes: ["Sales tax bookkeeping and filing support", "Range $75–$150 per filing, based on jurisdiction, complexity and frequency"] },
+      { key: "historical", name: "Historical reconciliation", billing: "one_time", price: 75, startingAt: false, unit: "per account, per statement month", includes: ["Reconciliation of one account for one statement month, from complete records", "Missing records, corrections, cleanup and complex discrepancies are quoted separately"] },
+      { key: "review", name: "Financial records review", billing: "one_time", price: 150, startingAt: true, unit: "", includes: ["Review of up to 2 financial accounts and 3 months of activity", "A findings summary of discrepancies and areas needing attention", "Corrections and remediation are quoted separately"] },
+      { key: "salestax", name: "Sales tax filing support", billing: "one_time", price: 75, startingAt: true, unit: "per filing", active: false, includes: ["One straightforward sales tax return in one jurisdiction, from complete records", "Complex, multi-jurisdiction or amended returns start at $150+ or are custom quoted"] },
       { key: "f1099", name: "1099 preparation", billing: "one_time", price: 25, startingAt: true, unit: "per form", active: false, includes: ["Preparation of 1099 forms", "Range $25–$50 per form, based on form type and volume"] },
       { key: "statements", name: "Financial statement preparation", billing: "one_time", price: 100, startingAt: true, unit: "per engagement", active: false, includes: ["Preparation of financial statements", "Range $100–$200, based on reporting period and scope"] },
       { key: "consult", name: "Financial consultation", billing: "one_time", price: 150, startingAt: false, unit: "per hour", includes: ["Financial consultation", "$150 per hour; scope defined before the engagement"] },
-      { key: "custom", name: "Custom solutions", billing: "quote", price: 0, startingAt: false, unit: "", includes: ["We create tailored solutions for your business", "Flexible pricing based on scope", "Get the exact support you need"] },
+      { key: "custom", name: "Custom bookkeeping solutions", billing: "one_time", price: 300, startingAt: true, unit: "$150/hour, 2-hour minimum", includes: ["Tailored bookkeeping support for a specific business need", "$150/hour with a 2-hour minimum ($300), or a fixed quote after scope review", "Scoped and approved before work begins"] },
     ],
     overagePerTransaction: 0,
     overagePerAccount: 50,
     upgradeAfterMonths: 2,
     quarterlyDiscountPct: 20,
-    /** 0 = catch-up is a custom quote (the pricing catalog: quoted on months behind, volume, accounts and records). */
+    /** No longer used: catch-up is priced per month of backlog by the Catch-up add-on. */
     catchupPctOfPlan: 0,
-    catalogVersion: 2,
+    catalogVersion: 3,
   },
   expunge: { baseFee: 550, chargesIncluded: 2, extraChargeFee: 550 },
   taxPartners: { software: "TaxWise", serviceBureau: "MKB Financial Group (in-house)", bankProduct: "Santa Barbara Tax Products Group (TPG)" },
@@ -191,10 +191,10 @@ export function booksQuote(b: ServiceFees["books"], need: { transactions: number
     // Weekly / every-two-weeks updates don't apply to quarterly clients.
     if (cadence === "quarterly" && (k === "weekly" || k === "biweekly")) continue;
     if (k === "catchup") {
+      // Catch-up: the add-on's price per month of backlog (starting at), when the number of months is known.
       const months = Math.max(0, Math.round(need.catchupMonths ?? 0));
-      const perMonth = Math.round(plan.fee * ((b.catchupPctOfPlan ?? 0) / 100));
-      if (months && perMonth) oneTime.push({ label: `${x.name}: ${months} month${months === 1 ? "" : "s"} × ${money(perMonth)}`, amount: months * perMonth, billing: "one_time", startingAt: plan.startingAt });
-      else quoted.push({ label: x.name, amount: 0, billing: "quote" });
+      if (months && x.price) oneTime.push({ label: `${x.name}: ${months} month${months === 1 ? "" : "s"} of backlog × ${money(x.price)}`, amount: months * x.price, billing: "one_time", startingAt: x.startingAt || undefined });
+      else quoted.push({ label: `${x.name}${x.price ? ` (${x.startingAt ? "starting at " : ""}${money(x.price)} per month of backlog)` : ""}`, amount: 0, billing: "quote" });
       continue;
     }
     const line = { label: x.name, amount: x.price, billing: x.billing, startingAt: x.startingAt };
