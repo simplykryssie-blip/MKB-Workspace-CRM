@@ -278,3 +278,32 @@ export async function noteSeen(env: AppEnv, licenseId: string, host: string | nu
   await run(env.DB, "UPDATE calc_licenses SET last_seen_at = ?, last_seen_host = ? WHERE id = ? AND (last_seen_at IS NULL OR last_seen_at < ?)", now(), host, licenseId, new Date(Date.now() - 3600e3).toISOString()).catch(() => undefined);
 }
 export { EMBED_ID_PATTERN };
+
+/* ---------------------------------------------------------------- one-time hand-off from the old Monarch app */
+/**
+ * The old app holds a customer's webhook encrypted with a key nobody can read back. A one-time hand-off lets
+ * that app send it here server-to-server: an owner arms it with the SHA-256 of a random one-time password
+ * (service_settings 'calc_handoff': {hash, embedId, expires}); the first request carrying that password for
+ * that embed id stores the webhook (encrypted with MKB's key), turns lead delivery on and disarms the hand-off.
+ * The webhook is never returned or logged.
+ */
+export async function receiveHandoff(env: AppEnv, req: Request, ip: string) {
+  if (!(await rateLimit(env.DB, `calc-handoff:${ip}`, 5, 60))) throw new HttpError(429, "Too many tries.");
+  const armed = await one<{ data: string }>(env.DB, "SELECT data FROM service_settings WHERE key = 'calc_handoff'");
+  const h = armed ? (JSON.parse(armed.data) as { hash: string; embedId: string; expires: string }) : null;
+  if (!h || h.expires < now()) throw notFound();
+  const raw = await req.text();
+  if (raw.length > 4000) throw new HttpError(413, "Too large.");
+  let b: { token?: unknown; embedId?: unknown; url?: unknown };
+  try { b = JSON.parse(raw); } catch { throw badRequest("Bad request."); }
+  if (typeof b.token !== "string" || !safeEqual(await sha256(b.token), h.hash) || b.embedId !== h.embedId) throw new HttpError(403, "Not allowed.");
+  const lic = await one<LicRow>(env.DB, "SELECT * FROM calc_licenses WHERE embed_id = ?", h.embedId);
+  if (!lic) throw notFound();
+  const u = cleanWebhook(b.url);
+  const secret = b64url(b64(crypto.getRandomValues(new Uint8Array(24))));
+  const webhookEnc = JSON.stringify(await encryptField(vault(env), JSON.stringify({ url: u.toString(), secret }), aad(lic.id)));
+  await run(env.DB, "UPDATE calc_lead_settings SET webhook_enc = ?, webhook_host = ?, enabled = 1, updated_at = ? WHERE license_id = ?", webhookEnc, u.hostname, now(), lic.id);
+  await run(env.DB, "DELETE FROM service_settings WHERE key = 'calc_handoff'");
+  await run(env.DB, "INSERT INTO audit_events (id, at, actor_user_id, actor_member_id, actor_client_id, action, resource, department, meta, success, ip) VALUES (?, ?, NULL, NULL, NULL, 'Record update', 'Monarch — Calculator license', NULL, ?, 1, ?)", randomId("au"), now(), `Lead webhook handed over from the old Monarch app (${u.hostname}) for license ${lic.id}`, ip);
+  return { ok: true, host: u.hostname };
+}
