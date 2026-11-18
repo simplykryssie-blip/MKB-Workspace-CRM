@@ -41,9 +41,12 @@ export type FullInputs = {
 
 export type FullResult = {
   difference: number; // positive = refund, negative = balance due
-  totalTax: number;
-  payments: number;
+  totalTax: number; // income tax after credits + self-employment tax + additional Medicare tax
+  payments: number; // withholding + refundable credits
+  incomeTaxBeforeCredits: number;
+  nonrefundableCtc: number;
   incomeTaxAfterCredits: number;
+  withholding: number;
   seTax: number;
   additionalMedicare: number;
   eitc: number;
@@ -128,6 +131,22 @@ function schedule1A(d: { status: FullStatus; magi: number; tips: number; overtim
   return round(tipsDeduction + overtimeDeduction + vehicleDeduction + senior);
 }
 
+/**
+ * EITC the way the IRS EIC Table is built: the credit for each $50 income band is computed at the band's
+ * midpoint and rounded to whole dollars. When AGI differs from earned income and is at or above the phase-out
+ * threshold, the credit is the smaller of the amounts for earned income and for AGI (Form 1040 EIC worksheet).
+ */
+function eicAt(p: EitcRow, status: FullStatus, income: number) {
+  if (income <= 0) return 0;
+  const mid = Math.floor(income / 50) * 50 + 25;
+  const threshold = status === "mfj" ? p.thMFJ : p.thOther;
+  const end = status === "mfj" ? p.endMFJ : p.endOther;
+  if (mid >= end) return 0;
+  let credit = Math.min(p.maxCredit, mid * (p.maxCredit / p.earnedIncomeAmount));
+  if (mid > threshold) credit -= (mid - threshold) * (p.maxCredit / (end - threshold));
+  return Math.max(0, Math.round(credit));
+}
+
 function computeEITC(d: { status: FullStatus; kids: number; earned: number; agi: number; investment: number; noChildOk: boolean; mfsApart: boolean }) {
   const kids = Math.min(3, Math.max(0, Math.floor(d.kids)));
   const p = EITC[kids];
@@ -136,13 +155,9 @@ function computeEITC(d: { status: FullStatus; kids: number; earned: number; agi:
   if (kids === 0 && !d.noChildOk) return 0;
   if (d.earned <= 0) return 0;
   const threshold = d.status === "mfj" ? p.thMFJ : p.thOther;
-  const end = d.status === "mfj" ? p.endMFJ : p.endOther;
-  const maxByIncome = Math.min(p.maxCredit, d.earned * (p.maxCredit / p.earnedIncomeAmount));
-  const base = Math.max(d.agi, d.earned);
-  if (base >= end) return 0;
-  let credit = maxByIncome;
-  if (base > threshold) credit -= (base - threshold) * (p.maxCredit / (end - threshold));
-  return round(Math.max(0, credit));
+  let credit = eicAt(p, d.status, d.earned);
+  if (d.agi !== d.earned && d.agi >= threshold) credit = Math.min(credit, eicAt(p, d.status, d.agi));
+  return credit;
 }
 
 function computeCTC(d: { kids: number; incomeTax: number; earned: number; status: FullStatus; agi: number }) {
@@ -161,28 +176,33 @@ export const NEEDS_INCOME_MESSAGE = "Enter W-2 wages and/or self-employment net 
 
 /** Null when neither wages nor self-employment profit was entered (the demo refuses to calculate then). */
 export function computeFull(i: FullInputs): FullResult | null {
-  const { status, wages, withholding, netProfit, investment } = i;
+  const { status, investment } = i;
+  // Every line in whole dollars, as on the tax forms, so the figures shown always add up.
+  const wages = Math.round(i.wages), netProfit = Math.round(i.netProfit), withholding = Math.round(i.withholding);
   const kids = Math.floor(i.kids);
   if (!wages && !netProfit) return null;
 
-  const seTax = estimateSETax(netProfit, wages);
-  const baseAGI = Math.max(0, wages + netProfit - seTax / 2);
+  const seTax = round(estimateSETax(netProfit, wages));
+  const halfSe = Math.round(seTax / 2);
+  const baseAGI = Math.max(0, wages + netProfit - halfSe);
   const deductions = schedule1A({ status, magi: baseAGI, tips: i.tips, overtime: i.overtime, vehicleInterest: i.vehicleInterest, seniorSelf: i.seniorSelf, seniorSpouse: i.seniorSpouse && status === "mfj", tipsQualified: i.tipsQualified, overtimeQualified: i.overtimeQualified, vehicleQualified: i.vehicleQualified });
-  const agi = Math.max(0, baseAGI - deductions - i.otherAdjustments);
+  const agi = Math.max(0, baseAGI - deductions - Math.round(i.otherAdjustments));
   const standardDeduction = STD_DED[status] || STD_DED.single;
   const taxableIncome = Math.max(0, agi - standardDeduction);
-  const incomeTaxBeforeCredits = progressiveTax(taxableIncome, BRACKETS[status]);
-  const earnedIncome = wages + netProfit * 0.9235;
+  const incomeTaxBeforeCredits = round(progressiveTax(taxableIncome, BRACKETS[status]));
+  // Earned income for the EITC and the additional child tax credit: wages plus net self-employment profit
+  // minus the deductible half of self-employment tax.
+  const earnedIncome = Math.max(0, wages + netProfit - halfSe);
 
   const noChildEligible = kids > 0 || (i.eicAge === "Yes" && i.eicUs === "Yes" && !i.eicDependent);
   const eitc = computeEITC({ status, kids, earned: earnedIncome, agi, investment, noChildOk: noChildEligible, mfsApart: i.eicMfsApart });
   const childCredit = computeCTC({ kids, incomeTax: incomeTaxBeforeCredits, earned: earnedIncome, status, agi });
 
   const incomeTaxAfterCredits = Math.max(0, incomeTaxBeforeCredits - childCredit.nonrefundable);
-  const additionalMedicare = estimateAdditionalMedicareTax(status, wages, netProfit);
-  const totalTax = Math.max(0, incomeTaxAfterCredits + seTax + additionalMedicare);
-  const payments = Math.max(0, withholding + eitc + childCredit.refundable);
-  return { difference: payments - totalTax, totalTax, payments, incomeTaxAfterCredits, seTax, additionalMedicare, eitc, actc: childCredit.refundable, schedule1A: deductions, standardDeduction, agi, taxableIncome };
+  const additionalMedicare = round(estimateAdditionalMedicareTax(status, wages, netProfit));
+  const totalTax = incomeTaxAfterCredits + seTax + additionalMedicare;
+  const payments = Math.max(0, withholding) + eitc + childCredit.refundable;
+  return { difference: payments - totalTax, totalTax, payments, incomeTaxBeforeCredits, nonrefundableCtc: childCredit.nonrefundable, incomeTaxAfterCredits, seTax, additionalMedicare, withholding: Math.max(0, withholding), eitc, actc: childCredit.refundable, schedule1A: deductions, standardDeduction, agi, taxableIncome };
 }
 
 const yesNo = (v: unknown): YesNo => (v === "Yes" || v === "No" ? v : "");
@@ -236,7 +256,10 @@ export function fullEstimateForLead(r: FullResult, status: FullStatus) {
     estimated_federal_tax: whole(r.totalTax),
     withholding_plus_refundable_credits: whole(r.payments),
     breakdown: {
+      federal_income_tax_before_credits: whole(r.incomeTaxBeforeCredits),
+      child_tax_credit_nonrefundable: whole(r.nonrefundableCtc),
       federal_income_tax_after_child_tax_credit: whole(r.incomeTaxAfterCredits),
+      federal_income_tax_withheld: whole(r.withholding),
       self_employment_tax: whole(r.seTax),
       additional_medicare_tax: whole(r.additionalMedicare),
       earned_income_tax_credit: whole(r.eitc),
@@ -257,7 +280,10 @@ export function fullEstimateText(e: FullLeadEstimate): string {
     `${e.headline} (${e.tax_year} tax year, ${e.filing_status_label})`,
     `Estimated federal tax: ${fullMoney(e.estimated_federal_tax)}`,
     `Withholding + refundable credits: ${fullMoney(e.withholding_plus_refundable_credits)}`,
-    `Federal income tax after child tax credit: ${fullMoney(b.federal_income_tax_after_child_tax_credit)}`,
+    `Federal income tax before credits: ${fullMoney(b.federal_income_tax_before_credits)}`,
+    `Child Tax Credit (nonrefundable): ${fullMoney(b.child_tax_credit_nonrefundable)}`,
+    `Federal income tax after credits: ${fullMoney(b.federal_income_tax_after_child_tax_credit)}`,
+    `Federal income tax withheld: ${fullMoney(b.federal_income_tax_withheld)}`,
     `Self-employment tax: ${fullMoney(b.self_employment_tax)}`,
     `Additional Medicare tax: ${fullMoney(b.additional_medicare_tax)}`,
     `Earned Income Tax Credit: ${fullMoney(b.earned_income_tax_credit)}`,
