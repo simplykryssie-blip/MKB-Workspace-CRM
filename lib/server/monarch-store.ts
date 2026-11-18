@@ -6,7 +6,7 @@
  * run (welcome email for software packages), and the buyer gets a confirmation email
  * with the product's "after purchase" message. Server-only.
  */
-import { all, HttpError, one, rateLimit, type AppEnv } from "./core";
+import { all, HttpError, one, rateLimit, stripeKey, type AppEnv } from "./core";
 import { sendMonarch } from "./monarch-email";
 import { loadSettings, toPackage } from "./monarch";
 import { recordWebsiteSale, type CheckoutSession } from "./monarch-sales";
@@ -78,7 +78,7 @@ export async function storeCheckout(env: AppEnv, req: Request, slug: string, ip:
   if (!(await rateLimit(env.DB, `store-buy:${ip}`, 20, 10))) throw new HttpError(429, "Too many tries. Please wait a few minutes.", "rate_limited");
   const p = await storeProduct(env, slug);
   if (!p) return Response.redirect(`${origin}/store`, 303);
-  if (!env.STRIPE_SECRET_KEY || p.billing === "monthly" || p.priceCents < 50) return back("?unavailable=1");
+  if (!stripeKey(env, "monarch") || p.billing === "monthly" || p.priceCents < 50) return back("?unavailable=1");
   const form = new URLSearchParams({
     mode: "payment",
     "line_items[0][quantity]": "1",
@@ -100,7 +100,7 @@ export async function storeCheckout(env: AppEnv, req: Request, slug: string, ip:
   });
   if (p.store.summary) form.set("line_items[0][price_data][product_data][description]", p.store.summary.slice(0, 300));
   if (p.store.images[0] && /^https:/.test(origin)) form.set("line_items[0][price_data][product_data][images][0]", `${origin.replace(/\/msite$/, "")}${media(p.store.images[0])}`);
-  const res = await fetch("https://api.stripe.com/v1/checkout/sessions", { method: "POST", headers: { authorization: `Bearer ${env.STRIPE_SECRET_KEY}`, "content-type": "application/x-www-form-urlencoded" }, body: form });
+  const res = await fetch("https://api.stripe.com/v1/checkout/sessions", { method: "POST", headers: { authorization: `Bearer ${stripeKey(env, "monarch")}`, "content-type": "application/x-www-form-urlencoded" }, body: form });
   const s = (await res.json().catch(() => ({}))) as { url?: string; error?: { message?: string } };
   if (!res.ok || !s.url) { console.error("monarch store checkout", res.status, s.error?.message); return back("?unavailable=1"); }
   return Response.redirect(s.url, 303);

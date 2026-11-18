@@ -18,13 +18,13 @@ import { closedDays } from "./firm";
 import { DAYS, LOCATIONS, usd, type BookingSettings, type DayKey, type Hours, type MyHours } from "@/lib/calendar/config";
 import { FIRM, type TemplateKey, renderEmail } from "@/lib/email/templates";
 import { canDo } from "@/lib/team/policy";
-import { all, badRequest, HttpError, isDev, json, notFound, now, one, rateLimit, run, type AppEnv } from "./core";
+import { all, badRequest, HttpError, isDev, json, notFound, now, one, rateLimit, run, type AppEnv, stripeKey } from "./core";
 import { decryptField, encryptField, randomId, sha256 } from "./crypto";
 import { loadWording, publicAssetOrigin } from "./email";
 import { audit, requirePermission, requireStaff, sendEmail, type Actor } from "./identity";
 import { linkOrigin } from "./books-intake";
 import { notify } from "./notifications";
-const stripeReady = (env: AppEnv) => !!env.STRIPE_SECRET_KEY;
+const stripeReady = (env: AppEnv, brand: Brand = "mkb") => !!stripeKey(env, brand);
 import { sendText } from "./sms";
 import { loadSettings as monarchSettings } from "./monarch";
 import { renderMonarch } from "./monarch-email";
@@ -203,7 +203,7 @@ export async function bookingPage(env: AppEnv, q: { brand?: string }) {
     if (people.length) list.push({ ...publicType(t), staff: people.map((p) => ({ id: p.id, name: p.name })) });
   }
   const r = await rules(env);
-  return { brand, types: list, payOnline: stripeReady(env) || isDev(env), windowDays: r.windowDays };
+  return { brand, types: list, payOnline: stripeReady(env, brand) || isDev(env), windowDays: r.windowDays };
 }
 export async function bookingSlots(env: AppEnv, q: { type?: string; member?: string }) {
   const t = await bookableType(env, s(q.type, 80));
@@ -290,7 +290,7 @@ export async function book(env: AppEnv, b: Record<string, unknown>, ip: string) 
   const token = await newToken(env, id);
   await audit(env.DB, { kind: "anonymous", ip }, { action: "Record update", resource: `Calendar appointment ${id}`, meta: `Booked online (${t.name})` });
   if (paid) {
-    if (!stripeReady(env)) {
+    if (!stripeReady(env, brand)) {
       if (!isDev(env)) { await run(env.DB, "UPDATE appointments SET status = 'cancelled' WHERE id = ?", id); throw new HttpError(503, "Online payment isn't available right now. Please call us to book."); }
       await markPaid(env, id, t.price_cents, `dev_${id}`); // local development: treated as paid
       return { status: "confirmed" as const, token };
@@ -322,7 +322,7 @@ async function checkout(env: AppEnv, id: string, t: TypeRow, name: string, email
     success_url: `${back}?paid=1${brand === "monarch" ? "&b=monarch" : ""}`,
     cancel_url: `${back}?unpaid=1${brand === "monarch" ? "&b=monarch" : ""}`,
   });
-  const res = await fetch("https://api.stripe.com/v1/checkout/sessions", { method: "POST", headers: { authorization: `Bearer ${env.STRIPE_SECRET_KEY}`, "content-type": "application/x-www-form-urlencoded" }, body: form });
+  const res = await fetch("https://api.stripe.com/v1/checkout/sessions", { method: "POST", headers: { authorization: `Bearer ${stripeKey(env, brand)}`, "content-type": "application/x-www-form-urlencoded" }, body: form });
   const out = (await res.json().catch(() => ({}))) as { url?: string; error?: { message?: string } };
   if (!res.ok || !out.url) { console.error("stripe booking checkout", res.status, out.error?.message); return null; }
   return out.url;

@@ -127,7 +127,7 @@ async function hmacHex(secret: string, msg: string) {
 
 /** Verifies Stripe's signature, then records completed checkout payments (once each). */
 export async function stripeWebhook(env: AppEnv, req: Request) {
-  if (!env.STRIPE_WEBHOOK_SECRET) throw new HttpError(503, "Webhook not configured.");
+  if (!env.STRIPE_WEBHOOK_SECRET && !env.STRIPE_MONARCH_WEBHOOK_SECRET) throw new HttpError(503, "Webhook not configured.");
   const raw = await req.text();
   if (raw.length > 512_000) throw badRequest("Too large.");
   const sig = req.headers.get("stripe-signature") ?? "";
@@ -135,8 +135,14 @@ export async function stripeWebhook(env: AppEnv, req: Request) {
   const all = sig.split(",").filter((p) => p.startsWith("v1=")).map((p) => p.slice(3));
   const t = Number(parts.t);
   if (!t || Math.abs(Date.now() / 1000 - t) > 300) throw new HttpError(400, "Stale or missing signature.");
-  const expected = await hmacHex(env.STRIPE_WEBHOOK_SECRET, `${t}.${raw}`);
-  if (!all.some((v) => safeEqual(v, expected))) throw new HttpError(400, "Bad signature.");
+  // One address for both Stripe accounts: MKB's and (when set up) Monarch's own. The secret that matches tells which sent it.
+  let account: "mkb" | "monarch" | null = null;
+  for (const [who, secret] of [["mkb", env.STRIPE_WEBHOOK_SECRET], ["monarch", env.STRIPE_MONARCH_WEBHOOK_SECRET]] as const) {
+    if (!secret) continue;
+    const expected = await hmacHex(secret, `${t}.${raw}`);
+    if (all.some((v) => safeEqual(v, expected))) { account = who; break; }
+  }
+  if (!account) throw new HttpError(400, "Bad signature.");
   const evt = JSON.parse(raw) as { type: string; data: { object: { id: string; payment_status?: string; amount_total?: number; payment_intent?: string; metadata?: Record<string, string> } } };
   if (evt.type !== "checkout.session.completed" && evt.type !== "checkout.session.async_payment_succeeded") return { received: true };
   const s = evt.data.object as typeof evt.data.object & { total_details?: { amount_discount?: number } | null; payment_link?: string | null };
@@ -150,7 +156,7 @@ export async function stripeWebhook(env: AppEnv, req: Request) {
   // A Monarch package bought through a payment link on the website.
   // A product bought in Monarch's online store (/store).
   if (s.metadata?.monarch_package_id) { const m = await monarchStorePurchase(env, s as Parameters<typeof monarchStorePurchase>[1]); if (m) return m; }
-  if (s.payment_link) { const m = await monarchWebsitePurchase(env, s as Parameters<typeof monarchWebsitePurchase>[1]); if (m) return m; }
+  if (s.payment_link) { const m = await monarchWebsitePurchase(env, s as Parameters<typeof monarchWebsitePurchase>[1], account); if (m) return m; }
   if (monarchFree) return { received: true };
   const id = s.metadata?.invoice_id;
   const r = id ? await one<InvoiceRow>(env.DB, "SELECT * FROM invoices WHERE id = ?", id) : null;

@@ -4,7 +4,7 @@
  * created when a sale is paid, cancelled if the sale is refunded, and marked
  * paid out by staff. Server-only.
  */
-import { badRequest, HttpError, notFound, now, one, rateLimit, run, str, type AppEnv } from "./core";
+import { badRequest, HttpError, notFound, now, one, rateLimit, run, str, stripeKey, type AppEnv, type StripeBrand } from "./core";
 import { randomId, randomToken, sha256 } from "./crypto";
 import { publicAssetOrigin } from "./email";
 import { notify } from "./notifications";
@@ -63,7 +63,7 @@ export async function createSale(env: AppEnv, a: Actor, b: Record<string, unknow
   if (!description) throw badRequest("Describe what was sold.");
   const paid = b.payment === "paid";
   if (b.payment === "link") {
-    if (!env.STRIPE_SECRET_KEY) throw badRequest("Online payment isn't set up yet (Stripe). Record the payment by hand instead.");
+    if (!stripeKey(env, "monarch")) throw badRequest("Online payment isn't set up yet (Stripe). Record the payment by hand instead.");
     if (!office.email) throw badRequest("Add the office's email address first.");
   }
   const method = paid ? (METHODS.includes(String(b.method)) ? String(b.method) : "Other") : null;
@@ -84,7 +84,7 @@ export async function payLink(env: AppEnv, a: Actor, id: string) {
   need(a, "edit");
   const r = await saleRow(env, id);
   if (r.status !== "unpaid") throw badRequest("Only unpaid sales can get a pay link.");
-  if (!env.STRIPE_SECRET_KEY) throw badRequest("Online payment isn't set up yet (Stripe). Record the payment by hand instead.");
+  if (!stripeKey(env, "monarch")) throw badRequest("Online payment isn't set up yet (Stripe). Record the payment by hand instead.");
   const o = await officeRow(env, r.office_id);
   if (!o.email) throw badRequest("Add the office's email address first.");
   const token = randomToken(24);
@@ -154,7 +154,7 @@ export async function publicMonarchPay(env: AppEnv, token: string, ip: string, d
   if (!r) return page("Link not valid", "<p>This payment link has expired or been replaced. Please use the newest email from Monarch Tax Suite.</p>", 404);
   if (r.status === "paid") return page("Already paid", "<p>This order is paid in full. Thank you!</p>");
   if (r.status !== "unpaid") return page("Link not valid", "<p>This order is no longer open. Please contact Monarch Tax Suite.</p>", 404);
-  if (!env.STRIPE_SECRET_KEY) return page("Online payment isn't available", "<p>Please contact Monarch Tax Suite to pay.</p>", 503);
+  if (!stripeKey(env, "monarch")) return page("Online payment isn't available", "<p>Please contact Monarch Tax Suite to pay.</p>", 503);
   const base = `${payOrigin(env)}/api/public/monarch-pay/${token}`;
   const form = new URLSearchParams({
     mode: "payment",
@@ -171,7 +171,7 @@ export async function publicMonarchPay(env: AppEnv, token: string, ip: string, d
     success_url: `${base}?done=1`,
     cancel_url: payOrigin(env) + "/",
   });
-  const res = await fetch("https://api.stripe.com/v1/checkout/sessions", { method: "POST", headers: { authorization: `Bearer ${env.STRIPE_SECRET_KEY}`, "content-type": "application/x-www-form-urlencoded" }, body: form });
+  const res = await fetch("https://api.stripe.com/v1/checkout/sessions", { method: "POST", headers: { authorization: `Bearer ${stripeKey(env, "monarch")}`, "content-type": "application/x-www-form-urlencoded" }, body: form });
   const s = (await res.json().catch(() => ({}))) as { url?: string; error?: { message?: string } };
   if (!res.ok || !s.url) { console.error("monarch stripe checkout", res.status, s.error?.message); return page("Payment page unavailable", "<p>We couldn't open the payment page right now. Please try again later.</p>", 502); }
   return Response.redirect(s.url, 303);
@@ -205,9 +205,11 @@ export type CheckoutSession = { id: string; payment_link?: string | null; paymen
  * that email), records the paid sale, and — through the usual paid steps —
  * sends the welcome. Returns null when the payment isn't for a Monarch package.
  */
-export async function monarchWebsitePurchase(env: AppEnv, s: CheckoutSession) {
-  if (!s.payment_link || !env.STRIPE_SECRET_KEY) return null;
-  const res = await fetch(`https://api.stripe.com/v1/payment_links/${encodeURIComponent(s.payment_link)}`, { headers: { authorization: `Bearer ${env.STRIPE_SECRET_KEY}` } });
+export async function monarchWebsitePurchase(env: AppEnv, s: CheckoutSession, account: StripeBrand = "mkb") {
+  // The payment link lives in the Stripe account that sent the event.
+  const key = stripeKey(env, account);
+  if (!s.payment_link || !key) return null;
+  const res = await fetch(`https://api.stripe.com/v1/payment_links/${encodeURIComponent(s.payment_link)}`, { headers: { authorization: `Bearer ${key}` } });
   const link = (await res.json().catch(() => ({}))) as { url?: string };
   if (!res.ok || !link.url) return null;
   const pk = await one<Parameters<typeof toPackage>[0]>(env.DB, "SELECT * FROM mon_packages WHERE stripe_link = ?", link.url);

@@ -4,7 +4,7 @@
  * resellers) and settings. Every call checks the "monarch" permission.
  * Server-only.
  */
-import { all, badRequest, HttpError, json, notFound, now, one, run, str, type AppEnv } from "./core";
+import { all, badRequest, HttpError, json, notFound, now, one, run, str, type AppEnv, stripeKey } from "./core";
 import { recordConsent } from "./campaigns";
 import { randomId } from "./crypto";
 import { notify } from "./notifications";
@@ -127,7 +127,7 @@ export async function loadAll(env: AppEnv, a: Actor): Promise<MonarchData> {
     sales: sl.map(toSale), commissions: cm.map(toCommission),
     uploads: up.map((u): BankUpload => ({ id: u.id, bankId: u.bank_id, reportType: u.report_type, fileName: u.file_name, rows: u.rows, matched: u.matched, createdAt: u.created_at })),
     unmatched,
-    stripe: !!env.STRIPE_SECRET_KEY,
+    stripe: !!stripeKey(env, "monarch"),
   };
 }
 

@@ -36,6 +36,10 @@ export type AppEnv = Omit<CloudflareEnv, "APP_ENV" | "BACKEND_ENABLED"> & {
   STRIPE_SECRET_KEY?: string;
   /** Signing secret of the Stripe webhook endpoint (whsec_…). */
   STRIPE_WEBHOOK_SECRET?: string;
+  /** Monarch Tax Suite's own Stripe account (store, Monarch pay links, Monarch bookings). Without it, Monarch uses STRIPE_SECRET_KEY. */
+  STRIPE_MONARCH_SECRET_KEY?: string;
+  /** Signing secret of the webhook endpoint in Monarch's Stripe account (same address as MKB's). */
+  STRIPE_MONARCH_WEBHOOK_SECRET?: string;
   /** Development only: password given to sample team members by the dev seed. */
   DEV_SEED_PASSWORD?: string;
 };
@@ -138,3 +142,7 @@ export async function rateLimit(db: Db, key: string, max: number, windowMinutes:
   await run(db, "UPDATE rate_limits SET count = count + 1 WHERE key = ?", key);
   return true;
 }
+
+/** Which Stripe account to charge: Monarch's own when its key is set, otherwise MKB's. */
+export type StripeBrand = "mkb" | "monarch";
+export const stripeKey = (env: AppEnv, brand: StripeBrand = "mkb") => (brand === "monarch" ? env.STRIPE_MONARCH_SECRET_KEY || env.STRIPE_SECRET_KEY : env.STRIPE_SECRET_KEY) || "";
