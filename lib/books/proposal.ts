@@ -31,7 +31,7 @@ export type Proposal = {
 };
 
 /** Every bookkeeping client keeps their own accounting software (shown on the proposal and in the signed copy). */
-export const SOFTWARE_REQUIRED = "Once you sign, you'll need your own accounting software subscription in your business's name — we work in your books, and you own your books and your data. We suggest QuickBooks Online, Wave, Xero or FreshBooks. The subscription is paid by you directly to the software company and isn't included in our fees. Already have one? We'll use it.";
+export const SOFTWARE_REQUIRED = "Once you sign, you'll need your own accounting software subscription in your business's name — we work in your books, and you own your books and your data. We recommend QuickBooks Online. If you already use Wave, Xero or FreshBooks, we can work in it. The subscription is paid by you directly to the software company and isn't included in our fees.";
 
 export const BILLING_LABEL: Record<ProposalBilling, string> = { monthly: "Monthly", quarterly: "Quarterly (paid upfront)", one_time: "One-time", quote: "Custom quote" };
 
@@ -69,7 +69,8 @@ const amt = (l: ProposalLine) => (l.billing === "quote" ? "custom quote" : `${l.
  */
 export const booksLetterBody = (body: string) => body
   .replace("Your monthly fee is {{fee}}, billed monthly in advance.", "Your fee is {{fee}}.")
-  .replace("- Keep your own accounting software subscription (such as QuickBooks Online). You own your books and your data.", "- Have your own accounting software subscription in the business's name once this letter is signed (we suggest QuickBooks Online, Wave, Xero or FreshBooks), paid directly by you to the software company. You own your books and your data.");
+  .replace("- Have your own accounting software subscription in the business's name once this letter is signed (we suggest QuickBooks Online, Wave, Xero or FreshBooks), paid directly by you to the software company. You own your books and your data.", "- Have your own accounting software subscription in the business's name once this letter is signed. We recommend QuickBooks Online; if you already use Wave, Xero or FreshBooks, we can work in it. You pay the subscription directly to the software company. You own your books and your data.")
+  .replace("- Keep your own accounting software subscription (such as QuickBooks Online). You own your books and your data.", "- Have your own accounting software subscription in the business's name once this letter is signed. We recommend QuickBooks Online; if you already use Wave, Xero or FreshBooks, we can work in it. You pay the subscription directly to the software company. You own your books and your data.");
 
 /** Words for the engagement letter's fill-ins, from the reviewed proposal. */
 export function proposalLetterVars(p: Proposal, planIncludes: string[]) {

@@ -191,7 +191,7 @@ Thank you for choosing MKB Financial Group LLC for your bookkeeping. This letter
 - Close the month and keep your financial records organized.
 
 ## Your responsibilities
-- Have your own accounting software subscription in the business's name once this letter is signed (we suggest QuickBooks Online, Wave, Xero or FreshBooks), paid directly by you to the software company. You own your books and your data.
+- Have your own accounting software subscription in the business's name once this letter is signed. We recommend QuickBooks Online; if you already use Wave, Xero or FreshBooks, we can work in it. You pay the subscription directly to the software company. You own your books and your data.
 - Give us access to your accounting software and provide statements, receipts and answers to our questions by the 10th of each month.
 - Tell us about new accounts, loans, large purchases, owner contributions or withdrawals.
 
