@@ -86,7 +86,8 @@
         "MONARCH_HOSTS": "monarchtaxsuite.com,www.monarchtaxsuite.com",
         "PORTAL_HOSTS": "portal.mkbfinancialgroup.com",
         "PORTAL_ORIGIN": "https://portal.mkbfinancialgroup.com",
-        "CALCULATOR_ORIGIN": "https://www.monarchtaxsuite.com"
+        "CALCULATOR_ORIGIN": "https://www.monarchtaxsuite.com",
+        "BRIDGE_HOSTS": "verexahq.com,www.verexahq.com"
       }
     }
   }

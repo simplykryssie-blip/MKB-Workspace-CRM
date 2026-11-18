@@ -125,6 +125,10 @@ const assetsFor = (env) => ({
     return (await serve(env, new URL(req.url), req.method, true)) ?? new Response("Not found", { status: 404 });
   },
 });
+// Bridge hosts (BRIDGE_HOSTS, e.g. verexahq.com while an old customer install still points there): Cloudflare routes
+// send only the calculator addresses and /_next/ here. The calculator and its own files are served by this app;
+// anything else that reaches it is passed through untouched to that host's origin.
+const CALC_PATH = /^\\/(embed\\/|api\\/license\\/|api\\/public\\/calculator\\/)/;
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -132,6 +136,8 @@ export default {
       const r = await serve(env, url, request.method);
       if (r) return r;
     }
+    const bridge = (env.BRIDGE_HOSTS || "").toLowerCase().split(",").map((h) => h.trim()).filter(Boolean);
+    if (bridge.includes(url.hostname) && !CALC_PATH.test(url.pathname)) return fetch(request);
     return worker.fetch(request, { ...env, ASSETS: assetsFor(env) }, ctx);
   },
   // Cron triggers. Every 15 minutes: campaigns (start scheduled ones, send what fits under the daily email cap),
