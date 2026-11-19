@@ -43,7 +43,7 @@ export type CampaignSettings = { brand: Brand; fromName: string; fromEmail: stri
 export const LEAD_STATUSES = [["open", "Open"], ["lost", "Lost"], ["converted", "Became a client"]] as const;
 export const CLIENT_STATUSES = [["active", "Active"], ["onboarding", "Onboarding"], ["inactive", "Inactive"]] as const;
 export const SERVICE_OPTIONS = [["tax", "Tax"], ["books", "Bookkeeping & payroll"], ["biz", "Business Solutions"], ["expunge", "Record Relief"]] as const;
-export const OFFICE_STAGES = [["lead", "Leads"], ["interested", "Interested"], ["paid", "Paid"], ["collecting", "Collecting info"], ["setup", "In setup"], ["active", "Active"], ["inactive", "Inactive"]] as const;
+export const OFFICE_STAGES = [["lead", "Leads"], ["customer", "Product customers"], ["interested", "Interested"], ["paid", "Paid"], ["collecting", "Collecting info"], ["setup", "In setup"], ["active", "Active"], ["inactive", "Inactive"]] as const;
 
 /* ---------------------------------------------------------------- rendering (shared with the live preview) */
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);

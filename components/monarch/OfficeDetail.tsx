@@ -40,6 +40,7 @@ function Detail({ d, o }: { d: MonarchData; o: Office }) {
   const cap = capacity(o, pkg);
   const sales = d.sales.filter((s) => s.officeId === o.id);
   const office = (method: "POST" | "PUT", path: string, body?: unknown) => m.applyOffice(method, path, body);
+  const cust = o.stage === "customer";
   const patch = (pt: Record<string, unknown>, ok?: string) => run("patch", () => office("PUT", `/api/monarch/offices/${o.id}`, { rev: o.rev, patch: pt }), ok);
   const setItem = (key: string, status: string, extra: { note?: string; date?: string } = {}, ok?: string) => run(`item:${key}`, () => office("PUT", `/api/monarch/offices/${o.id}`, { item: { key, status, ...extra } }), ok);
 
@@ -57,18 +58,25 @@ function Detail({ d, o }: { d: MonarchData; o: Office }) {
   return (
     <div>
       <PageHeader
-        crumbs={[{ label: "Monarch", href: "/monarch" }, o.stage === "lead" ? { label: "Leads", href: "/monarch/leads" } : { label: "Offices", href: "/monarch/offices" }, { label: o.name }]}
+        crumbs={[{ label: "Monarch", href: "/monarch" }, o.stage === "lead" ? { label: "Leads", href: "/monarch/leads" } : cust ? { label: "Customers", href: "/monarch/customers" } : { label: "Offices", href: "/monarch/offices" }, { label: o.name }]}
         title={<span className="flex flex-wrap items-center gap-2">{o.name} <StageBadge stage={o.stage} /></span>}
         subtitle={<>{[o.contactName, o.city && `${o.city}${o.state ? `, ${o.state}` : ""}`, pkg?.name].filter(Boolean).join(" · ") || "No details yet"}{reseller && <> · brought in by <Link href="/monarch/resellers" className="font-semibold text-accent hover:underline">{reseller.name}</Link></>}</>}
         actions={<><Button icon={Pencil} onClick={() => setEditing(true)}>Edit</Button><Button icon={Wallet} href={`/monarch/sales?office=${o.id}`}>Record a sale</Button></>}
       />
 
+      {cust && (
+        <Card className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 border-accent/30 bg-accent-soft px-5 py-3 sm:px-6">
+          <span className="min-w-[200px] flex-1 text-[13.5px] text-accent-ink"><b>Product customer.</b> They buy store products (like the tax calculator) — not a service bureau firm, so there's no onboarding. If they sign up for a service bureau package, it moves them to onboarding automatically.</span>
+          <Button size="sm" disabled={!!busy} onClick={() => { if (confirm(`Make ${o.name} a service bureau firm and start onboarding?`)) void patch({ stage: "interested" }, "Moved to onboarding"); }}>Make a firm</Button>
+        </Card>
+      )}
       {o.stage === "lead" && (
         <Card className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 border-accent/30 bg-accent-soft px-5 py-3 sm:px-6">
           <span className="min-w-[200px] flex-1 text-[13.5px] text-accent-ink"><b>This is a lead.</b> It stays off Onboarding and Offices until they're ready to buy or start setup. Recording a paid sale moves it to onboarding automatically.</span>
           <Button size="sm" variant="primary" disabled={!!busy} onClick={() => void patch({ stage: "interested" }, "Moved to onboarding")}>Start onboarding</Button>
         </Card>
       )}
+      {!cust && (<>
       <Card className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-3 sm:px-6">
         <Badge tone={o.welcomeSentAt ? "success" : "neutral"} icon={Send}>{o.welcomeSentAt ? `Welcome sent ${shortDate(o.welcomeSentAt)}` : "Welcome not sent"}</Badge>
         <span className="min-w-[200px] flex-1 text-[13px] text-ink-2">Setup link, what we need, and the {software?.name ?? "software"} and {bank?.name ?? "bank"} applications in one email.{d.settings.autoWelcome ? " Sent automatically when their package is paid." : ""}</span>
@@ -97,16 +105,18 @@ function Detail({ d, o }: { d: MonarchData; o: Office }) {
           );
         })}
       </ol>
+      </>)}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
-        <Card>
+      <div className={cust ? "grid gap-4 lg:grid-cols-2" : "grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]"}>
+        {!cust && (<Card>
           <CardHeader title="Onboarding checklist" subtitle={`Built from this office's package, software and bank · ${p.done} of ${p.total} done`} />
           <ul className="border-t border-line">
             {items.map((i) => <ItemRow key={i.key} d={d} o={o} def={i} busy={busy} setItem={setItem} run={run} onLocations={() => setLocs(true)} onPreparers={() => setPreps(true)} />)}
           </ul>
-        </Card>
+        </Card>)}
 
         <div className="flex flex-col gap-4">
+          {!cust && (<>
           <Card>
             <CardHeader title="Software & bank" action={<Button size="sm" variant="ghost" icon={Pencil} onClick={() => setEditing(true)}>Change</Button>} />
             <dl className="grid grid-cols-[130px_minmax(0,1fr)] gap-x-3 gap-y-2 border-t border-line px-5 py-4 text-[13.5px] sm:px-6">
@@ -156,6 +166,7 @@ function Detail({ d, o }: { d: MonarchData; o: Office }) {
             </Card>
           )}
 
+          </>)}
           <Card>
             <CardHeader title="Sales" action={<Button size="sm" variant="ghost" icon={Plus} href={`/monarch/sales?office=${o.id}`}>Record</Button>} />
             <ul className="border-t border-line">
@@ -181,12 +192,14 @@ function Detail({ d, o }: { d: MonarchData; o: Office }) {
           <Notes o={o} />
 
           <Card className="px-5 py-4 sm:px-6">
+{!cust && (<>
             <p className="text-[13px] font-semibold text-ink">Renews</p>
             <div className="mt-1 flex flex-wrap items-end gap-2">
               <input type="date" aria-label="Renewal date" defaultValue={o.renewsOn ?? ""} key={o.renewsOn ?? "none"} onBlur={(e) => e.target.value !== (o.renewsOn ?? "") && void patch({ renewsOn: e.target.value }, "Renewal date saved")} className="h-9 rounded-xl border border-line bg-surface px-3 text-[13.5px] text-ink" />
               <span className="text-[12px] text-muted">Set automatically a year after a season package is paid.</span>
             </div>
-            <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-3">
+            </>)}
+            <div className={cust ? "flex flex-wrap gap-2" : "mt-4 flex flex-wrap gap-2 border-t border-line pt-3"}>
               {o.stage !== "inactive"
                 ? <Button size="sm" onClick={() => void patch({ stage: "inactive" }, "Marked inactive")}>Mark inactive</Button>
                 : <Button size="sm" onClick={() => void patch({ stage: "interested" }, "Reopened")}>Reopen</Button>}

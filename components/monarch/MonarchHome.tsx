@@ -21,7 +21,7 @@ export function itemsOf(d: MonarchData, o: Office) {
 export function needsYou(d: MonarchData) {
   const out: { office: Office; what: string; action: string }[] = [];
   for (const o of d.offices) {
-    if (o.stage === "inactive" || o.stage === "active" || o.stage === "lead") continue;
+    if (o.stage === "inactive" || o.stage === "active" || o.stage === "lead" || o.stage === "customer") continue;
     const items = itemsOf(d, o);
     const review = items.filter((i) => itemState(o, i.key).status === "review");
     if (review.length) out.push({ office: o, what: `sent ${review.map((i) => i.label.toLowerCase()).join(", ")} — review`, action: "Review" });

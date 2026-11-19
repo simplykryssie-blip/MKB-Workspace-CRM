@@ -41,10 +41,15 @@ async function afterPaid(env: AppEnv, r: SaleRowLite) {
       await run(env.DB, "INSERT INTO mon_commissions (id, reseller_id, sale_id, rate_bp, amount_cents, status, created_at) VALUES (?, ?, ?, ?, ?, 'owed', ?) ON CONFLICT(sale_id) DO UPDATE SET status = 'owed', amount_cents = excluded.amount_cents, rate_bp = excluded.rate_bp WHERE mon_commissions.status = 'cancelled'", randomId("mc"), r.reseller_id, r.id, rs.rate_bp, amt, now());
     }
   }
+  // Firm or product customer: a service bureau package (or seats/locations) makes them a firm and starts
+  // onboarding; anything else (calculator, WISP build, downloads) bought by someone who isn't already a
+  // firm in onboarding makes them a product customer, with no onboarding.
+  if (pkg && pkg.kind !== "other") await run(env.DB, "UPDATE mon_offices SET is_lead = 0, is_customer = 0, updated_at = ?, rev = rev + 1 WHERE id = ? AND (is_lead = 1 OR is_customer = 1)", now(), r.office_id);
+  else await run(env.DB, "UPDATE mon_offices SET is_lead = 0, is_customer = 1, updated_at = ?, rev = rev + 1 WHERE id = ? AND is_customer = 0 AND package_id IS NULL AND stage = 'interested'", now(), r.office_id);
   await advance(env, r.office_id, { paid: true });
   // A new package: the welcome (setup link + software and bank applications) goes out right away.
   if (pkg?.kind === "package") {
-    const o = await one<{ welcome_sent_at: string | null; stage: string }>(env.DB, "SELECT welcome_sent_at, CASE WHEN is_lead = 1 THEN 'lead' ELSE stage END AS stage FROM mon_offices WHERE id = ?", r.office_id);
+    const o = await one<{ welcome_sent_at: string | null; stage: string }>(env.DB, "SELECT welcome_sent_at, CASE WHEN is_lead = 1 THEN 'lead' WHEN is_customer = 1 THEN 'customer' ELSE stage END AS stage FROM mon_offices WHERE id = ?", r.office_id);
     const s = await loadSettings(env);
     if (s.autoWelcome && o && !o.welcome_sent_at && (o.stage === "lead" || o.stage === "interested" || o.stage === "paid")) await sendWelcomePackage(env, r.office_id).catch((e) => console.error("monarch welcome", e instanceof Error ? e.message : e));
   }
