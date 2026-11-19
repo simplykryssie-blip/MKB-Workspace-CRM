@@ -20,6 +20,11 @@ export async function call<T = unknown>(method: "GET" | "POST" | "PUT" | "DELETE
     window.location.assign("/login");
     throw new RemoteError(401, data.error ?? "Please sign in.", data.code);
   }
+  if (r.status === 403 && data.code === "onboarding_required" && window.location.pathname !== "/onboarding") {
+    // A new team member who hasn't finished their onboarding documents: send them there.
+    window.location.assign("/onboarding");
+    throw new RemoteError(403, data.error ?? "Finish your onboarding first.", data.code);
+  }
   if (!r.ok) throw new RemoteError(r.status, data.error ?? "Something went wrong.", data.code);
   return data;
 }

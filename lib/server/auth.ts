@@ -12,6 +12,7 @@
 import { addMinutes, clientIp, HttpError, isDev, now, one, rateLimit, run, type AppEnv } from "./core";
 import { decryptField, encryptField, hashPassword, newTotpSecret, otpauthUrl, passwordProblem, randomId, randomToken, sha256, verifyPassword, verifyTotp } from "./crypto";
 import { appOrigin, audit, loadMember, loadPolicy, loadSecurity, sendEmail, type Actor } from "./identity";
+import { ONBOARDING_PATHS, onboardingPending } from "./staff-onboarding";
 import { portalOrigin } from "./email";
 
 const ABSOLUTE_HOURS = 12;
@@ -77,7 +78,13 @@ export async function authenticate(env: AppEnv, req: Request, opts: { allowParti
     await run(env.DB, "UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL", now(), r.user.id);
     throw new HttpError(401, "This account can't sign in.", "account_inactive");
   }
-  return { kind: "staff", userId: r.user.id, member, policy: await loadPolicy(env.DB), ip, mfaPending: pending };
+  const policy = await loadPolicy(env.DB);
+  // Staff onboarding (documents signed + identity confirmed): until it's done, only the person's own
+  // onboarding screen and sign-in endpoints work. Enforced here, for every staff request.
+  if (!pending && !ONBOARDING_PATHS.test(new URL(req.url).pathname) && (await onboardingPending(env, policy, member))) {
+    throw new HttpError(403, "Finish your onboarding documents first.", "onboarding_required");
+  }
+  return { kind: "staff", userId: r.user.id, member, policy, ip, mfaPending: pending };
 }
 
 async function mfaRequiredFor(env: AppEnv, user: UserRow) {

@@ -13,8 +13,8 @@ async function api<T = Record<string, unknown>>(path: string, method: "POST" | "
   return { ok: r.ok, status: r.status, data };
 }
 const afterSignIn = async () => {
-  const s = await api<{ kind?: string }>("/api/auth/session", "GET");
-  window.location.assign(s.data.kind === "client" ? "/portal" : "/dashboard");
+  const s = await api<{ kind?: string; onboardingRequired?: boolean }>("/api/auth/session", "GET");
+  window.location.assign(s.data.kind === "client" ? "/portal" : s.data.onboardingRequired ? "/onboarding" : "/dashboard");
 };
 
 function Shell({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {

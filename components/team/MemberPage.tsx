@@ -1,5 +1,6 @@
 "use client";
 
+import { StaffDocsCard } from "./StaffDocsCard";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Activity, ArrowLeft, Building2, CheckCircle2, Circle, ClipboardList, KeyRound, Laptop, LogIn, Mail, ShieldAlert, ShieldCheck, UserCog, UserMinus, UserX, Users } from "lucide-react";
@@ -120,6 +121,7 @@ export function MemberPage({ id }: { id: string }) {
         </div>
 
         <div className="space-y-5">
+          <StaffDocsCard id={m.id} name={m.name} canConfirm={!isSelf && manageEdit} />
           <Onboarding id={m.id} />
           <Card>
             <CardHeader icon={Laptop} title="Sessions" subtitle={`MFA: ${m.mfa === "enabled" ? "enabled" : "not enrolled"}`} action={(manageArchive || isSelf) && m.sessions.some((s) => !s.revokedAt) && <Button size="sm" onClick={() => { team.revokeSession(m.id); toast("All sessions revoked"); }}>Revoke all</Button>} />

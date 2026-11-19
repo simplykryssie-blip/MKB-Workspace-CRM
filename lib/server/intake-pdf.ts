@@ -263,6 +263,27 @@ export async function buildMonarchAgreementPdf(x: { officeName: string; text: st
   return finish(x.officeName);
 }
 
+/** Staff onboarding: one signed document (contractor agreement, NDA, policy, training), with the proof of signing. */
+export async function buildStaffDocPdf(x: { title: string; version: number; text: string; memberName: string; memberEmail: string; signedName: string; signedAt: string; ip: string; textSha256: string; signaturePng: Uint8Array }): Promise<Uint8Array> {
+  const { text, heading, row, space, finish, signature, fonts: { serif } } = await makeWriter(`${x.title} — ${x.memberName}`, "Staff document");
+  text(x.title, { size: 17, font: serif, gap: 6 });
+  text(`Version ${x.version} · ${x.memberName}`, { size: 8.5, color: MUTED, gap: 8 });
+  for (const b of parseLetter(x.text)) {
+    if (b.kind === "h") heading(b.text);
+    else if (b.kind === "li") text(`•  ${b.text}`, { size: 10, x: M + 10, gap: 3 });
+    else { text(b.text, { size: 10, gap: 3 }); space(5); }
+  }
+  heading("Signature");
+  await signature(x.signaturePng, `Signature of ${x.signedName}`);
+  row("Signed by (printed name)", x.signedName);
+  row("Team member account", `${x.memberName} (${x.memberEmail})`);
+  row("Date and time", `${new Date(x.signedAt).toLocaleString("en-US", { dateStyle: "long", timeStyle: "short", timeZone: "America/Chicago" })} (Central)`);
+  row("How", "Signed online in the MKB CRM while signed in to their own account (drawn signature)");
+  row("Connection", x.ip);
+  row("Document fingerprint (SHA-256)", x.textSha256);
+  return finish(x.memberName);
+}
+
 /** WISP Generator (Monarch funnel): a Written Information Security Plan built from the practice's answers. */
 export async function buildWispPdf(x: { practice: { businessName: string; ownerName: string; city: string; state: string; qualifiedIndividual: string; people: string; locations: string; software: string }; createdAt: string; areas: { area: string; inPlace: string[] }[]; actions: { area: string; text: string; unsure: boolean }[]; score: number; disclaimer: string }): Promise<Uint8Array> {
   const { text, heading, row, space, finish, fonts: { serif, bold } } = await makeWriter(`WISP — ${x.practice.businessName}`, "Written Information Security Plan", { name: "Monarch Tax Suite", tagline: "SOFTWARE • TOOLS • GROWTH" });

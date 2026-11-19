@@ -1,6 +1,7 @@
 import { handle, jsonResponse } from "@/lib/server/core";
 import { authenticate } from "@/lib/server/auth";
 import { effectiveSensitive, roleOf } from "@/lib/team/policy";
+import { onboardingPending } from "@/lib/server/staff-onboarding";
 
 /** Who is signed in, and what they may do (the interface uses this; the server re-checks every request). */
 export const GET = handle(async (req, env) => {
@@ -10,6 +11,7 @@ export const GET = handle(async (req, env) => {
   return jsonResponse({
     kind: "staff",
     mfaPending: a.mfaPending,
+    onboardingRequired: !a.mfaPending && (await onboardingPending(env, a.policy, a.member)),
     member: { id: a.member.id, name: a.member.name, email: a.member.email, roleId: a.member.roleId, roleName: role?.name, departments: a.member.departments },
     perms: role?.perms ?? {},
     sensitive: effectiveSensitive(a.policy, a.member),
