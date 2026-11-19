@@ -293,7 +293,7 @@ export function WebsiteEditor({ which = "mkb" }: { which?: SiteKey }) {
 
 /* ---------------------------------------------------------------- site settings */
 function SettingsForm({ s, onChange, disabled }: { s: SiteSettings; onChange: (p: Partial<SiteSettings>) => void; disabled: boolean }) {
-  const f = (k: keyof SiteSettings, label: string, hint?: string) => <TextField label={label} hint={hint} value={s[k]} disabled={disabled} onChange={(e) => onChange({ [k]: e.target.value })} />;
+  const f = (k: keyof SiteSettings, label: string, hint?: string) => <TextField label={label} hint={hint} value={s[k] ?? ""} disabled={disabled} onChange={(e) => onChange({ [k]: e.target.value })} />;
   return (
     <div className="space-y-5">
       <Panel title="Brand">
@@ -322,6 +322,14 @@ function SettingsForm({ s, onChange, disabled }: { s: SiteSettings; onChange: (p
           {f("bookingLabel", "Booking link text")}
           {f("bookingHref", "Booking link")}
           <div className="sm:col-span-2">{f("portalHref", "Client portal sign-in link", "leave empty to hide")}</div>
+        </div>
+        <div className="mt-5 border-t border-line pt-4">
+          <p className="text-[13.5px] font-semibold text-ink">Tracking (ads and analytics)</p>
+          <p className="mt-0.5 text-[12.5px] text-muted">Counts page views on your marketing pages. For your clients' privacy (and IRS rules on tax information), it's never added to pages that collect information — contact and get-started forms, the tax calculator, booking — or to the client portal, and it never reads what visitors type. Mention it in your Privacy Policy.</p>
+          <div className="mt-3 grid gap-4 sm:grid-cols-2">
+            {f("metaPixelId", "Meta (Facebook) Pixel ID", "numbers only, e.g. 1234567890")}
+            {f("ga4Id", "Google Analytics 4 measurement ID", "starts with G-")}
+          </div>
         </div>
         <p className="mt-3 text-[12.5px] text-muted">Links: a page of this site (e.g. <code>/contact</code>), or a full address starting with https://.</p>
       </Panel>

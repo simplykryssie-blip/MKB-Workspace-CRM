@@ -13,7 +13,7 @@ import { decideEmbed, frameAncestors, hostFromHeader } from "@/lib/server/calc-e
  *    comes from.
  */
 const ON = process.env.NEXT_PUBLIC_BACKEND === "1";
-const OLD_PATHS: Record<string, string> = { "/about-mkb": "/about", "/about-us": "/about", "/get-started": "/contact", "/mkb-financial-group": "/" };
+const OLD_PATHS: Record<string, string> = { "/about-mkb": "/about", "/about-us": "/about", "/mkb-financial-group": "/" };
 const STAFF_FREE = /^\/(api|embed\/|login|portal(\/|$)|campaigns\/|f\/|i\/|u\/|w\/|site(\/|$)|msite(\/|$)|_next|brand|favicon|icon|apple-icon)/;
 
 // 3. The client portal's own address (PORTAL_HOSTS, e.g. "portal.mkbfinancialgroup.com") only serves

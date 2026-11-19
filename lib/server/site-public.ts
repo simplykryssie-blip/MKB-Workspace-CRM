@@ -8,6 +8,7 @@ import { renderSectionsBody } from "@/lib/website/render";
 import { MKB_PAGES, MKB_SETTINGS } from "@/lib/website/mkb-content";
 import { MONARCH_PAGES, MONARCH_SETTINGS } from "@/lib/website/monarch-content";
 import { isHtmlPage, type SiteKey } from "@/lib/website/types";
+import { trackable, trackingTags, withTracking } from "@/lib/website/tracking";
 import { preparePage, WIDGET_SCRIPT } from "@/lib/website/html";
 import type { PublicSite } from "./website";
 
@@ -74,9 +75,12 @@ export async function serveSite(req: Request, site: SiteKey, slugParts?: string[
   const own = await ownHost(req, site);
   const prefix = own ? "" : site === "monarch" ? "/msite" : "/site";
   if (!s) return html(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Page not found</title>${ICONS[site]}</head><body style="font-family:Arial,sans-serif;text-align:center;padding:80px 20px"><h1 style="font:500 34px Georgia,serif">Page not found</h1><p>This page doesn't exist.</p><p><a href="${prefix || "/"}">Go to the home page</a></p></body></html>`, 404, !own);
-  if (isHtmlPage(s.sections)) return html(preparePage(s.sections[0].html ?? "", prefix), 200, !own);
+  // Marketing tags: only on the real website address (never the sandboxed preview) and only on pages that don't collect information.
+  const raw = isHtmlPage(s.sections) ? s.sections[0].html ?? "" : undefined;
+  const tags = own && trackable(slug, s.sections, raw) ? trackingTags(s.settings) : "";
+  if (raw !== undefined) return html(withTracking(preparePage(raw, prefix), tags), 200, !own);
   const name = s.settings.siteName;
   const title = s.page.slug ? `${s.page.title} | ${name}` : `${name}${s.settings.tagline ? ` | ${s.settings.tagline}` : ""}`;
   const body = renderSectionsBody({ settings: s.settings, page: s.page, sections: s.sections, nav: s.nav, base: prefix, site, legal: s.legal });
-  return html(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${s.page.description ? `<meta name="description" content="${esc(s.page.description)}">` : ""}<meta property="og:title" content="${esc(s.page.title)}"><meta property="og:site_name" content="${esc(name)}"><meta property="og:image" content="${OG[site]}">${ICONS[site]}<style>body{margin:0}</style></head><body>${body}${body.includes("data-mkb-frame") ? WIDGET_SCRIPT : ""}</body></html>`, 200, !own);
+  return html(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${s.page.description ? `<meta name="description" content="${esc(s.page.description)}">` : ""}<meta property="og:title" content="${esc(s.page.title)}"><meta property="og:site_name" content="${esc(name)}"><meta property="og:image" content="${OG[site]}">${ICONS[site]}<style>body{margin:0}</style>${tags}</head><body>${body}${body.includes("data-mkb-frame") ? WIDGET_SCRIPT : ""}</body></html>`, 200, !own);
 }

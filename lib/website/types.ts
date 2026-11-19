@@ -68,6 +68,9 @@ export type SiteSettings = {
   bookingHref: string;
   /** Leave empty to hide the "Client Portal Sign In" link. */
   portalHref: string;
+  /** Marketing tracking (marketing pages only — never on forms, the calculator, booking or the portal). */
+  metaPixelId?: string;
+  ga4Id?: string;
 };
 
 export type SitePage = {
@@ -162,6 +165,8 @@ export function cleanSettings(v: Partial<SiteSettings> | undefined, fallbackName
     bookingLabel: s(x.bookingLabel, 60),
     bookingHref: cleanHref(x.bookingHref),
     portalHref: cleanHref(x.portalHref),
+    metaPixelId: /^\d{8,20}$/.test(s(x.metaPixelId, 20)) ? s(x.metaPixelId, 20) : "",
+    ga4Id: /^G-[A-Z0-9]{4,16}$/.test(s(x.ga4Id, 20).toUpperCase()) ? s(x.ga4Id, 20).toUpperCase() : "",
   };
 }
 /** Total size limit for one page (keeps the database row small). */
