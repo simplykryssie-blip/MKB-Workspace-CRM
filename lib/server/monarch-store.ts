@@ -105,9 +105,16 @@ export async function storeCheckout(env: AppEnv, req: Request, slug: string, ip:
   });
   if (p.store.summary) form.set("line_items[0][price_data][product_data][description]", p.store.summary.slice(0, 300));
   if (p.store.images[0] && /^https:/.test(origin)) form.set("line_items[0][price_data][product_data][images][0]", `${origin.replace(/\/msite$/, "")}${media(p.store.images[0])}`);
+  if (p.store.stripePrice) {
+    // Charge the saved Stripe price (its product carries the name, image and any product-limited coupons).
+    for (const k of [...form.keys()]) if (k.startsWith("line_items[0][price_data]")) form.delete(k);
+    form.set("line_items[0][price]", p.store.stripePrice);
+  }
   const res = await fetch("https://api.stripe.com/v1/checkout/sessions", { method: "POST", headers: { authorization: `Bearer ${stripeKey(env, "monarch")}`, "content-type": "application/x-www-form-urlencoded" }, body: form });
-  const s = (await res.json().catch(() => ({}))) as { url?: string; error?: { message?: string } };
+  const s = (await res.json().catch(() => ({}))) as { url?: string; amount_subtotal?: number; error?: { message?: string } };
   if (!res.ok || !s.url) { console.error("monarch store checkout", res.status, s.error?.message); return back("?unavailable=1"); }
+  // A saved Stripe price must match the store price, so buyers are never charged a different amount than shown.
+  if (p.store.stripePrice && s.amount_subtotal !== p.priceCents) { console.error("monarch store checkout: Stripe price", p.store.stripePrice, "is", s.amount_subtotal, "but the store shows", p.priceCents); return back("?unavailable=1"); }
   return Response.redirect(s.url, 303);
 }
 

@@ -46,7 +46,7 @@ function PackageDialog({ value, onClose }: { value: Package | "new" | null; onCl
   const m = useMonarch();
   const { busy, run } = useAct();
   const toast = useToast();
-  const noStore: StoreInfo = { listed: false, slug: "", summary: "", description: "", terms: "", disclaimer: "", images: [], afterPurchase: "", position: 0, delivery: "none", files: [] };
+  const noStore: StoreInfo = { listed: false, slug: "", stripePrice: "", summary: "", description: "", terms: "", disclaimer: "", images: [], afterPurchase: "", position: 0, delivery: "none", files: [] };
   const empty = { name: "", kind: "package" as Package["kind"], price: "", billing: "season" as Package["billing"], locations: "1", seats: "1", askPtins: false, features: "", stripeLink: "", softwareId: "", bankId: "", active: true, store: noStore };
   const [uploading, setUploading] = useState(false);
   const fileOp = async (method: "POST" | "DELETE", path: string, file?: File) => {
@@ -101,6 +101,7 @@ function PackageDialog({ value, onClose }: { value: Package | "new" | null; onCl
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <TextField label="Web address" value={f.store.slug} onChange={(e) => setF({ ...f, store: { ...f.store, slug: e.target.value } })} placeholder="made from the name" hint={`/store/${f.store.slug || "…"}`} />
             <TextField label="Order in the store" type="number" min={0} value={String(f.store.position)} onChange={(e) => setF({ ...f, store: { ...f.store, position: Number(e.target.value) || 0 } })} hint="Lower numbers show first" />
+            <div className="sm:col-span-2"><TextField label="Stripe price ID (optional)" value={f.store.stripePrice ?? ""} onChange={(e) => setF({ ...f, store: { ...f.store, stripePrice: e.target.value.trim() } })} placeholder="price_…" hint="From this product's price in your Monarch Stripe account. Lets coupons limited to this product work. It must be the same amount as the price above." /></div>
             <div className="sm:col-span-2"><TextArea label="Short summary" rows={2} value={f.store.summary} onChange={(e) => setF({ ...f, store: { ...f.store, summary: e.target.value } })} placeholder="One or two sentences under the name" /></div>
             <div className="sm:col-span-2"><TextArea label="Description" rows={5} value={f.store.description} onChange={(e) => setF({ ...f, store: { ...f.store, description: e.target.value } })} placeholder="A blank line starts a new paragraph" /></div>
             <div className="sm:col-span-2"><TextArea label="Purchase terms" rows={4} value={f.store.terms} onChange={(e) => setF({ ...f, store: { ...f.store, terms: e.target.value } })} /></div>
