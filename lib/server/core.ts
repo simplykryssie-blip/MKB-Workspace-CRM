@@ -145,6 +145,6 @@ export async function rateLimit(db: Db, key: string, max: number, windowMinutes:
   return true;
 }
 
-/** Which Stripe account to charge: Monarch's own when its key is set, otherwise MKB's. */
+/** Which Stripe account to charge. Monarch only ever uses its own account — no key means no online payment, never a silent charge to MKB. */
 export type StripeBrand = "mkb" | "monarch";
-export const stripeKey = (env: AppEnv, brand: StripeBrand = "mkb") => (brand === "monarch" ? env.STRIPE_MONARCH_SECRET_KEY || env.STRIPE_SECRET_KEY : env.STRIPE_SECRET_KEY) || "";
+export const stripeKey = (env: AppEnv, brand: StripeBrand = "mkb") => (brand === "monarch" ? env.STRIPE_MONARCH_SECRET_KEY : env.STRIPE_SECRET_KEY) || "";
