@@ -86,6 +86,16 @@ export function Conversation({ brand, phone, base, canSend, onChange }: { brand:
     catch (e) { toast(e instanceof Error ? e.message : "Couldn't send", "info"); }
     setBusy(false);
   };
+  const team = useTeam();
+  const canSave = team.can(brand === "monarch" ? "monarch" : "leads", "edit");
+  const [saving, setSaving] = useState(false);
+  const [newName, setNewName] = useState("");
+  const saveContact = async () => {
+    setBusy(true);
+    try { setC(await call<Convo>("PUT", "/api/texts", { brand, phone, name: newName })); setSaving(false); setNewName(""); onChange(); toast(brand === "monarch" ? "Saved as a firm" : "Saved as a lead"); }
+    catch (e) { toast(e instanceof Error ? e.message : "Couldn't save", "info"); }
+    setBusy(false);
+  };
   const seg = smsSegments(body);
   if (!c) return <Card className="p-8 text-center text-[13px] text-muted">Loading…</Card>;
   return (
@@ -95,7 +105,15 @@ export function Conversation({ brand, phone, base, canSend, onChange }: { brand:
         <span className="min-w-0 flex-1"><span className="block truncate text-[15px] font-semibold text-ink">{c.name}</span><span className="block text-[12.5px] text-muted">{fmtPhone(c.phone)}{c.contact ? ` · ${c.contact.type === "office" ? "Firm" : c.contact.type[0].toUpperCase() + c.contact.type.slice(1)}` : ""}</span></span>
         {c.optedOut ? <Badge tone="warning">Opted out (STOP)</Badge> : c.consent?.status === "subscribed" ? <Badge tone="success">Opted in to marketing texts</Badge> : null}
         {c.contact?.href && <Button size="sm" href={c.contact.href}>Open record</Button>}
+        {!c.contact && canSave && <Button size="sm" icon={Plus} onClick={() => setSaving(true)}>{brand === "monarch" ? "Save as firm" : "Save as lead"}</Button>}
       </div>
+      {!c.contact && saving && (
+        <div className="flex flex-wrap items-end gap-2 border-b border-line px-4 py-3">
+          <div className="min-w-[200px] flex-1"><TextField label={brand === "monarch" ? "Firm name" : "Their name"} value={newName} placeholder={`Text from ${fmtPhone(c.phone)}`} onChange={(e) => setNewName(e.target.value)} /></div>
+          <Button size="sm" variant="primary" disabled={busy} onClick={() => void saveContact()}>Save</Button>
+          <Button size="sm" onClick={() => setSaving(false)}>Cancel</Button>
+        </div>
+      )}
       <div className="flex-1 space-y-2 overflow-auto bg-surface-2 px-4 py-4" style={{ maxHeight: "60vh" }}>
         {!c.messages.length && <p className="text-center text-[13px] text-muted">No messages yet — say hello below.</p>}
         {c.messages.map((m) => (

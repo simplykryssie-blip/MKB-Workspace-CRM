@@ -136,10 +136,10 @@ export async function findContact(env: AppEnv, brand: Brand, phone: string): Pro
 }
 export const contactHref = (c: { type: string; id: string } | null) => (!c ? null : c.type === "lead" ? `/leads/${c.id}` : c.type === "client" ? `/clients/${c.id}` : c.type === "office" ? `/monarch/offices/${c.id}` : c.type === "reseller" ? "/monarch/resellers" : null);
 
-/** Someone new texted in: they become a lead (MKB) or an interested firm (Monarch). */
-async function newContact(env: AppEnv, brand: Brand, phone: string) {
+/** Staff chose to save an unknown texter: they become a lead (MKB) or an interested firm (Monarch). */
+async function newContact(env: AppEnv, brand: Brand, phone: string, name?: string) {
   const t = now();
-  const label = `Text from ${fmtPhone(phone)}`;
+  const label = (name ?? "").trim().slice(0, 120) || `Text from ${fmtPhone(phone)}`;
   if (brand === "mkb") {
     const owner = await one<{ id: string }>(env.DB, "SELECT m.id FROM members m JOIN roles r ON r.id = m.role_id WHERE r.is_owner = 1 AND m.status = 'active' LIMIT 1");
     const stage = await one<{ id: string }>(env.DB, "SELECT id FROM lead_stages ORDER BY position LIMIT 1");
@@ -185,7 +185,8 @@ export async function inboundText(env: AppEnv, req: Request) {
   const word = body.trim().toUpperCase().replace(/[^A-Z]/g, "");
   if (STOP.has(word)) await recordConsent(env, brand, "sms", from, "unsubscribed", `Replied ${word} by text`, null);
   else if (START.has(word)) await recordConsent(env, brand, "sms", from, "subscribed", `Replied ${word} by text`, null);
-  const c = (await findContact(env, brand, from)) ?? (word && (STOP.has(word) || START.has(word) || word === "HELP") ? null : await newContact(env, brand, from));
+  // Unknown numbers stay in the Text inbox only; staff can save them as a lead/firm from the conversation.
+  const c = await findContact(env, brand, from);
   const t = now();
   await run(env.DB, "INSERT INTO sms_messages (id, brand, direction, phone, body, status, provider_sid, contact_type, contact_id, created_at, updated_at) VALUES (?, ?, 'in', ?, ?, 'received', ?, ?, ?, ?, ?)", randomId("sms"), brand, from, body, params.get("MessageSid"), c?.type ?? null, c?.id ?? null, t, t);
   await timeline(env, c, STOP.has(word) ? "Replied STOP — opted out of texts" : `Text received: “${body.slice(0, 120)}”`);
@@ -201,6 +202,21 @@ export async function textStatus(env: AppEnv, req: Request) {
   const code = params.get("ErrorCode");
   if (sid && status) await run(env.DB, "UPDATE sms_messages SET status = ?, error = coalesce(?, error), updated_at = ? WHERE provider_sid = ?", status, code ? `Twilio error ${code}` : null, now(), sid);
   return new Response(null, { status: 204 });
+}
+
+/** { brand, phone, name? } — save an unknown texter as a lead (MKB) or an interested firm (Monarch). */
+export async function saveTexter(env: AppEnv, a: Actor, b: { brand?: unknown; phone?: unknown; name?: unknown }) {
+  requireStaff(a);
+  if (!isBrand(b.brand)) throw badRequest("Unknown brand.");
+  requirePermission(a, b.brand === "monarch" ? "monarch" : "leads", "edit");
+  const p = phone10(String(b.phone ?? ""));
+  if (p.length !== 10) throw badRequest("Not a valid phone number.");
+  if (await findContact(env, b.brand, p)) throw new HttpError(409, "This number is already saved.");
+  const c = await newContact(env, b.brand, p, typeof b.name === "string" ? b.name : "");
+  if (!c) throw badRequest("Couldn't create the record — check that lead stages exist.");
+  await run(env.DB, "UPDATE sms_messages SET contact_type = ?, contact_id = ? WHERE brand = ? AND phone = ? AND contact_id IS NULL", c.type, c.id, b.brand, p);
+  await audit(env.DB, a, { action: "Record update", resource: `Created ${c.type === "lead" ? "lead" : "firm"} ${c.id} from a text conversation` });
+  return getThread(env, a, b.brand, p);
 }
 
 /* ================================================================ Text inbox */
