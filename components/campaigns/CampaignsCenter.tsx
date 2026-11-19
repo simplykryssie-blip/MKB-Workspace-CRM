@@ -197,7 +197,7 @@ function SettingsTab({ brand }: { brand: Brand }) {
       <CardHeader icon={Settings2} title={`${BRANDS[brand].label} — sender & limits`} subtitle="Used for every campaign from this brand." />
       <fieldset disabled={!can} className="grid gap-4 border-t border-line px-5 py-5 sm:grid-cols-2 sm:px-6">
         <TextField label="From name" value={s.fromName} onChange={(e) => setS({ ...s, fromName: e.target.value })} />
-        <TextField label="From address" value={s.fromEmail} onChange={(e) => setS({ ...s, fromEmail: e.target.value })} hint={brand === "monarch" ? "monarchtaxsuite.com must be verified in Resend first" : undefined} />
+        <TextField label="From address" value={s.fromEmail} onChange={(e) => setS({ ...s, fromEmail: e.target.value })} hint={brand === "monarch" ? "Must be an @monarchtaxsuite.com address (verified for sending in Resend)" : "Must be an @mkbfinancialgroup.com address (verified for sending in Resend)"} />
         <TextField label="Replies go to" value={s.replyTo} onChange={(e) => setS({ ...s, replyTo: e.target.value })} placeholder="e.g. info@mkbfinancialgroup.com" />
         <div className="sm:col-span-2"><TextArea label="Mailing address (required — shown at the bottom of every marketing email)" value={s.mailingAddress} onChange={(e) => setS({ ...s, mailingAddress: e.target.value })} rows={2} placeholder="Street or P.O. box, City, State ZIP" /></div>
         <TextField label="Daily email limit (your Resend plan)" type="number" value={String(s.dailyLimit)} onChange={(e) => setS({ ...s, dailyLimit: Number(e.target.value) })} hint="Free plan: 100" />

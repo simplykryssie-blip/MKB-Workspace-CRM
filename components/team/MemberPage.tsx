@@ -31,6 +31,8 @@ export function MemberPage({ id }: { id: string }) {
   const [roleTo, setRoleTo] = useState<string | null>(null);
   const [grant, setGrant] = useState<string | null>(null);
   const [suspend, setSuspend] = useState(false);
+  const [allSessions, setAllSessions] = useState(false);
+  const [allActivity, setAllActivity] = useState(false);
   if (!team.can("team", "view")) return null;
   if (!m) return <Card className="p-10 text-center"><p className="text-muted">Team member not found.</p><Button className="mt-4" href="/team#directory">Back to the directory</Button></Card>;
   const role = roleOf(team.roles, m);
@@ -68,6 +70,10 @@ export function MemberPage({ id }: { id: string }) {
       <div className="grid grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="space-y-5">
           {m.offboarding && <Offboarding id={m.id} />}
+          <div className="grid gap-5 lg:grid-cols-2">
+            <StaffDocsCard id={m.id} name={m.name} canConfirm={!isSelf && manageEdit} />
+            <Onboarding id={m.id} />
+          </div>
 
           <Card>
             <CardHeader icon={ShieldCheck} title="Role & access" subtitle={role ? SCOPE_META[role.scope].label : undefined} action={manage && m.status !== "deactivated" && (
@@ -121,14 +127,13 @@ export function MemberPage({ id }: { id: string }) {
         </div>
 
         <div className="space-y-5">
-          <StaffDocsCard id={m.id} name={m.name} canConfirm={!isSelf && manageEdit} />
-          <Onboarding id={m.id} />
           <Card>
             <CardHeader icon={Laptop} title="Sessions" subtitle={`MFA: ${m.mfa === "enabled" ? "enabled" : "not enrolled"}`} action={(manageArchive || isSelf) && m.sessions.some((s) => !s.revokedAt) && <Button size="sm" onClick={() => { team.revokeSession(m.id); toast("All sessions revoked"); }}>Revoke all</Button>} />
             <ul className="divide-y divide-line border-t border-line">
               {m.sessions.length === 0 && <li className="px-5 py-4 text-[13px] text-muted">No sessions.</li>}
-              {m.sessions.map((s) => <li key={s.id} className="flex items-center gap-2 px-5 py-2.5 text-[13px]"><div className="min-w-0 flex-1"><div className="font-medium text-ink">{s.device}</div><div className="text-[12px] text-muted">{s.location} · active {relTime(s.lastActiveAt)}</div></div>{s.revokedAt ? <Badge tone="neutral">Revoked</Badge> : (manageArchive || isSelf) && <Button size="sm" variant="ghost" onClick={() => { team.revokeSession(m.id, s.id); toast("Session revoked"); }}>Revoke</Button>}</li>)}
+              {(allSessions ? m.sessions : m.sessions.slice(0, 4)).map((s) => <li key={s.id} className="flex items-center gap-2 px-5 py-2.5 text-[13px]"><div className="min-w-0 flex-1"><div className="font-medium text-ink">{s.device}</div><div className="text-[12px] text-muted">{s.location} · active {relTime(s.lastActiveAt)}</div></div>{s.revokedAt ? <Badge tone="neutral">Revoked</Badge> : (manageArchive || isSelf) && <Button size="sm" variant="ghost" onClick={() => { team.revokeSession(m.id, s.id); toast("Session revoked"); }}>Revoke</Button>}</li>)}
             </ul>
+            {m.sessions.length > 4 && <button type="button" onClick={() => setAllSessions((x) => !x)} className="w-full border-t border-line px-5 py-2.5 text-left text-[13px] font-semibold text-accent hover:bg-surface-hover">{allSessions ? "Show fewer" : `Show all ${m.sessions.length} sessions`}</button>}
           </Card>
           <Card>
             <CardHeader icon={LogIn} title="Recent sign-ins" />
@@ -145,8 +150,9 @@ export function MemberPage({ id }: { id: string }) {
               <CardHeader icon={Activity} title="Activity" />
               <ul className="divide-y divide-line border-t border-line">
                 {activity.length === 0 && <li className="px-5 py-4 text-[13px] text-muted">No activity.</li>}
-                {activity.map((e) => <li key={e.id} className="px-5 py-2 text-[12.5px]"><div className="flex items-center gap-2"><Badge tone={e.success ? "neutral" : "danger"}>{e.action}</Badge><span className="ml-auto text-muted">{relTime(e.at)}</span></div><div className="mt-0.5 text-ink-2">{e.resource}</div></li>)}
+                {(allActivity ? activity : activity.slice(0, 8)).map((e) => <li key={e.id} className="px-5 py-2 text-[12.5px]"><div className="flex items-center gap-2"><Badge tone={e.success ? "neutral" : "danger"}>{e.action}</Badge><span className="ml-auto text-muted">{relTime(e.at)}</span></div><div className="mt-0.5 text-ink-2">{e.resource}</div></li>)}
               </ul>
+              {activity.length > 8 && <button type="button" onClick={() => setAllActivity((x) => !x)} className="w-full border-t border-line px-5 py-2.5 text-left text-[13px] font-semibold text-accent hover:bg-surface-hover">{allActivity ? "Show fewer" : `Show all ${activity.length} entries`}</button>}
             </Card>
           )}
         </div>

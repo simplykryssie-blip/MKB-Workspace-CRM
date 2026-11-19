@@ -118,12 +118,36 @@ I report anything suspicious (an odd sign-in alert, a strange request, a lost de
 Breaking these rules can end my work with MKB immediately.`,
   },
   {
+    key: "wisp",
+    title: "Written Information Security Plan (WISP) Acknowledgment",
+    kind: "sign",
+    required: true,
+    active: true,
+    position: 4,
+    body: `{{company}} keeps a Written Information Security Plan (WISP), as the FTC Safeguards Rule and IRS Publication 4557 require of tax professionals. It explains how MKB protects client information and what every person working for MKB must do.
+
+## What the WISP requires of me
+- Use only my own account with two-step verification, and only the access my role gives me.
+- Keep client information inside the MKB CRM; never in email, texts, chat apps, personal storage or AI tools.
+- Keep my devices locked, updated and protected, and never use shared or public computers.
+- Complete security training when I join and every year after.
+- Report any suspected incident (lost device, phishing, a mistake with client data, unusual access) to the Owner within 1 hour.
+- When my work ends, return or delete all MKB and client information and confirm it in writing.
+
+## What MKB does
+- Gives me only the access my work needs, and removes it the day my work ends.
+- Records sign-ins and actions in the CRM and reviews access regularly.
+- Keeps the WISP current and tells me when it changes.
+
+I, {{name}}, confirm I received MKB's Written Information Security Plan (a copy is available from the Owner at any time), read it, and will follow it. I understand that breaking it can end my work with MKB immediately.`,
+  },
+  {
     key: "taxpayer_privacy",
     title: "Taxpayer Information Privacy Acknowledgment",
     kind: "sign",
     required: true,
     active: true,
-    position: 4,
+    position: 5,
     body: `I, {{name}}, understand that {{company}} is a tax return preparer and that the information I may see is protected by U.S. federal law.
 
 - Tax return information may be used only to prepare returns and provide the services the client asked for, and may be disclosed only as the law allows or the client has consented in writing (Internal Revenue Code section 7216 and Treasury Regulations).
@@ -139,7 +163,7 @@ I have read MKB's Confidentiality & Non-Disclosure Agreement and Information Sec
     kind: "sign",
     required: true,
     active: true,
-    position: 5,
+    position: 6,
     body: `Read this training carefully. Signing confirms that you, {{name}}, completed it and will apply it. It is repeated every year.
 
 ## 1. Phishing
@@ -169,7 +193,7 @@ Mistakes happen. Report them within 1 hour (888-379-9372 or info@mkbfinancialgro
     kind: "upload",
     required: true,
     active: true,
-    position: 6,
+    position: 7,
     body: `Upload your completed and signed tax form so MKB can pay you.
 
 - Outside the United States: Form W-8BEN. Download it from irs.gov/w8ben, fill it in, sign and date it.

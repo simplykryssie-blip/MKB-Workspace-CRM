@@ -1,9 +1,10 @@
 "use client";
 
+import { StaffDocsOverview } from "./StaffDocsOverview";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Activity, BadgeCheck, Building2, ChevronLeft, ChevronRight, ClipboardList, Copy, Download, GitCompare, KeyRound, LayoutGrid, Lock, Mail, Plus, RotateCcw, Search, Send, ShieldAlert, ShieldCheck, UserCheck, UserPlus, Users, UserX, X } from "lucide-react";
+import { Activity, FileSignature, BadgeCheck, Building2, ChevronLeft, ChevronRight, ClipboardList, Copy, Download, GitCompare, KeyRound, LayoutGrid, Lock, Mail, Plus, RotateCcw, Search, Send, ShieldAlert, ShieldCheck, UserCheck, UserPlus, Users, UserX, X } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -26,6 +27,7 @@ import { ConfirmDialog, Initials, LockedNote, PermissionMatrix, RecordTypeEditor
 const TABS = [
   { key: "overview", label: "Team overview", icon: LayoutGrid },
   { key: "directory", label: "Team directory", icon: Users },
+  { key: "documents", label: "Staff documents", icon: FileSignature },
   { key: "roles", label: "Roles & permissions", icon: ShieldCheck },
   { key: "departments", label: "Departments", icon: Building2 },
   { key: "invitations", label: "Invitations", icon: Mail },
@@ -67,6 +69,7 @@ export function TeamCenter() {
       </div>
       {current === "overview" && <Overview go={go} />}
       {current === "directory" && <Directory onInvite={() => setInvite(true)} />}
+      {current === "documents" && <StaffDocsOverview />}
       {current === "roles" && <Roles />}
       {current === "departments" && <Departments />}
       {current === "invitations" && <Invitations onInvite={() => setInvite(true)} />}

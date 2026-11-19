@@ -205,3 +205,15 @@ export async function getDocVersion(env: AppEnv, a: Actor, key: string, version:
   if (!d) throw notFound("That version doesn't exist.");
   return { doc: d };
 }
+
+/** Team → Staff documents: every member the viewer manages, with their documents and identity status. */
+export async function allStaffDocs(env: AppEnv, a: Actor) {
+  requirePermission(a, "team", "view");
+  requireStaff(a);
+  const { loadMembers } = await import("./identity");
+  const owner = isOwnerMember(a.policy, a.member);
+  const members = (await loadMembers(env.DB)).filter((m) => m.status !== "deactivated" && !isOwnerMember(a.policy, m) && (owner || canManage(a.policy, a.member, m, "view")));
+  const rows = [];
+  for (const m of members) rows.push({ id: m.id, name: m.name, email: m.email, status: m.status, onboarding: await statusFor(env, a.policy, m) });
+  return { docs: (await currentDocs(env)).filter((d) => d.active).map((d) => ({ key: d.key, title: d.title, kind: d.kind, required: d.required })), members: rows };
+}
