@@ -13,7 +13,7 @@ type Form = { name: string; contactName: string; email: string; phone: string; c
 const blank: Form = { name: "", contactName: "", email: "", phone: "", city: "", state: "", packageId: "", softwareId: "", bankId: "", resellerId: "" };
 
 /** Add a new office, or edit an existing office's details. */
-export function OfficeDialog({ open, onClose, data, office }: { open: boolean; onClose: () => void; data: MonarchData; office?: Office }) {
+export function OfficeDialog({ open, onClose, data, office, asLead }: { open: boolean; onClose: () => void; data: MonarchData; office?: Office; asLead?: boolean }) {
   const m = useMonarch();
   const router = useRouter();
   const { busy, run } = useAct();
@@ -33,14 +33,14 @@ export function OfficeDialog({ open, onClose, data, office }: { open: boolean; o
       await m.applyOffice("PUT", `/api/monarch/offices/${office.id}`, { rev: office.rev, patch: f });
       onClose();
     } else {
-      const r = await m.apply<{ id: string }>("POST", "/api/monarch/offices", { id: newId("of"), ...f });
+      const r = await m.apply<{ id: string }>("POST", "/api/monarch/offices", { id: newId("of"), ...f, ...(asLead ? { stage: "lead" } : {}) });
       onClose();
       router.push(`/monarch/offices/${r.id}`);
     }
-  }, office ? "Office saved" : "Office added");
+  }, office ? "Office saved" : asLead ? "Lead added" : "Office added");
 
   return (
-    <Modal open={open} onClose={onClose} title={office ? "Edit office" : "New office"} description={office ? undefined : "A tax office (ERO) you're selling to or onboarding."} size="lg"
+    <Modal open={open} onClose={onClose} title={office ? "Edit office" : asLead ? "New lead" : "New office"} description={office ? undefined : asLead ? "A tax office you might sell to. Move it to onboarding when they're ready." : "A tax office (ERO) you're selling to or onboarding."} size="lg"
       footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!f.name.trim() || busy === "save"} onClick={() => void save()}>{busy === "save" ? "Saving…" : office ? "Save" : "Add office"}</Button></>}>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2"><TextField label="Office name" required value={f.name} onChange={set("name")} placeholder="e.g. Gulf Coast Tax Pros" /></div>

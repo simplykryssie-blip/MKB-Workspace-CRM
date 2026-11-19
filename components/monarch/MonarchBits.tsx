@@ -10,7 +10,7 @@ import { RemoteError } from "@/lib/sync/remote";
 import { useMonarch } from "@/lib/store/monarch-store";
 import { stageLabel, type ItemDef, type ItemState, type MonarchData, type Stage } from "@/lib/monarch/types";
 
-export const STAGE_TONE: Record<Stage, Tone> = { interested: "neutral", paid: "info", collecting: "warning", setup: "info", active: "success", inactive: "neutral" };
+export const STAGE_TONE: Record<Stage, Tone> = { interested: "neutral", paid: "info", collecting: "warning", setup: "info", active: "success", inactive: "neutral", lead: "neutral" };
 export function StageBadge({ stage }: { stage: Stage }) {
   return <Badge tone={STAGE_TONE[stage]}>{stageLabel(stage)}</Badge>;
 }

@@ -20,7 +20,7 @@ export const note = (a: Actor, resource: string, meta: string, env: AppEnv) => a
 
 /* ---------------------------------------------------------------- rows */
 export type OfficeRow = {
-  id: string; name: string; contact_name: string; email: string; phone: string; city: string; state: string; stage: Stage;
+  id: string; name: string; contact_name: string; email: string; phone: string; city: string; state: string; stage: Stage; is_lead?: number;
   package_id: string | null; software_id: string | null; bank_id: string | null; reseller_id: string | null; software_username: string;
   renews_on: string | null; extra_seats: number; extra_locations: number; notes: string; checklist: string; locations: string; preparers: string;
   agreement: string | null; link_hash: string | null; link_sent_at: string | null; link_last_used: string | null; link_expires_at: string | null; link_off_at: string | null;
@@ -53,7 +53,7 @@ export function linkState(r: Pick<OfficeRow, "link_hash" | "link_off_at" | "link
 export function toOffice(r: OfficeRow, files: FileRow[] = [], bank: BankStatus = {}): Office {
   const ag = json<{ name: string; at: string; fileId: string } | null>(r.agreement, null);
   return {
-    id: r.id, name: r.name, contactName: r.contact_name, email: r.email, phone: r.phone, city: r.city, state: r.state, stage: r.stage,
+    id: r.id, name: r.name, contactName: r.contact_name, email: r.email, phone: r.phone, city: r.city, state: r.state, stage: r.is_lead ? "lead" : r.stage,
     packageId: r.package_id ?? undefined, softwareId: r.software_id ?? undefined, bankId: r.bank_id ?? undefined, resellerId: r.reseller_id ?? undefined,
     softwareUsername: r.software_username, renewsOn: r.renews_on ?? undefined, extraSeats: r.extra_seats, extraLocations: r.extra_locations, notes: r.notes,
     checklist: json(r.checklist, {}), locations: json(r.locations, []), preparers: json(r.preparers, []), agreement: ag ?? undefined,
@@ -255,7 +255,7 @@ export async function officeRow(env: AppEnv, id: string) {
   return r;
 }
 
-const STAGE_KEYS: Stage[] = ["interested", "paid", "collecting", "setup", "active", "inactive"];
+const STAGE_KEYS: Stage[] = ["lead", "interested", "paid", "collecting", "setup", "active", "inactive"];
 
 function cleanLocations(v: unknown): Location[] {
   if (!Array.isArray(v)) throw badRequest("Invalid locations.");
@@ -296,8 +296,8 @@ export async function createOffice(env: AppEnv, a: Actor, b: Record<string, unkn
   const email = str(b.email, 200).toLowerCase();
   if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw badRequest("That email address doesn't look right.");
   const t = now();
-  await run(env.DB, `INSERT INTO mon_offices (id, name, contact_name, email, phone, city, state, stage, package_id, software_id, bank_id, reseller_id, created_at, created_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'interested', ?, ?, ?, ?, ?, ?, ?)`,
-    id, name, str(b.contactName, 120), email, str(b.phone, 40), str(b.city, 80), str(b.state, 2).toUpperCase(), (await ref(env, "mon_packages", b.packageId)), (await ref(env, "mon_software", b.softwareId)), (await ref(env, "mon_banks", b.bankId)), (await ref(env, "mon_resellers", b.resellerId)), t, staffId(a), t);
+  await run(env.DB, `INSERT INTO mon_offices (id, name, contact_name, email, phone, city, state, stage, is_lead, package_id, software_id, bank_id, reseller_id, created_at, created_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'interested', ?, ?, ?, ?, ?, ?, ?, ?)`,
+    id, name, str(b.contactName, 120), email, str(b.phone, 40), str(b.city, 80), str(b.state, 2).toUpperCase(), b.stage === "lead" ? 1 : 0, (await ref(env, "mon_packages", b.packageId)), (await ref(env, "mon_software", b.softwareId)), (await ref(env, "mon_banks", b.bankId)), (await ref(env, "mon_resellers", b.resellerId)), t, staffId(a), t);
   await note(a, `Office ${name}`, "Office added", env);
   return { id, data: await loadAll(env, a) };
 }
@@ -335,7 +335,7 @@ export async function updateOffice(env: AppEnv, a: Actor, id: string, b: { rev?:
   }
   const refs: [string, "mon_packages" | "mon_software" | "mon_banks" | "mon_resellers", string][] = [["packageId", "mon_packages", "package_id"], ["softwareId", "mon_software", "software_id"], ["bankId", "mon_banks", "bank_id"], ["resellerId", "mon_resellers", "reseller_id"]];
   for (const [k, table, col] of refs) if (p[k] !== undefined) { sets.push(`${col} = ?`); args.push(await ref(env, table, p[k])); changes.push(k); }
-  if (p.stage !== undefined) { if (!STAGE_KEYS.includes(p.stage as Stage)) throw badRequest("Unknown stage."); sets.push("stage = ?"); args.push(p.stage); changes.push(`stage → ${p.stage}`); }
+  if (p.stage !== undefined) { if (!STAGE_KEYS.includes(p.stage as Stage)) throw badRequest("Unknown stage."); if (p.stage === "lead") sets.push("is_lead = 1"); else { sets.push("stage = ?", "is_lead = 0"); args.push(p.stage); } changes.push(`stage → ${p.stage}`); }
   if (p.renewsOn !== undefined) { const d = str(p.renewsOn, 10); if (d && !/^\d{4}-\d{2}-\d{2}$/.test(d)) throw badRequest("Invalid renewal date."); sets.push("renews_on = ?"); args.push(d || null); changes.push("renewal date"); }
   for (const [k, col] of [["extraSeats", "extra_seats"], ["extraLocations", "extra_locations"]] as const) if (p[k] !== undefined) { sets.push(`${col} = ?`); args.push(Math.max(0, Math.min(5000, Math.round(Number(p[k]) || 0)))); changes.push(k); }
   let newEfins: string[] = [];
@@ -384,21 +384,22 @@ export async function itemsFor(env: AppEnv, r: OfficeRow) {
  */
 export async function advance(env: AppEnv, id: string, opts: { linkSent?: boolean; paid?: boolean } = {}) {
   const r = await officeRow(env, id);
-  if (r.stage === "inactive") return;
+  const cur: Stage = r.is_lead ? "lead" : r.stage;
+  if (cur === "inactive") return;
   const { items } = await itemsFor(env, r);
   const o = toOffice(r);
   const officeDone = items.filter((i) => i.who === "office").every((i) => isDone(itemState(o, i.key)));
   const allDone = items.every((i) => isDone(itemState(o, i.key)));
-  let target: Stage = r.stage;
+  let target: Stage = cur;
   const bump = (s: Stage) => { if (stageIndex(s) > stageIndex(target)) target = s; };
   if (opts.paid) bump("paid");
   if (opts.linkSent) bump("collecting");
-  if (stageIndex(r.stage) >= stageIndex("collecting") || opts.linkSent) {
+  if (stageIndex(cur) >= stageIndex("collecting") || opts.linkSent) {
     if (officeDone) bump("setup");
     if (allDone) bump("active");
   }
-  if (target !== r.stage) {
-    await run(env.DB, "UPDATE mon_offices SET stage = ?, updated_at = ?, rev = rev + 1 WHERE id = ?", target, now(), id);
+  if (target !== cur) {
+    await run(env.DB, "UPDATE mon_offices SET stage = ?, is_lead = 0, updated_at = ?, rev = rev + 1 WHERE id = ?", target, now(), id);
     if (target === "active") await closeLinkIfDone(env, id);
     // Everything the office owes is in: it's ready for software setup and bank enrollment.
     if (target === "setup") await notify(env, { module: "monarch" }, { kind: "documents", title: `Monarch: ${r.name} is ready to onboard`, body: "Their agreement and documents are in. Next: create their software account and send their banking information.", href: `/monarch/offices/${id}` });
@@ -450,7 +451,7 @@ export async function websiteInquiry(env: AppEnv, ip: string, b: Record<string, 
   const t = now();
   const id = randomId("of");
   const notes = [`From the website contact form (${new Date(t).toLocaleDateString("en-US", { dateStyle: "medium", timeZone: "America/Chicago" })}).`, locations && `Locations: ${locations}`, message && `Message: ${message}`].filter(Boolean).join("\n");
-  await run(env.DB, "INSERT INTO mon_offices (id, name, contact_name, email, phone, city, state, stage, notes, created_at, created_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'interested', ?, ?, NULL, ?)",
+  await run(env.DB, "INSERT INTO mon_offices (id, name, contact_name, email, phone, city, state, stage, is_lead, notes, created_at, created_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'interested', 1, ?, ?, NULL, ?)",
     id, office || name, name, email, phone, str(b.city, 80), str(b.state, 2).toUpperCase(), notes, t, t);
   const { notify } = await import("./notifications");
   await notify(env, { module: "monarch" }, { kind: "lead", title: `New Monarch lead: ${office || name}`, body: `${name} filled out the Monarch website form.`, href: `/monarch/offices/${id}` });

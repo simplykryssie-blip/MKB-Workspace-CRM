@@ -59,7 +59,7 @@ export async function generateWisp(env: AppEnv, ip: string, b: Record<string, un
     practice.people && `People handling client data: ${practice.people}`, practice.locations && `Locations: ${practice.locations}`, practice.software && `Tax software: ${practice.software}`,
     r.gaps.length ? `Needs attention: ${r.gaps.map((g) => g.area + " — " + g.question.replace(/\?$/, "")).slice(0, 8).join("; ")}${r.gaps.length > 8 ? ` (+${r.gaps.length - 8} more)` : ""}` : ""].filter(Boolean).join("\n");
   await env.DB.batch([
-    env.DB.prepare("INSERT INTO mon_offices (id, name, contact_name, email, phone, city, state, stage, notes, created_at, created_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'interested', ?, ?, NULL, ?)").bind(officeId, practice.businessName, practice.ownerName, practice.email, practice.phone, practice.city, practice.state, notes, t, t),
+    env.DB.prepare("INSERT INTO mon_offices (id, name, contact_name, email, phone, city, state, stage, is_lead, notes, created_at, created_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'interested', 1, ?, ?, NULL, ?)").bind(officeId, practice.businessName, practice.ownerName, practice.email, practice.phone, practice.city, practice.state, notes, t, t),
     env.DB.prepare("INSERT INTO mon_files (id, office_id, item, r2_key, name, content_type, size_bytes, uploaded_by, created_at) VALUES (?, ?, 'other', ?, ?, 'application/pdf', ?, 'office', ?)").bind(fileId, officeId, key, fileName, pdf.length, t),
   ]);
   await notify(env, { module: "monarch" }, { kind: "lead", title: `New WISP lead: ${practice.businessName}`, body: `${practice.ownerName} built a WISP (${r.score}% ready, ${r.gaps.length} item${r.gaps.length === 1 ? "" : "s"} to address).`, href: `/monarch/offices/${officeId}` });

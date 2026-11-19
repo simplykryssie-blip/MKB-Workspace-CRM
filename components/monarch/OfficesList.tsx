@@ -29,11 +29,12 @@ function List({ d }: { d: MonarchData }) {
   const rows = useMemo(() => {
     const t = q.trim().toLowerCase();
     return d.offices
+      .filter((o) => o.stage !== "lead")
       .filter((o) => tab === "all" || (tab === "onboarding" ? !["active", "inactive"].includes(o.stage) : o.stage === tab))
       .filter((o) => !t || [o.name, o.contactName, o.email, o.city, ...o.locations.map((l) => l.efin)].some((x) => x.toLowerCase().includes(t)))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [d.offices, q, tab]);
-  const count = (k: (typeof TABS)[number]["key"]) => d.offices.filter((o) => k === "all" || (k === "onboarding" ? !["active", "inactive"].includes(o.stage) : o.stage === k)).length;
+  const count = (k: (typeof TABS)[number]["key"]) => d.offices.filter((o) => o.stage !== "lead").filter((o) => k === "all" || (k === "onboarding" ? !["active", "inactive"].includes(o.stage) : o.stage === k)).length;
   return (
     <div>
       <PageHeader title="Offices" subtitle="The tax offices (EROs) you sell to and support." actions={<Button variant="primary" icon={Plus} onClick={() => setAdding(true)}>New office</Button>} />

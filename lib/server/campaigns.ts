@@ -165,7 +165,7 @@ async function contacts(env: AppEnv, brand: Brand, f: Filters): Promise<Contact[
     }
   } else {
     if (f.offices?.on) {
-      const rows = await all<{ id: string; name: string; contact_name: string; email: string; phone: string; state: string; stage: string }>(env.DB, "SELECT id, name, contact_name, email, phone, state, stage FROM mon_offices");
+      const rows = await all<{ id: string; name: string; contact_name: string; email: string; phone: string; state: string; stage: string }>(env.DB, "SELECT id, name, contact_name, email, phone, state, CASE WHEN is_lead = 1 THEN 'lead' ELSE stage END AS stage FROM mon_offices");
       for (const r of rows) {
         if (!any(f.offices.stages, [r.stage]) || !inStates(f, r.state)) continue;
         const person = r.contact_name || r.name;

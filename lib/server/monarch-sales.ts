@@ -44,9 +44,9 @@ async function afterPaid(env: AppEnv, r: SaleRowLite) {
   await advance(env, r.office_id, { paid: true });
   // A new package: the welcome (setup link + software and bank applications) goes out right away.
   if (pkg?.kind === "package") {
-    const o = await one<{ welcome_sent_at: string | null; stage: string }>(env.DB, "SELECT welcome_sent_at, stage FROM mon_offices WHERE id = ?", r.office_id);
+    const o = await one<{ welcome_sent_at: string | null; stage: string }>(env.DB, "SELECT welcome_sent_at, CASE WHEN is_lead = 1 THEN 'lead' ELSE stage END AS stage FROM mon_offices WHERE id = ?", r.office_id);
     const s = await loadSettings(env);
-    if (s.autoWelcome && o && !o.welcome_sent_at && (o.stage === "interested" || o.stage === "paid")) await sendWelcomePackage(env, r.office_id).catch((e) => console.error("monarch welcome", e instanceof Error ? e.message : e));
+    if (s.autoWelcome && o && !o.welcome_sent_at && (o.stage === "lead" || o.stage === "interested" || o.stage === "paid")) await sendWelcomePackage(env, r.office_id).catch((e) => console.error("monarch welcome", e instanceof Error ? e.message : e));
   }
 }
 

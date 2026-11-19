@@ -223,7 +223,7 @@ async function contactFor(env: AppEnv, brand: Brand, g: Guest, t: TypeRow, owner
     if (o) return { type: "office" as const, id: o.id, name: o.name };
     const id = randomId("mo");
     const name = g.business || g.name;
-    await run(env.DB, "INSERT INTO mon_offices (id, name, contact_name, email, phone, city, state, stage, notes, created_at, created_by, updated_at) VALUES (?, ?, ?, ?, ?, '', '', 'interested', ?, ?, NULL, ?)", id, name, g.name, g.email, g.phone, `Booked a “${t.name}” online.`, ts, ts);
+    await run(env.DB, "INSERT INTO mon_offices (id, name, contact_name, email, phone, city, state, stage, is_lead, notes, created_at, created_by, updated_at) VALUES (?, ?, ?, ?, ?, '', '', 'interested', 1, ?, ?, NULL, ?)", id, name, g.name, g.email, g.phone, `Booked a “${t.name}” online.`, ts, ts);
     return { type: "office" as const, id, name };
   }
   const c = await one<{ id: string; name: string }>(env.DB, `SELECT id, name FROM clients WHERE status NOT IN ('prospect', 'declined') AND (lower(email) = ? OR (length(?) = 10 AND ${NORM} LIKE ?)) LIMIT 1`, g.email, d, `%${d}`);

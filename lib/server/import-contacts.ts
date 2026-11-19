@@ -132,7 +132,7 @@ export async function applyContacts(env: AppEnv, a: Actor, b: { csv?: unknown; c
       done.lead++;
     } else {
       const id = randomId("of");
-      await run(env.DB, "INSERT INTO mon_offices (id, name, contact_name, email, phone, city, state, stage, notes, created_at, created_by, updated_at) VALUES (?, ?, ?, ?, ?, '', '', 'interested', ?, ?, ?, ?)",
+      await run(env.DB, "INSERT INTO mon_offices (id, name, contact_name, email, phone, city, state, stage, is_lead, notes, created_at, created_by, updated_at) VALUES (?, ?, ?, ?, ?, '', '', 'interested', 1, ?, ?, ?, ?)",
         id, r.name, r.name, r.email, r.phone, `Imported from the old CRM. ${tagLine}`, t, s.member.id, t);
       done.monarch++;
     }

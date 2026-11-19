@@ -57,12 +57,18 @@ function Detail({ d, o }: { d: MonarchData; o: Office }) {
   return (
     <div>
       <PageHeader
-        crumbs={[{ label: "Monarch", href: "/monarch" }, { label: "Offices", href: "/monarch/offices" }, { label: o.name }]}
+        crumbs={[{ label: "Monarch", href: "/monarch" }, o.stage === "lead" ? { label: "Leads", href: "/monarch/leads" } : { label: "Offices", href: "/monarch/offices" }, { label: o.name }]}
         title={<span className="flex flex-wrap items-center gap-2">{o.name} <StageBadge stage={o.stage} /></span>}
         subtitle={<>{[o.contactName, o.city && `${o.city}${o.state ? `, ${o.state}` : ""}`, pkg?.name].filter(Boolean).join(" · ") || "No details yet"}{reseller && <> · brought in by <Link href="/monarch/resellers" className="font-semibold text-accent hover:underline">{reseller.name}</Link></>}</>}
         actions={<><Button icon={Pencil} onClick={() => setEditing(true)}>Edit</Button><Button icon={Wallet} href={`/monarch/sales?office=${o.id}`}>Record a sale</Button></>}
       />
 
+      {o.stage === "lead" && (
+        <Card className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 border-accent/30 bg-accent-soft px-5 py-3 sm:px-6">
+          <span className="min-w-[200px] flex-1 text-[13.5px] text-accent-ink"><b>This is a lead.</b> It stays off Onboarding and Offices until they're ready to buy or start setup. Recording a paid sale moves it to onboarding automatically.</span>
+          <Button size="sm" variant="primary" disabled={!!busy} onClick={() => void patch({ stage: "interested" }, "Moved to onboarding")}>Start onboarding</Button>
+        </Card>
+      )}
       <Card className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-3 sm:px-6">
         <Badge tone={o.welcomeSentAt ? "success" : "neutral"} icon={Send}>{o.welcomeSentAt ? `Welcome sent ${shortDate(o.welcomeSentAt)}` : "Welcome not sent"}</Badge>
         <span className="min-w-[200px] flex-1 text-[13px] text-ink-2">Setup link, what we need, and the {software?.name ?? "software"} and {bank?.name ?? "bank"} applications in one email.{d.settings.autoWelcome ? " Sent automatically when their package is paid." : ""}</span>

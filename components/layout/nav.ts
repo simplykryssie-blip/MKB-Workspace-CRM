@@ -91,6 +91,7 @@ export const MONARCH_NAV: { section?: string; items: NavItem[] }[] = [
   {
     items: [
       { label: "Onboarding", href: "/monarch", icon: ClipboardCheck, exact: true },
+      { label: "Leads", href: "/monarch/leads", icon: UserPlus },
       { label: "Offices", href: "/monarch/offices", icon: Building },
       { label: "Sales & Payments", href: "/monarch/sales", icon: Wallet },
       { label: "Resellers & Commissions", href: "/monarch/resellers", icon: Handshake },

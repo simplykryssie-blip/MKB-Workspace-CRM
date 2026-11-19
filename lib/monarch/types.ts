@@ -11,9 +11,10 @@ export const STAGES = [
   { key: "setup", label: "Setting up" },
   { key: "active", label: "Active" },
 ] as const;
-export type Stage = (typeof STAGES)[number]["key"] | "inactive";
-export const stageLabel = (s: Stage) => (s === "inactive" ? "Inactive" : STAGES.find((x) => x.key === s)!.label);
-export const stageIndex = (s: Stage) => (s === "inactive" ? -1 : STAGES.findIndex((x) => x.key === s));
+/** "lead": a contact you haven't started selling to yet — kept off Onboarding and Offices. */
+export type Stage = (typeof STAGES)[number]["key"] | "inactive" | "lead";
+export const stageLabel = (s: Stage) => (s === "inactive" ? "Inactive" : s === "lead" ? "Lead" : STAGES.find((x) => x.key === s)!.label);
+export const stageIndex = (s: Stage) => (s === "inactive" || s === "lead" ? -1 : STAGES.findIndex((x) => x.key === s));
 
 /** Who does a checklist item: the office (through the upload link) or Monarch staff. */
 export type ItemWho = "office" | "staff";

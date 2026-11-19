@@ -152,7 +152,7 @@ async function newContact(env: AppEnv, brand: Brand, phone: string, name?: strin
     return { type: "lead", id, name: label, state: "" };
   }
   const id = `off_${randomId("t").slice(2)}`;
-  await run(env.DB, "INSERT INTO mon_offices (id, name, contact_name, email, phone, city, state, stage, notes, created_at, created_by, updated_at) VALUES (?, ?, '', '', ?, '', '', 'interested', 'Started by texting the Monarch number.', ?, NULL, ?)", id, label, fmtPhone(phone), t, t);
+  await run(env.DB, "INSERT INTO mon_offices (id, name, contact_name, email, phone, city, state, stage, is_lead, notes, created_at, created_by, updated_at) VALUES (?, ?, '', '', ?, '', '', 'interested', 1, 'Started by texting the Monarch number.', ?, NULL, ?)", id, label, fmtPhone(phone), t, t);
   return { type: "office", id, name: label, state: "" };
 }
 async function timeline(env: AppEnv, c: { type: string; id: string } | null, text: string) {
