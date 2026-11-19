@@ -72,7 +72,7 @@ export async function getCalc(env: AppEnv, a: Actor, officeId: string) {
       all<{ outcome: string; n: number }>(env.DB, "SELECT outcome, count(*) n FROM calc_deliveries WHERE license_id = ? AND created_at >= ? GROUP BY outcome", l.id, since),
     ]);
     licenses.push({
-      id: l.id, embedId: l.embed_id, keyPrefix: l.key_prefix, maxDomains: (l as LicRow & { max_domains?: number }).max_domains ?? 3, taxYears: jsonArr<number>(l.tax_years), status: l.status, source: l.source, notes: l.notes,
+      id: l.id, embedId: l.embed_id, keyPrefix: l.key_prefix, maxDomains: (l as LicRow & { max_domains?: number }).max_domains ?? 1, taxYears: jsonArr<number>(l.tax_years), status: l.status, source: l.source, notes: l.notes,
       lastSeenAt: l.last_seen_at, lastSeenHost: l.last_seen_host, createdAt: l.created_at,
       domains: domains.map((d) => d.domain), installUrl: embedUrl(env, l.embed_id), snippet: embedSnippet(env, l.embed_id),
       leads: { enabled: !!s?.enabled, businessName: s?.business_name ?? "", leadSource: s?.lead_source ?? "", includeSummary: s ? !!s.include_summary : true, tags: jsonArr<string>(s?.tags), webhookHost: s?.webhook_host ?? "", webhookSaved: !!s?.webhook_enc, lastSuccessAt: s?.last_success_at ?? null, lastError: s?.last_error ?? null, lastErrorAt: s?.last_error_at ?? null },
@@ -160,7 +160,7 @@ type LicLite = { id: string; office_id: string; status: string; max_domains: num
 export async function createLicense(env: AppEnv, officeId: string, o: { taxYear: number; packageId?: string | null }) {
   const t = now();
   const id = randomId("cal");
-  await run(env.DB, "INSERT INTO calc_licenses (id, office_id, embed_id, tax_years, status, package_id, source, created_at, updated_at) VALUES (?, ?, ?, ?, 'active', ?, 'mkb', ?, ?)", id, officeId, newEmbedId(), JSON.stringify([o.taxYear]), o.packageId ?? null, t, t);
+  await run(env.DB, "INSERT INTO calc_licenses (id, office_id, embed_id, tax_years, status, package_id, source, created_at, updated_at, max_domains) VALUES (?, ?, ?, ?, 'active', ?, 'mkb', ?, ?, 1)", id, officeId, newEmbedId(), JSON.stringify([o.taxYear]), o.packageId ?? null, t, t);
   const office = await one<{ name: string }>(env.DB, "SELECT name FROM mon_offices WHERE id = ?", officeId);
   await run(env.DB, "INSERT INTO calc_lead_settings (license_id, enabled, business_name, lead_source, include_summary, tags, updated_at) VALUES (?, 0, ?, ?, 1, '[]', ?) ON CONFLICT(license_id) DO NOTHING", id, office?.name ?? "", office?.name ?? "", t);
   return id;

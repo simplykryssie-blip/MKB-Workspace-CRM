@@ -1,6 +1,7 @@
 "use client";
 
 import { CalculatorLicenseCard } from "./CalculatorLicenseCard";
+import { copyText } from "@/lib/clipboard";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -44,7 +45,7 @@ function Detail({ d, o }: { d: MonarchData; o: Office }) {
 
   const link = (action: "send" | "copy" | "off") => run(`link:${action}`, async () => {
     const r = await m.applyOffice<{ office: Office; url?: string; emailed?: boolean }>("POST", `/api/monarch/offices/${o.id}/link`, { action });
-    if (action === "copy" && r.url) { await navigator.clipboard?.writeText(r.url).catch(() => {}); setCopied(r.url); }
+    if (action === "copy" && r.url) { await copyText(r.url).catch(() => {}); setCopied(r.url); }
     return r;
   }, (r) => action === "off" ? "Upload link turned off" : action === "copy" ? "New link copied — the old one no longer works" : r.emailed ? `Upload link emailed to ${o.email}` : "Link created — email isn't connected, so copy it from the outbox");
 

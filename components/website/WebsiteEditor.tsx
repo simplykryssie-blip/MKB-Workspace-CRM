@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { copyText } from "@/lib/clipboard";
 import { ArrowDown, ArrowUp, Code2, Copy, Eye, ExternalLink, FilePlus2, Globe, ImageIcon, ImageUp, Plus, RefreshCw, Rocket, Settings2, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Checkbox, SelectField, TextArea, TextField } from "@/components/ui/Field";
@@ -429,7 +430,7 @@ function HtmlPageEditor({ html, disabled, onChange }: { html: string; disabled: 
   // The preview refreshes a moment after typing stops.
   useEffect(() => { const t = setTimeout(() => setDoc(html), 600); return () => clearTimeout(t); }, [html]);
   const prefix = siteKey === "monarch" ? "/msite" : "/site";
-  const copy = (t: string) => void navigator.clipboard?.writeText(t).then(() => toast("Copied"), () => toast("Couldn't copy — select and copy it instead.", "info"));
+  const copy = (t: string) => void copyText(t).then(() => toast("Copied"), () => toast("Couldn't copy — select and copy it instead.", "info"));
   return (
     <div className="space-y-4">
       <Panel title="Page HTML" actions={<Button size="sm" variant="ghost" icon={Eye} onClick={() => setShow((v) => !v)}>{show ? "Hide preview" : "Show preview"}</Button>}>
@@ -512,7 +513,7 @@ function MediaLibrary({ which, canEdit, canDelete }: { which: SiteKey; canEdit: 
     setBusy(null);
   };
   const full = (m: Media) => `${window.location.origin}${m.url}`;
-  const copy = (t: string) => void navigator.clipboard?.writeText(t).then(() => toast("Link copied — paste it into your HTML, e.g. <img src=\"…\">"), () => toast("Couldn't copy — select the link and copy it.", "info"));
+  const copy = (t: string) => void copyText(t).then(() => toast("Link copied — paste it into your HTML, e.g. <img src=\"…\">"), () => toast("Couldn't copy — select the link and copy it.", "info"));
   return (
     <div className="space-y-4">
       <Panel title="Media library" actions={canEdit ? <Button size="sm" variant="primary" icon={ImageUp} disabled={busy === "upload"} onClick={() => addRef.current?.click()}>{busy === "upload" ? "Uploading…" : "Upload pictures"}</Button> : undefined}>

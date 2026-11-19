@@ -10,7 +10,7 @@ export const PLATFORM_GUIDES: PlatformGuide[] = [
       "Paste your embed code and save.",
       "Publish, then open the page on your own domain to check it.",
     ],
-    note: "It only shows on the websites you add above. If your page is also reachable on a GoHighLevel preview address, add that address too if you want it to show there.",
+    note: "It only shows on the website you add above, so it won't appear in GoHighLevel's preview — check it on your published page.",
   },
   {
     id: "wordpress", label: "WordPress", uses: "code",

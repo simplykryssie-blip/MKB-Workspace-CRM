@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { copyText } from "@/lib/clipboard";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { FilePlus2, Megaphone, MousePointerClick, Send, Settings2, Trash2, Users } from "lucide-react";
@@ -231,7 +232,7 @@ function TextSettings({ brand }: { brand: Brand }) {
     try { await call("POST", "/api/sms/test", { brand, to: testTo }); toast(s.simulated && !s.tokenSaved ? "Test recorded (test mode — not really sent)" : "Test text sent"); }
     catch (e) { toast(e instanceof Error ? e.message : "Couldn't send", "info"); }
   };
-  const copy = (t: string) => navigator.clipboard.writeText(t).then(() => toast("Copied"), () => toast("Couldn't copy", "info"));
+  const copy = (t: string) => copyText(t).then(() => toast("Copied"), () => toast("Couldn't copy", "info"));
   return (
     <Card>
       <CardHeader title="Text messaging (Twilio)" subtitle="One Twilio account for both brands, with a separate number for MKB and for Monarch. Your Auth Token is stored encrypted and never shown again." />

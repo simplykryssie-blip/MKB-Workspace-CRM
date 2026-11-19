@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { copyText } from "@/lib/clipboard";
 import { CheckCircle2, Copy, Eye, FileSignature, Info, Mail, Plus, RotateCcw, Save, Trash2, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -255,7 +256,7 @@ export function ProposalPanel({ intake, client, reload }: { intake: BooksIntake;
         {sentUrl ? (
           <div className="space-y-3 text-[13.5px] text-ink-2">
             <p>Sent to <b>{email}</b>. The link works for 14 days and closes once they sign. If you change the price, they&rsquo;ll need the new version.</p>
-            <Button size="sm" icon={Copy} onClick={() => navigator.clipboard.writeText(sentUrl).then(() => toast("Link copied"), () => toast("Couldn't copy", "info"))}>Copy link</Button>
+            <Button size="sm" icon={Copy} onClick={() => copyText(sentUrl).then(() => toast("Link copied"), () => toast("Couldn't copy", "info"))}>Copy link</Button>
           </div>
         ) : (
           <div className="space-y-3">

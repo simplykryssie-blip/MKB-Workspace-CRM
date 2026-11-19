@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { copyText } from "@/lib/clipboard";
 import { Copy, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
@@ -10,7 +11,7 @@ import { call } from "@/lib/sync/remote";
 import { DAYS, TIMEZONES, type BookingSettings, type DayKey, type Hours, type MyHours } from "@/lib/calendar/config";
 
 const box = "h-4 w-4 accent-[var(--accent)]";
-const copy = async (text: string, toast: (m: string) => void) => { try { await navigator.clipboard.writeText(text); toast("Copied"); } catch { toast("Couldn't copy — select it and copy"); } };
+const copy = async (text: string, toast: (m: string) => void) => { try { await copyText(text); toast("Copied"); } catch { toast("Couldn't copy — select it and copy"); } };
 
 /** A staff member's weekly hours for online booking, days off and Zoom user. */
 export function HoursDialog({ open, onClose }: { open: boolean; onClose: () => void }) {

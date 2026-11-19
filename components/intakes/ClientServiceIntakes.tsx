@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { copyText } from "@/lib/clipboard";
 import { useRouter } from "next/navigation";
 import { ArrowRight, ClipboardList, Copy, Mail, Play, ShieldCheck } from "lucide-react";
 import { NewRequestDialog } from "@/components/biz/BizDialogs";
@@ -107,7 +108,7 @@ export function ClientServiceIntakesCard({ c }: { c: Client }) {
           <div className="space-y-3 text-[13.5px] text-ink-2">
             <p>Sent to <b>{email}</b>. The link works for 14 days and closes once they submit.</p>
             <p className="text-[12.5px] text-muted">Need to text it instead? Copy it now — it isn&rsquo;t shown again. Only send it to the client.</p>
-            <Button size="sm" icon={Copy} onClick={() => navigator.clipboard.writeText(sentUrl).then(() => toast("Link copied"), () => toast("Couldn't copy", "info"))}>Copy link</Button>
+            <Button size="sm" icon={Copy} onClick={() => copyText(sentUrl).then(() => toast("Link copied"), () => toast("Couldn't copy", "info"))}>Copy link</Button>
           </div>
         ) : (
           <div className="space-y-3">

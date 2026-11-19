@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { copyText } from "@/lib/clipboard";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, ChevronDown, ChevronRight, Code2, Copy, Eye, ExternalLink, Link2, Plus, Rocket, Settings2, ShieldAlert, Trash2, Wrench, FlaskConical, Inbox } from "lucide-react";
@@ -206,7 +207,7 @@ function Share({ f }: { f: LeadForm }) {
   const toast = useToast();
   const url = `${publicOrigin()}${publicPath(f.slug)}`;
   const embed = `<iframe src="${url}?embed=1" title="${f.title.replace(/"/g, "&quot;")}" style="width:100%;min-height:780px;border:0" loading="lazy"></iframe>`;
-  const copy = (t: string, what: string) => { navigator.clipboard?.writeText(t).catch(() => {}); toast(`${what} copied`); };
+  const copy = (t: string, what: string) => { copyText(t).catch(() => {}); toast(`${what} copied`); };
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-2">
       {f.status !== "published" && <div className="xl:col-span-2 rounded-2xl border border-warning/40 bg-warning-soft/50 px-4 py-3 text-[13px] text-warning-ink">This form is a {f.status}. Publish it before sharing — unpublished links don&rsquo;t accept responses.</div>}

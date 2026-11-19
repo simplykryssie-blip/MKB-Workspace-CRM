@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { copyText } from "@/lib/clipboard";
 import { Calculator, Copy, Mail, Plus, Save, Send, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -47,7 +48,7 @@ function LicenseBlock({ l, canEdit, busy, act }: { l: License; canEdit: boolean;
   const [domain, setDomain] = useState("");
   const [f, setF] = useState({ enabled: l.leads.enabled, businessName: l.leads.businessName, leadSource: l.leads.leadSource, includeSummary: l.leads.includeSummary, webhookUrl: "" });
   useEffect(() => { setF((x) => ({ ...x, enabled: l.leads.enabled, businessName: l.leads.businessName, leadSource: l.leads.leadSource, includeSummary: l.leads.includeSummary, webhookUrl: "" })); }, [l.leads.enabled, l.leads.businessName, l.leads.leadSource, l.leads.includeSummary, l.leads.webhookHost]);
-  const copy = (t: string, what: string) => { void navigator.clipboard?.writeText(t).then(() => toast(`${what} copied`)).catch(() => toast("Couldn't copy", "info")); };
+  const copy = (t: string, what: string) => { void copyText(t).then(() => toast(`${what} copied`)).catch(() => toast("Couldn't copy", "info")); };
   const sent = l.last30.sent ?? 0, failed = l.last30.failed ?? 0;
   return (
     <div className="mt-3 space-y-3 text-[13px]">

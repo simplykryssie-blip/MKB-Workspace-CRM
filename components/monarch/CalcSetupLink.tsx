@@ -2,6 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element -- static brand image */
 import { useEffect, useState } from "react";
+import { copyText } from "@/lib/clipboard";
 import { CheckCircle2, Copy, Globe, Plus, Send, Trash2, Zap } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -48,7 +49,7 @@ export function CalcSetupLink({ token }: { token: string }) {
       setV(d); setF((x) => ({ ...x, enabled: d.leads.enabled, businessName: d.leads.businessName, webhookUrl: "" })); setMsg({ ok: true, text: ok }); return true;
     } catch (e) { setMsg({ ok: false, text: e instanceof Error ? e.message : "Something went wrong." }); return false; } finally { setBusy(false); }
   };
-  const copy = (t: string, what: string) => { void navigator.clipboard?.writeText(t).then(() => setMsg({ ok: true, text: `${what} copied` })).catch(() => setMsg({ ok: false, text: "Couldn't copy. Press and hold to copy instead." })); };
+  const copy = (t: string, what: string) => { void copyText(t).then(() => setMsg({ ok: true, text: `${what} copied` })).catch(() => setMsg({ ok: false, text: "Couldn't copy. Press and hold to copy instead." })); };
   const guide = PLATFORM_GUIDES.find((g) => g.id === platform) ?? PLATFORM_GUIDES[0];
   const active = v?.license.status === "active";
   return (
@@ -76,7 +77,7 @@ export function CalcSetupLink({ token }: { token: string }) {
 
             <Card className="p-5">
               <h2 className="flex items-center gap-2 text-[17px] font-bold text-ink"><Globe size={18} /> 1. Your website</h2>
-              <p className="mt-1 text-[13.5px] text-muted">The calculator only shows on the websites you add here (each also covers its www. version). Your license covers up to {v.license.maxDomains}.</p>
+              <p className="mt-1 text-[13.5px] text-muted">The calculator only shows on the websites you add here (each also covers its www. version). {v.license.maxDomains === 1 ? "Your license covers one website." : `Your license covers up to ${v.license.maxDomains}.`}</p>
               <ul className="mt-3 space-y-2">
                 {v.domains.map((d) => <li key={d} className="flex items-center justify-between rounded-xl border border-line px-3 py-2.5 text-[14px] text-ink"><span className="font-medium">{d}</span><button type="button" aria-label={`Remove ${d}`} disabled={busy || !active} onClick={() => { if (confirm(`Remove ${d}? The calculator will stop showing there.`)) void act({ action: "removeDomain", domain: d }, "Website removed"); }} className="rounded-lg p-1.5 text-muted hover:bg-surface-2"><Trash2 size={16} /></button></li>)}
                 {!v.domains.length && <li className="rounded-xl bg-surface-2 px-3 py-2.5 text-[13.5px] text-muted">No website yet — add yours below.</li>}
