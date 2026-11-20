@@ -99,7 +99,7 @@ export async function getFunnels(env: AppEnv, a: Actor) {
   const cvForm = s.creditVault.formId ? await one<{ id: string; slug: string; status: string }>(env.DB, "SELECT id, slug, status FROM forms WHERE id = ?", s.creditVault.formId) : null;
   const cvLeads = (await one<{ n: number }>(env.DB, "SELECT count(*) AS n FROM form_submissions WHERE form_id = ? AND channel != 'Staff test' AND outcome != 'spam'", CREDIT_VAULT.formId).catch(() => null))?.n ?? 0;
   const cvVisits = (await one<{ n: number }>(env.DB, "SELECT COALESCE(SUM(visits), 0) AS n FROM funnel_visits WHERE funnel = ?", CREDIT_VAULT.key).catch(() => null))?.n ?? 0;
-  return { settings: s, form, campaignId: MONEY_VAULT.campaignId, taxYear: MONEY_VAULT.taxYear, path: MONEY_VAULT.path, creditVault: { form: cvForm, path: CREDIT_VAULT.path, signups: cvLeads, visits: cvVisits } };
+  return { settings: s, form, campaignId: MONEY_VAULT.campaignId, taxYear: MONEY_VAULT.taxYear, path: MONEY_VAULT.path, creditVault: { form: cvForm, path: "/black-friday", signups: cvLeads, visits: cvVisits } };
 }
 
 const PIXEL = /^\d{8,20}$/;

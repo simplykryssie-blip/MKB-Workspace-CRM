@@ -55,7 +55,7 @@ export function FunnelsCard() {
     setBusy(false);
   };
   const cvOn = !!v.settings.creditVault?.on;
-  const cvPath = v.creditVault?.path ?? "/credit-comeback";
+  const cvPath = v.creditVault?.path ?? "/black-friday";
   const cvUrl = o === "https://www.mkbfinancialgroup.com" ? `${o}${cvPath}` : `${o}/site${cvPath}`;
   const trackingDirty = pixel.trim() !== v.settings.tracking.metaPixelId || ga.trim().toUpperCase() !== v.settings.tracking.gaId;
 
@@ -74,15 +74,15 @@ export function FunnelsCard() {
       </Card>
 
       <Card>
-        <CardHeader icon={Gift} title="Black Friday: Credit Comeback Vault" subtitle={`Golden-ticket scratch-off at ${cvPath}. Visitors join your VIP waitlist and get the free credit packet (PDF + Letter Builder). When it's off, ${cvPath} sends visitors to your home page.`} action={<Badge tone={cvOn ? "success" : "neutral"}>{cvOn ? "On" : "Off"}</Badge>} />
+        <CardHeader icon={Gift} title="Black Friday Tax Prize" subtitle={`Golden-ticket scratch-off at ${cvPath}: every ticket wins $25, $50 or $75 off 2026 tax prep. Closes Cyber Monday, Nov 30. When it's off, ${cvPath} sends visitors to your home page.`} action={<Badge tone={cvOn ? "success" : "neutral"}>{cvOn ? "On" : "Off"}</Badge>} />
         <div className="space-y-4 px-5 pb-5 text-[13.5px] text-ink-2 sm:px-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <Button variant={cvOn ? "secondary" : "primary"} disabled={!canEdit || busy} onClick={() => { if (!cvOn || window.confirm("Turn the Credit Comeback Vault page off? Visitors will be sent to your home page. People who already joined keep their Vault link.")) void save({ creditVaultOn: !cvOn }, cvOn ? "Credit Comeback Vault page turned off" : "Credit Comeback Vault page is live"); }}>{cvOn ? "Turn page off" : "Turn page on"}</Button>
+            <Button variant={cvOn ? "secondary" : "primary"} disabled={!canEdit || busy} onClick={() => { if (!cvOn || window.confirm("Turn the Black Friday Tax Prize page off? Visitors will be sent to your home page. Winners keep their prize codes.")) void save({ creditVaultOn: !cvOn }, cvOn ? "Black Friday Tax Prize page turned off" : "Black Friday Tax Prize page is live"); }}>{cvOn ? "Turn page off" : "Turn page on"}</Button>
             {cvOn && <a href={cvUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 break-all font-semibold text-accent hover:underline">{cvUrl} <ExternalLink size={14} /></a>}
           </div>
-          {v.creditVault && (v.creditVault.visits > 0 || v.creditVault.signups > 0) && <p><b>{v.creditVault.visits}</b> visits · <b>{v.creditVault.signups}</b> VIP sign-ups{v.creditVault.visits ? ` (${pct(v.creditVault.signups, v.creditVault.visits)})` : ""}</p>}
-          <p>Sign-ups become leads (stage <b>New</b>) tagged <b>BFCM 2026</b>, <b>VIP Waitlist</b> and <b>Credit Comeback Vault</b>, with their credit goal in the lead notes. Each one gets an email with their private Vault link. The waitlist countdown ends Cyber Monday, Nov 30.</p>
-          {v.creditVault?.form && <p>The sign-up questions are the <a href="/forms" className="font-semibold text-accent hover:underline">“Credit Comeback Vault (Black Friday 2026)” form</a>.</p>}
+          {v.creditVault && (v.creditVault.visits > 0 || v.creditVault.signups > 0) && <p><b>{v.creditVault.visits}</b> visits · <b>{v.creditVault.signups}</b> entries{v.creditVault.visits ? ` (${pct(v.creditVault.signups, v.creditVault.visits)})` : ""}</p>}
+          <p>Entries become leads (stage <b>New</b>) tagged <b>Black Friday Tax Prize</b> and <b>Prize: $__ off 2026 tax prep</b>; the prize code is in the lead notes. Each one gets their 2026 tax interview (individual or the right business return) and a prize email. Those who opt in to texts are tagged <b>VIP bonus</b> and get the Credit Comeback Vault and their code by text.</p>
+          {v.creditVault?.form && <p>The sign-up questions are the <a href="/forms" className="font-semibold text-accent hover:underline">“Black Friday Tax Prize (2026)” form</a>.</p>}
         </div>
       </Card>
 
