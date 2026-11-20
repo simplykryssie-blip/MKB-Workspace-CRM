@@ -1,5 +1,6 @@
 "use client";
 
+import { BACKEND } from "@/lib/sync/remote";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -167,9 +168,9 @@ export function LeadsPage() {
         subtitle="Track prospects from first contact to client — across every MKB service."
         actions={
           <>
-            <Button variant="ghost" icon={RotateCcw} aria-label="Reset sample data" title="Reset sample data" className="px-2.5 sm:px-4" onClick={() => { if (confirm("Reset leads and clients to the original sample data?")) { store.reset(); clientStore.reset(); toast("Sample data reset"); } }}>
+            {!BACKEND && <Button variant="ghost" icon={RotateCcw} aria-label="Reset sample data" title="Reset sample data" className="px-2.5 sm:px-4" onClick={() => { if (confirm("Reset leads and clients to the original sample data?")) { store.reset(); clientStore.reset(); toast("Sample data reset"); } }}>
               <span className="hidden sm:inline">Reset</span>
-            </Button>
+            </Button>}
             <Button icon={Settings2} onClick={() => setSettingsOpen(true)}>
               <span className="hidden sm:inline">Pipeline settings</span>
               <span className="sm:hidden">Stages</span>

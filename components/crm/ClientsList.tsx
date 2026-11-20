@@ -1,5 +1,6 @@
 "use client";
 
+import { BACKEND } from "@/lib/sync/remote";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -90,9 +91,9 @@ export function ClientsList() {
       subtitle="One record per client, shared across every MKB service."
       actions={
         <>
-          <Button icon={RotateCcw} variant="ghost" aria-label="Reset sample data" title="Reset sample data" className="px-2.5 sm:px-4" onClick={() => { if (confirm("Reset all sample data to its original state? Changes made in this session will be lost.")) { resetStore(); toast("Sample data reset"); } }}>
+          {!BACKEND && <Button icon={RotateCcw} variant="ghost" aria-label="Reset sample data" title="Reset sample data" className="px-2.5 sm:px-4" onClick={() => { if (confirm("Reset all sample data to its original state? Changes made in this session will be lost.")) { resetStore(); toast("Sample data reset"); } }}>
             <span className="hidden sm:inline">Reset sample data</span>
-          </Button>
+          </Button>}
           <Button icon={Download} onClick={exportCsv} disabled={rows.length === 0 || !team.can("crm", "export")} title={team.can("crm", "export") ? undefined : "Your role can't export"}>
             Export<span className="hidden sm:inline">{filtersOn ? " filtered" : ""}</span>
           </Button>

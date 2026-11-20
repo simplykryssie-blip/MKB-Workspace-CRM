@@ -1,5 +1,6 @@
 "use client";
 
+import { BACKEND } from "@/lib/sync/remote";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -63,7 +64,7 @@ export function ExpCenter() {
         actions={
           <>
             <RoleSwitcher />
-            <Button variant="ghost" icon={RotateCcw} aria-label="Reset sample data" title="Reset sample data" className="px-2.5" onClick={() => { if (confirm("Reset expungement and client sample data?")) { exp.reset(); clientStore.reset(); toast("Sample data reset"); } }} />
+            {!BACKEND && <Button variant="ghost" icon={RotateCcw} aria-label="Reset sample data" title="Reset sample data" className="px-2.5" onClick={() => { if (confirm("Reset expungement and client sample data?")) { exp.reset(); clientStore.reset(); toast("Sample data reset"); } }} />}
             <Button variant="primary" icon={Plus} disabled={!exp.can.edit} onClick={() => setNewOpen(true)}>New inquiry</Button>
           </>
         }

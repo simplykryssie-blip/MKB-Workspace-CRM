@@ -99,7 +99,7 @@ export function BizCenter() {
         subtitle="Formation, compliance, documentation and consulting — from request to delivery and follow-up."
         actions={
           <>
-            <Button variant="ghost" icon={RotateCcw} aria-label="Reset sample data" title="Reset sample data" className="px-2.5" onClick={() => { if (confirm("Reset business services and client sample data?")) { biz.reset(); clientStore.reset(); toast("Sample data reset"); } }} />
+            {!BACKEND && <Button variant="ghost" icon={RotateCcw} aria-label="Reset sample data" title="Reset sample data" className="px-2.5" onClick={() => { if (confirm("Reset business services and client sample data?")) { biz.reset(); clientStore.reset(); toast("Sample data reset"); } }} />}
             <Button variant="primary" icon={Plus} onClick={() => setNewOpen(true)}>New request</Button>
           </>
         }

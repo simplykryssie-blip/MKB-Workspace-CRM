@@ -1,5 +1,6 @@
 "use client";
 
+import { BACKEND } from "@/lib/sync/remote";
 import Link from "next/link";
 import { Form8821Tab } from "./Form8821Tab";
 import { useRouter } from "next/navigation";
@@ -114,7 +115,7 @@ export function TaxCenter() {
         actions={
           <>
             <TaxYearSelect value={year} onChange={setYear} years={TAX_YEARS} allowAll />
-            <Button variant="ghost" icon={RotateCcw} aria-label="Reset sample data" title="Reset sample data" className="px-2.5" onClick={() => { if (confirm("Reset tax and client sample data?")) { tax.reset(); clientStore.reset(); toast("Sample data reset"); } }} />
+            {!BACKEND && <Button variant="ghost" icon={RotateCcw} aria-label="Reset sample data" title="Reset sample data" className="px-2.5" onClick={() => { if (confirm("Reset tax and client sample data?")) { tax.reset(); clientStore.reset(); toast("Sample data reset"); } }} />}
             <Button variant="primary" icon={Plus} disabled={!tax.access.edit} onClick={() => setNewOpen({})}>New return</Button>
           </>
         }
