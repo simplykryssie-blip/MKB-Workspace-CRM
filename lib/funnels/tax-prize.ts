@@ -24,7 +24,7 @@ export const OFFICIAL_RULES = `## Black Friday Tax Prize — Official Rules
 NO PURCHASE NECESSARY TO ENTER OR WIN. A purchase does not improve your chances of winning.
 
 ## Sponsor
-MKB Financial Group, 5520 Johnston St Ste K PMB 1307, Lafayette, LA 70607 · 888-379-9372 · info@mkbfinancialgroup.com.
+MKB Financial Group, 4459 Nelson Road Suite 105 PMB 1089, Lake Charles, LA 70605 · 888-379-9372 · info@mkbfinancialgroup.com.
 
 ## Promotion period
 Begins November 20, 2026 and ends November 30, 2026 at 11:59 pm Central Time.

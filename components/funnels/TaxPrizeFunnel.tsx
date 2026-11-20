@@ -492,7 +492,7 @@ export function TaxPrizeFunnel({ form, tracking, home, privacyHref, claimed }: P
           <p className="mt-6 text-[13px] text-white/60"><button type="button" onClick={() => setRules(true)} className="underline">Official Rules</button>{privacyHref && <> · <a href={privacyHref} className="underline">Privacy Policy</a></>} · No purchase necessary.{claimed >= 25 ? ` ${claimed.toLocaleString()} tickets claimed.` : ""}</p>
         </div>
       </section>
-      <footer className="border-t border-white/10 px-4 py-8 text-center text-[12px] text-white/45 sm:px-6">MKB Financial Group · 888-379-9372 · info@mkbfinancialgroup.com · Lafayette, Louisiana</footer>
+      <footer className="border-t border-white/10 px-4 py-8 text-center text-[12px] text-white/45 sm:px-6">MKB Financial Group · 888-379-9372 · info@mkbfinancialgroup.com · Lake Charles, Louisiana</footer>
 
       {sheet && <Sheet onSubmit={submit} busy={busy} err={err} emailOpt={emailOpt} setEmailOpt={setEmailOpt} smsOpt={smsOpt} setSmsOpt={setSmsOpt} privacyHref={privacyHref} onRules={() => setRules(true)} />}
       {nudge && <BonusNudge onAdd={() => { setSmsOpt(true); void send(nudge, true); }} onSkip={() => void send(nudge, false)} />}
