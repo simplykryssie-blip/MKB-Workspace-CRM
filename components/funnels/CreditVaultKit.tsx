@@ -14,7 +14,8 @@ const FOIL = "linear-gradient(115deg,#6e4105,#b87912,#f7d77f,#a96808,#ffe7a1,#b8
 const CSS = `
 .cvk .foil-text{background:${FOIL};background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent}
 .cvk .foil-btn{background:${FOIL};background-size:200% 100%;color:#1a1206;font-weight:700}
-.cvk .paper{background:#fff;color:#111;font-family:Georgia,'Times New Roman',serif}
+.cvk{overflow-x:hidden;max-width:100vw}
+.cvk .paper{background:#fff;color:#111;font-family:Georgia,'Times New Roman',serif;overflow-wrap:anywhere;word-break:break-word}
 @media print{
   body *{visibility:hidden!important}
   .cvk .print-area,.cvk .print-area *{visibility:visible!important}

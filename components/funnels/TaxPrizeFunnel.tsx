@@ -42,7 +42,7 @@ const CSS = `
 .tpf .perf{background-image:radial-gradient(circle at 50% 50%,${INK} 4px,transparent 4.5px);background-size:12px 12px;background-repeat:repeat-y;width:12px}
 .tpf .stamp{color:${RED};border:3px solid ${RED};border-radius:6px;padding:2px 10px;transform:rotate(-12deg) scale(1);opacity:.88;mix-blend-mode:multiply;animation:tpf-stamp .45s cubic-bezier(.2,1.8,.4,1) both;box-shadow:0 0 0 1px rgba(179,38,30,.2) inset}
 .tpf .prize-in{animation:tpf-rise .7s cubic-bezier(.2,1.4,.4,1) both}
-.tpf .coin{position:absolute;top:-50px;width:30px;height:30px;background:url('${COIN}') center/contain no-repeat;animation:tpf-coin 2.2s cubic-bezier(.3,.1,.6,1) forwards}
+.tpf .coin{position:absolute;top:-60px;width:30px;height:30px;background:url('${COIN}') center/contain no-repeat;opacity:0;animation-name:tpf-coin;animation-timing-function:cubic-bezier(.35,.05,.65,1);animation-fill-mode:forwards}
 .tpf .flake{position:absolute;width:6px;height:4px;border-radius:1px;pointer-events:none;animation:tpf-flake .9s ease-in forwards}
 .tpf .sheet{animation:tpf-sheet .38s cubic-bezier(.2,1,.3,1) both}
 .tpf .bonus{background:linear-gradient(180deg,#1b150b,#0f0c07);border:1.5px solid transparent;background-clip:padding-box;position:relative}
@@ -51,7 +51,7 @@ const CSS = `
 @keyframes tpf-shine{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
 @keyframes tpf-stamp{0%{transform:rotate(-12deg) scale(2.4);opacity:0}100%{transform:rotate(-12deg) scale(1);opacity:.88}}
 @keyframes tpf-rise{0%{transform:translateY(18px) scale(.9);opacity:0}100%{transform:none;opacity:1}}
-@keyframes tpf-coin{to{transform:translateY(640px) rotate(720deg)}}
+@keyframes tpf-coin{0%{opacity:0;transform:translate(0,0) rotate(0)}8%{opacity:1}70%{opacity:1}100%{opacity:0;transform:translate(var(--dx),var(--fall)) rotate(var(--spin))}}
 @keyframes tpf-flake{to{transform:translateY(70px) rotate(220deg);opacity:0}}
 @keyframes tpf-sheet{from{transform:translateY(100%)}to{transform:none}}
 @keyframes tpf-wiggle{0%,100%{transform:rotate(0)}25%{transform:rotate(-2deg)}75%{transform:rotate(2deg)}}
@@ -156,8 +156,8 @@ function Ticket({ phase, prize, onStart, onJam, sweep }: { phase: "fresh" | "scr
       const d = g.getImageData(0, 0, c.width, c.height).data;
       let clear = 0, n = 0;
       for (let i = 3; i < d.length; i += 4 * 50) { n++; if (d[i] < 40) clear++; }
-      // The foil "jams" a third of the way in: where should we send your prize?
-      if (clear / n > 0.32) { down.current = false; buzz([20, 50, 20]); onJam(); }
+      // The foil "jams" at 80% scratched: where should we send your prize?
+      if (clear / n > 0.8) { down.current = false; buzz([20, 50, 20]); onJam(); }
     }
   };
   const onMove = (e: React.PointerEvent) => {
@@ -218,8 +218,16 @@ function Ticket({ phase, prize, onStart, onJam, sweep }: { phase: "fresh" | "scr
   );
 }
 
+/** Gold coins that tumble down at different speeds, fade out, and are gone after a few seconds. */
 function CoinRain() {
-  return <div aria-hidden className="pointer-events-none fixed inset-x-0 top-0 z-40 h-0">{Array.from({ length: 26 }).map((_, i) => <span key={i} className="coin" style={{ left: `${(i * 37) % 100}%`, animationDelay: `${(i % 8) * 0.09}s`, width: 22 + (i % 3) * 8, height: 22 + (i % 3) * 8 }} />)}</div>;
+  const [on, setOn] = useState(true);
+  const coins = useRef(Array.from({ length: 28 }, () => ({
+    left: Math.random() * 100, size: 20 + Math.random() * 18, delay: Math.random() * 0.9, dur: 1.8 + Math.random() * 1.4,
+    fall: 45 + Math.random() * 55, dx: (Math.random() - 0.5) * 120, spin: (Math.random() > 0.5 ? 1 : -1) * (360 + Math.random() * 540),
+  }))).current;
+  useEffect(() => { const t = setTimeout(() => setOn(false), 4500); return () => clearTimeout(t); }, []);
+  if (!on) return null;
+  return <div aria-hidden className="pointer-events-none fixed inset-0 z-40 overflow-hidden">{coins.map((c, i) => <span key={i} className="coin" style={{ left: `${c.left}%`, width: c.size, height: c.size, animationDelay: `${c.delay}s`, animationDuration: `${c.dur}s`, ["--fall" as string]: `${c.fall}vh`, ["--dx" as string]: `${c.dx}px`, ["--spin" as string]: `${c.spin}deg` } as React.CSSProperties} />)}</div>;
 }
 
 /* ------------------------------------------------------------------ the details sheet */
