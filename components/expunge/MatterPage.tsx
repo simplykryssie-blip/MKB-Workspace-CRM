@@ -29,6 +29,7 @@ const TABS = [
   { key: "cases", label: "Cases", icon: ClipboardList },
   { key: "intake", label: "Intake", icon: UserRound },
   { key: "requests", label: "Requests & messages", icon: MessageSquare },
+  { key: "documents", label: "Documents", icon: FileText },
   { key: "billing", label: "Billing", icon: Receipt },
   { key: "team", label: "Team & access", icon: Users },
   { key: "notes", label: "Internal notes", icon: Lock },
@@ -96,6 +97,7 @@ export function MatterPage({ id }: { id: string }) {
         )}
         {tab === "intake" && <IntakeTab m={m} c={c} />}
         {tab === "requests" && <RequestsTab m={m} c={c} />}
+        {tab === "documents" && <DocumentsTab m={m} c={c} />}
         {tab === "billing" && <BillingTab m={m} c={c} />}
         {tab === "team" && <TeamTab m={m} />}
         {tab === "notes" && <NotesTab m={m} />}
@@ -243,7 +245,7 @@ function RequestsTab({ m, c }: { m: ExpMatter; c: Client }) {
   const [open, setOpen] = useState(false);
   const [item, setItem] = useState({ label: "", detail: "", file: false, caseId: "" });
   const [msg, setMsg] = useState("");
-  const msgs = c.messages.filter((x) => x.expMatterId === m.id);
+  const msgs = c.messages.filter((x) => x.expMatterId === m.id || (!x.expMatterId && x.service === "expunge"));
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
       <Card>
@@ -291,14 +293,16 @@ function BillingTab({ m, c }: { m: ExpMatter; c: Client }) {
   const toast = useToast();
   const cs = matterCases(exp, m.id).filter((x) => !x.draft);
   const remName = (x: { jurisdictionId: string; remedyId?: string }) => exp.jurisdictions.find((j) => j.id === x.jurisdictionId)?.remedies.find((r) => r.id === x.remedyId)?.short ?? "workflow not set";
-  const inv = c.invoices.filter((i) => i.expMatterId === m.id).sort((a, b) => b.issuedAt.localeCompare(a.issuedAt));
+  const inv = c.invoices.filter((i) => i.expMatterId === m.id || (!i.expMatterId && i.service === "expunge")).sort((a, b) => b.issuedAt.localeCompare(a.issuedAt));
   const [lines, setLines] = useState<InvoiceLine[] | null>(null);
   const [pay, setPay] = useState(false);
   const [adj, setAdj] = useState<{ id: string; kind: "refund" | "credit" | "correction"; amount: string; note: string } | null>(null);
   if (!exp.can.billing && !exp.can.criminalHistory) return <Restricted what="Billing details" />;
-  const groupTotal = (g: "mkb" | "passthrough") => inv.flatMap((i) => i.lines ?? []).filter((l) => FEE_KIND[l.kind as FeeKind].group === g).reduce((s, l) => s + l.amount, 0);
-  const billed = inv.reduce((s, i) => s + i.amount, 0);
-  const paid = inv.reduce((s, i) => s + i.paid, 0);
+  // Totals count sent invoices only; drafts and voided ones are listed but not owed.
+  const live = inv.filter((i) => i.status !== "draft" && i.status !== "void");
+  const groupTotal = (g: "mkb" | "passthrough") => live.flatMap((i) => i.lines ?? []).filter((l) => (FEE_KIND[l.kind as FeeKind]?.group ?? "mkb") === g).reduce((s, l) => s + (l.kind === "discount" ? -Math.abs(l.amount) : l.amount), 0);
+  const billed = live.reduce((s, i) => s + i.amount, 0);
+  const paid = live.reduce((s, i) => s + i.paid, 0);
   const suggest = (): InvoiceLine[] => [
     ...cs.map((x) => {
       const svc = exp.services.find((s) => s.id === x.serviceType);
@@ -433,3 +437,31 @@ function NotesTab({ m }: { m: ExpMatter }) {
 
 export type { Tri, InfoRequest };
 export { UploadCloud, FileText, Masked };
+
+/** Every Expungement Relief document on the client's record: intake PDF, ID, court papers, records, requests and prepared forms. */
+function DocumentsTab({ m, c }: { m: ExpMatter; c: Client }) {
+  const docs = c.documents
+    .filter((d) => d.expMatterId === m.id || (!d.expMatterId && d.service === "expunge"))
+    .sort((a, b) => (b.uploadedAt ?? b.requestedAt).localeCompare(a.uploadedAt ?? a.requestedAt));
+  const waiting = docs.filter((d) => d.status === "requested").length;
+  return (
+    <Card>
+      <CardHeader icon={FileText} title="Documents" subtitle={`${docs.length} for Expungement Relief${waiting ? ` · ${waiting} waiting on the client` : ""}`} action={<Button size="sm" variant="ghost" href={`/clients/${c.id}#documents`}>All client documents</Button>} />
+      {docs.length === 0 ? <p className="border-t border-line px-6 py-8 text-center text-[13.5px] text-muted">No Expungement Relief documents yet. The intake PDF, ID, court papers and records land here.</p> : (
+        <ul className="divide-y divide-line border-t border-line">
+          {docs.map((d) => (
+            <li key={d.id} className="flex flex-wrap items-center gap-3 px-5 py-3 sm:px-6">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[14px] font-medium text-ink">{d.name}</span>
+                <span className="block text-[12px] text-muted">{d.category}{d.uploadedAt ? ` · added ${fmtDate(d.uploadedAt)}${d.uploadedBy === "client" ? " by the client" : ""}` : ` · requested ${fmtDate(d.requestedAt)}`}{d.deliveredAt ? ` · delivered ${fmtDate(d.deliveredAt)}` : ""}</span>
+              </span>
+              {d.sensitive && <Badge tone="neutral">Sensitive</Badge>}
+              <Badge tone={d.status === "requested" ? "warning" : d.status === "rejected" ? "danger" : "success"}>{d.status === "requested" ? "Waiting on client" : d.status === "rejected" ? "Needs a new copy" : d.status === "reviewed" ? "Reviewed" : "Received"}</Badge>
+              {d.hasFile && <a href={`/api/clients/${encodeURIComponent(c.id)}/files/${encodeURIComponent(d.id)}?inline=1`} target="_blank" rel="noopener" className="text-[13px] font-semibold text-accent">Open</a>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}

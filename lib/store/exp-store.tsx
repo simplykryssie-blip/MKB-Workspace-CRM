@@ -80,6 +80,24 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
   const upC = (id: string, fn: (c: ExpCase) => ExpCase) => set((s) => ({ ...s, cases: s.cases.map((c) => (c.id === id ? fn(c) : c)) }));
   const msg = (m: ExpMatter, body: string, from: "staff" | "client" = "staff") => clients().sendMessage(m.clientId, body, "expunge", { expMatterId: m.id, from, author: from === "staff" ? staffById(m.assignments["Client follow-up"]).name : undefined });
   const logClient = (clientId: string, text: string, actor: "staff" | "client" = "staff") => clients().logActivity(clientId, "status", text, actor);
+  /** Live CRM: the court date goes on the assigned staff member's calendar (and moves if the court changes it). */
+  const putHearingOnCalendar = async (caseId: string, hearingAt: string, note: string) => {
+    const c = C(caseId);
+    const client = clients().clients.find((x) => x.id === c.clientId);
+    const start = new Date(hearingAt);
+    if (isNaN(start.getTime())) return;
+    try {
+      if (c.filing.hearingApptId) await call("POST", `/api/calendar/appointments/${encodeURIComponent(c.filing.hearingApptId)}/status`, { status: "cancelled", notify: false }).catch(() => {});
+      const r = await call<{ appointment: { id: string } }>("POST", "/api/calendar/appointments", {
+        kind: "appointment", title: `Court hearing — ${client?.name ?? "client"} (${c.number})`, service: "expunge", memberId: c.assignedTo || undefined,
+        startsAt: start.toISOString(), endsAt: new Date(start.getTime() + 3600e3).toISOString(), location: "in_person", locationNote: [c.locality, ...c.dockets.map((d) => d.court)].filter(Boolean).join(" · ").slice(0, 300),
+        contact: { type: "client", id: c.clientId }, notes: note.slice(0, 4000), notify: false,
+      });
+      upC(caseId, (x) => ({ ...x, filing: { ...x.filing, hearingApptId: r.appointment.id } }));
+    } catch (e) {
+      notify(`The hearing was saved, but couldn't be added to the calendar — ${e instanceof Error ? e.message : "add it there by hand"}.`);
+    }
+  };
   const who = () => ({ who: role() === "owner" ? "MKB Owner" : role() === "coordinator" ? "Jesse Park" : role() === "intake" ? "Alex Lane" : "Robin Tate", role: EXP_ROLES[role()].label });
 
   const moveTo = (caseId: string, status: CaseStatus, note?: string, byId = meId(), extra: Partial<ExpCase> = {}) => {
@@ -341,6 +359,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       const status: CaseStatus = { awaiting: "Awaiting Agency / Court Response", hearing: "Hearing Scheduled", info: "Additional Information Requested", granted: "Granted", denied: "Denied", withdrawn: "Withdrawn" }[u.kind] as CaseStatus;
       moveTo(caseId, status, u.note, u.byId, { filing: { ...c.filing, hearingAt: u.hearingAt ?? c.filing.hearingAt, courtResponse: u.note || c.filing.courtResponse, finalOrderDocId: u.kind === "granted" ? orderDocId : c.filing.finalOrderDocId, finalOrderVerified: u.kind === "granted" ? true : c.filing.finalOrderVerified } });
       const m = M(c.matterId);
+      if (u.kind === "hearing" && u.hearingAt && BACKEND) void putHearingOnCalendar(caseId, u.hearingAt, u.note);
       if (u.kind === "hearing" && u.hearingAt) msg(m, `A court date has been set for case ${c.number}: ${new Date(u.hearingAt).toLocaleString("en-US", { month: "long", day: "numeric", hour: "numeric", minute: "2-digit" })}. We'll send details on what to bring.`);
       if (u.kind === "granted") msg(m, `The court issued an order on case ${c.number}. We're finishing up and will share the order in your portal.`);
       return true;

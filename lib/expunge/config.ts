@@ -253,6 +253,8 @@ export type Filing = {
   filingFee?: number;
   feeStatus: "not_due" | "unpaid" | "paid";
   hearingAt?: string;
+  /** The hearing's appointment on the assigned staff member's calendar (live CRM). */
+  hearingApptId?: string;
   requirements?: string;
   courtResponse?: string;
   finalOrderDocId?: string;

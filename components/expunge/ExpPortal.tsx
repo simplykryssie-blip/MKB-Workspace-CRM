@@ -233,9 +233,9 @@ function PortalHome({ m }: { m: ExpMatter }) {
   const [approving, setApproving] = useState<{ c: ExpCase; i: InfoRequest } | null>(null);
   const [adding, setAdding] = useState<CaseDraft | null>(null);
   const [msg, setMsg] = useState("");
-  const invoices = c.invoices.filter((i) => i.expMatterId === m.id && i.status !== "draft");
+  const invoices = c.invoices.filter((i) => (i.expMatterId === m.id || (!i.expMatterId && i.service === "expunge")) && i.status !== "draft");
   const delivered = c.documents.filter((d) => d.expMatterId === m.id && d.deliveredAt);
-  const msgs = c.messages.filter((x) => x.expMatterId === m.id);
+  const msgs = c.messages.filter((x) => x.expMatterId === m.id || (!x.expMatterId && x.service === "expunge"));
   return (
     <div className="space-y-5">
       <section className="rounded-2xl border border-line bg-surface p-5 shadow-soft sm:p-6">
