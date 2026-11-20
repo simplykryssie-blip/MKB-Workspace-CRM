@@ -43,7 +43,9 @@ export type QType =
   /** Bank routing / account — last four only. */
   | "bank"
   /** IRS Identity Protection PIN (6 digits) — encrypted like an SSN, last four only. */
-  | "ippin";
+  | "ippin"
+  /** A list of criminal charges, each with its outcome (stored as JSON: [{ c, o }]). */
+  | "charges";
 /** Kinds of numbers that go straight to the encrypted vault. */
 export type SecureKind = "ssn" | "ein" | "bank" | "pin";
 
@@ -100,12 +102,39 @@ export const all = (...cs: Cond[]): Cond => (a, row) => cs.every((c) => c(a, row
 export const any = (...cs: Cond[]): Cond => (a, row) => cs.some((c) => c(a, row));
 export const form = (...forms: TaxForm[]): Cond => (a) => forms.includes(a.__form as TaxForm);
 
+/* ---------------- charges (expungement intake) ---------------- */
+
+/** How each charge ended, in the client's words. */
+export const CHARGE_OUTCOMES = [
+  "Dismissed",
+  "Not prosecuted (NPO / nolle prosequi / refused)",
+  "Pleaded guilty",
+  "Pleaded no contest",
+  "Found guilty at trial",
+  "Found not guilty",
+  "Deferred / pretrial diversion",
+  "Still pending",
+  "Not sure",
+] as const;
+export type ChargeEntry = { c: string; o: string };
+export const parseCharges = (v?: string): ChargeEntry[] => {
+  if (!v) return [];
+  try {
+    const x = JSON.parse(v);
+    return Array.isArray(x) ? x.map((e) => ({ c: String(e?.c ?? ""), o: String(e?.o ?? "") })) : [];
+  } catch {
+    return [];
+  }
+};
+/** Any charge on this row ended in a guilty plea or conviction. */
+export const anyGuilty = (id: string): Cond => (a, row) => parseCharges(val(a, row, id)).some((e) => /guilty at trial|pleaded/i.test(e.o));
+
 /* ---------------- evaluation ---------------- */
 
 export const sectionVisible = (s: Section, a: Answers) => !s.show || s.show(a);
 export const qVisible = (q: Q, a: Answers, row?: Row) => !q.show || q.show(a, row);
 export const rowsOf = (a: Answers, sectionId: string): Row[] => (Array.isArray(a[sectionId]) ? (a[sectionId] as Row[]) : []);
-const filled = (v?: string) => v !== undefined && v.trim() !== "";
+const filled = (v?: string) => v !== undefined && v.trim() !== "" && v.trim() !== "[]";
 
 /** Required questions still unanswered in a section (counts every repeat row). */
 /** Why an answer isn't acceptable as entered (format problems), or nothing. */
@@ -116,6 +145,11 @@ export function invalidReason(q: Q, v?: string): string | undefined {
   if (q.type === "last4" && !/^\d{4}$/.test(t)) return "Enter only the last 4 digits.";
   if (q.type === "percent" && !(Number(t) >= 0 && Number(t) <= 100)) return "Enter a percentage from 0 to 100.";
   if (q.type === "state" && !/^[A-Z]{2}$/.test(t)) return "Choose a state.";
+  if (q.type === "charges") {
+    const list = parseCharges(t);
+    if (list.some((e) => !e.c.trim())) return "Type the name of every charge (or remove the empty one).";
+    if (list.some((e) => !e.o)) return "Choose how every charge ended.";
+  }
   return undefined;
 }
 /** Shown red: required and empty, or filled in the wrong format. */
@@ -183,6 +217,7 @@ export function display(q: Q, v?: string) {
   if (q.type === "money") return `$${Number(v).toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
   if (q.type === "percent") return `${v}%`;
   if (q.type === "multi") return v!.split("|").join(", ");
+  if (q.type === "charges") return parseCharges(v).map((e, i) => `${i + 1}. ${e.c || "(charge not named)"} — ${e.o || "outcome not chosen"}`).join("\n") || "—";
   return v!;
 }
 

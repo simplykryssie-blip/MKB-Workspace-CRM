@@ -406,7 +406,7 @@ const SIGN_TEMPLATES: Record<ServiceKey, string[]> = {
   tax: ["Engagement letter — tax preparation", "Form 8879 (e-file authorization)"],
   books: ["Bookkeeping services agreement"],
   biz: ["Engagement letter — business services", "Registered agent consent"],
-  expunge: ["Engagement letter — record expungement", "Records release authorization"],
+  expunge: ["Engagement letter — Expungement Relief", "Records release authorization"],
 };
 
 const APPT_TITLES: Record<ServiceKey, string[]> = {

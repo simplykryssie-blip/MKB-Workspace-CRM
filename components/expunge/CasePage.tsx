@@ -63,7 +63,7 @@ export function CasePage({ id }: { id: string }) {
   const remedy = j?.remedies.find((r) => r.id === c.remedyId);
   return (
     <>
-      <Breadcrumbs crumbs={[{ label: "Record Expungement", href: "/services/record-expungement" }, { label: client.name, href: matterHref(m) }, { label: c.number }]} />
+      <Breadcrumbs crumbs={[{ label: "Expungement Relief", href: "/services/record-expungement" }, { label: client.name, href: matterHref(m) }, { label: c.number }]} />
       <section className="rounded-2xl border border-line bg-surface p-5 shadow-soft sm:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
           <div className="min-w-0 flex-1">

@@ -217,7 +217,7 @@ function Submitted({ intake, client, reload }: { intake: Intake; client: Client;
               {s.repeat ? rowsOf(a, s.id).map((r, i) => (
                 <dl key={i} className="mt-1 rounded-xl border border-line p-2.5">
                   <p className="text-[13px] font-semibold text-ink">{s.repeat!.rowTitle?.(r, i)}</p>
-                  {s.questions.filter((q) => qVisible(q, a, r)).map((q) => <div key={q.id} className="flex flex-wrap gap-x-3 text-[13px]"><dt className="min-w-[200px] flex-1 text-muted">{q.label}</dt><dd className="font-medium text-ink">{display(q, r[q.id])}</dd></div>)}
+                  {s.questions.filter((q) => qVisible(q, a, r)).map((q) => <div key={q.id} className="flex flex-wrap gap-x-3 text-[13px]"><dt className="min-w-[200px] flex-1 text-muted">{q.label}</dt><dd className="whitespace-pre-line font-medium text-ink">{display(q, r[q.id])}</dd></div>)}
                 </dl>
               )) : (
                 <dl className="mt-1 divide-y divide-line rounded-xl border border-line">

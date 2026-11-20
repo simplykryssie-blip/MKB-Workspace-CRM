@@ -32,7 +32,7 @@ type MD = { documents?: ClientDocument[]; messages?: Message[]; [k: string]: unk
 /** Requests that are answered through a secure form (SSN, EIN…), never by uploading a file. */
 const secureForm = (d: Pick<ClientDocument, "name">) => /\(secure form\)/i.test(d.name);
 const firstName = (c: Pick<ClientBits, "name" | "contact_name">) => (c.contact_name || c.name).trim().split(/\s+/)[0];
-const SERVICE_NAME: Record<string, string> = { tax: "Tax preparation", books: "Bookkeeping", biz: "Business services", expunge: "Record expungement" };
+const SERVICE_NAME: Record<string, string> = { tax: "Tax preparation", books: "Bookkeeping", biz: "Business services", expunge: "Expungement Relief" };
 const MODULE: Record<string, "tax" | "books" | "biz" | "exp" | "crm"> = { tax: "tax", books: "books", biz: "biz", expunge: "exp" };
 
 /** Where a tax return stands, in plain words for the client. */

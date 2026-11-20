@@ -147,8 +147,8 @@ const ALL_PAGES: SitePage[] = [
     text("light", "Payroll + bookkeeping", "Your payroll doesn't stop at payday.", "Payroll activity affects financial statements. Connecting payroll to bookkeeping keeps the financial side organized."),
     cta("Your team deserves a payroll system that works."),
   ]),
-  page("record-expungement", "Record Expungement", "Administrative help and document preparation for people seeking a record expungement. MKB is not a law firm and does not give legal advice.", 4, [
-    hero("Record Expungement", "Help with the paperwork behind a fresh start.", "MKB Financial Group provides administrative assistance and document preparation for people pursuing a record expungement. We help you gather your information, request your records and prepare your paperwork — and we keep you updated along the way.", [talk]),
+  page("record-expungement", "Expungement Relief", "Administrative help and document preparation for people seeking a record expungement. MKB is not a law firm and does not give legal advice.", 4, [
+    hero("Expungement Relief", "Help with the paperwork behind a fresh start.", "MKB Financial Group provides administrative assistance and document preparation for people pursuing a record expungement. We help you gather your information, request your records and prepare your paperwork — and we keep you updated along the way.", [talk]),
     cards("warm", "How we help", [
       { label: "1", title: "Intake", body: "We collect your information and organize it in one place." },
       { label: "2", title: "Records requests", body: "We help you request the records and court documents needed for your paperwork." },

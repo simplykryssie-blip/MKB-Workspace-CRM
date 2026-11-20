@@ -205,7 +205,7 @@ function AnswerRows({ qs, get, onAsk, onUpdate, fuFor, revealKey, returnId }: { 
           <div key={q.id} className="group px-3 py-1.5">
             <div className="flex flex-wrap items-baseline gap-x-3">
               <dt className="min-w-[200px] flex-1 text-[12.5px] text-muted">{q.label}</dt>
-              <dd className="text-[13px] font-medium text-ink">{BACKEND && returnId && revealKey && SECURE_TYPES.includes(q.type) && get(q) ? <RevealAnswer returnId={returnId} k={revealKey(q)} masked={display(q, get(q))} /> : display(q, get(q))}</dd>
+              <dd className="whitespace-pre-line text-[13px] font-medium text-ink">{BACKEND && returnId && revealKey && SECURE_TYPES.includes(q.type) && get(q) ? <RevealAnswer returnId={returnId} k={revealKey(q)} masked={display(q, get(q))} /> : display(q, get(q))}</dd>
               {editable && !open && <button onClick={start} className="text-[11.5px] font-semibold text-accent opacity-70 hover:underline group-hover:opacity-100">Edit</button>}
               {onAsk && !fu && <button onClick={() => onAsk(q)} className="text-[11.5px] font-semibold text-accent opacity-70 hover:underline group-hover:opacity-100">Ask</button>}
               {fu && !fu.resolvedAt && fu.status !== "answered" && <span className="text-[11.5px] font-semibold text-muted">{fu.status === "draft" ? "In follow-up" : "Asked"}</span>}

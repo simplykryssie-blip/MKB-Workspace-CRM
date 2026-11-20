@@ -20,7 +20,7 @@ import { BACKEND, call } from "@/lib/sync/remote";
 import type { Client } from "@/lib/types";
 
 /**
- * Client profile: send the payroll, Business Solutions or Record Relief intake by
+ * Client profile: send the payroll, Business Solutions or Expungement Relief intake by
  * private link, and follow each one (opened, submitted, signed PDF).
  */
 export function ClientServiceIntakesCard({ c }: { c: Client }) {
@@ -44,7 +44,7 @@ export function ClientServiceIntakesCard({ c }: { c: Client }) {
     catch (e) { toast(e instanceof Error ? e.message : "Couldn't open the intake", "info"); }
     setStarting(null);
   };
-  /** Record Relief → matter with the client's details and one draft case per record (staff review each). */
+  /** Expungement Relief → matter with the client's details and one draft case per record (staff review each). */
   const openMatter = async (x: SvcItem) => {
     setStarting(x.id);
     try {
@@ -102,7 +102,7 @@ export function ClientServiceIntakesCard({ c }: { c: Client }) {
 
   return (
     <Card>
-      <CardHeader icon={ClipboardList} title="Service intakes" subtitle="Payroll, Business Solutions and Record Relief — sent by private link; the signed PDF lands in Documents."
+      <CardHeader icon={ClipboardList} title="Service intakes" subtitle="Payroll, Business Solutions and Expungement Relief — sent by private link; the signed PDF lands in Documents."
         action={kinds.length ? <div className="flex flex-wrap justify-end gap-2">{kinds.map((k) => <Button key={k} size="sm" icon={Mail} onClick={() => { setSentUrl(null); setEmail(c.email ?? ""); setSending(k); }}>{SERVICE_INTAKES[k].label}</Button>)}</div> : undefined} />
       {items === null ? <p className="border-t border-line px-6 py-4 text-[13px] text-muted">Loading…</p>
         : items.length ? <ServiceIntakeRows items={items} clientId={c.id} action={rowAction} />

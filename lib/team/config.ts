@@ -45,7 +45,7 @@ export const DEPARTMENTS = [
   { key: "tax", label: "Tax Preparation" },
   { key: "books", label: "Bookkeeping" },
   { key: "biz", label: "Business Services" },
-  { key: "exp", label: "Expungement Services" },
+  { key: "exp", label: "Expungement Relief" },
   { key: "admin", label: "Administration" },
   { key: "support", label: "Client Support" },
 ] as const;

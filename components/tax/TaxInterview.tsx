@@ -18,7 +18,7 @@ import { useServiceFees } from "@/lib/fees/use-fees";
 import { feeWords } from "@/lib/fees/config";
 import { LetterView } from "@/components/engagement/LetterView";
 import { SignaturePad } from "@/components/ui/SignaturePad";
-import { display, docsFor, invalidReason, maskLast4, missingIn, needsFix, progress, qVisible, rowsOf, sectionVisible, type Answers, type Q, type Row, type Section, type SecureKind } from "@/lib/tax/interview/engine";
+import { CHARGE_OUTCOMES, parseCharges, display, docsFor, invalidReason, maskLast4, missingIn, needsFix, progress, qVisible, rowsOf, sectionVisible, type Answers, type Q, type Row, type Section, type SecureKind } from "@/lib/tax/interview/engine";
 import { INTERVIEW_VERSION, sectionsFor } from "@/lib/tax/interview/questions";
 import { applyPrefill, prefillFrom } from "@/lib/tax/interview/prefill";
 import { US_STATES, formatPhone } from "@/lib/validation";
@@ -190,6 +190,33 @@ export function SectionView({ s, a, prefilled, showErrors, setVal, setRows, secu
 
 const inputCls = (err?: boolean) => `h-11 w-full rounded-xl border bg-surface px-3 text-[15px] text-ink placeholder:text-faint focus:outline-none focus:ring-4 ${err ? "border-danger focus:ring-danger/15" : "border-line focus:border-accent focus:ring-accent/15"}`;
 
+/** Every charge from one arrest, each with how it ended. Stored as JSON [{ c, o }]. */
+function ChargesInput({ id, value, onChange, err }: { id: string; value: string; onChange: (v: string) => void; err?: boolean }) {
+  const list = parseCharges(value);
+  const rows = list.length ? list : [{ c: "", o: "" }];
+  const save = (next: { c: string; o: string }[]) => onChange(next.length === 1 && !next[0].c && !next[0].o ? "" : JSON.stringify(next));
+  const set = (i: number, k: "c" | "o", v: string) => save(rows.map((r, j) => (j === i ? { ...r, [k]: v } : r)));
+  return (
+    <div className="space-y-2.5">
+      {rows.map((r, i) => (
+        <div key={i} className="rounded-xl border border-line bg-surface-2 p-3">
+          <div className="mb-1.5 flex items-center justify-between">
+            <span className="text-[12.5px] font-semibold text-ink-2">Charge {i + 1}</span>
+            {rows.length > 1 && <button type="button" onClick={() => save(rows.filter((_, j) => j !== i))} className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-danger-ink"><Trash2 size={13} />Remove</button>}
+          </div>
+          <input id={i === 0 ? id : `${id}-${i}`} aria-label={`Charge ${i + 1}`} value={r.c} placeholder="e.g. Simple possession of marijuana" onChange={(e) => set(i, "c", e.target.value)} className={inputCls(err && !r.c.trim())} />
+          <label htmlFor={`${id}-o${i}`} className="mt-2 block text-[12.5px] text-muted">How did this charge end?</label>
+          <select id={`${id}-o${i}`} aria-label={`How charge ${i + 1} ended`} value={r.o} onChange={(e) => set(i, "o", e.target.value)} className={`${inputCls(err && !r.o)} mt-1`}>
+            <option value="">Choose…</option>
+            {CHARGE_OUTCOMES.map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </div>
+      ))}
+      <button type="button" onClick={() => save([...rows, { c: "", o: "" }])} className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-line-strong px-3 py-2 text-[13.5px] font-semibold text-accent"><Plus size={14} />Add another charge</button>
+    </div>
+  );
+}
+
 function Field({ q, idp, value, onChange, err, prefilled, changed, row, secure, reveal, secureKey }: { q: Q; idp: string; value: string; onChange: (v: string) => void; err?: boolean; prefilled?: boolean; changed?: boolean; row?: Row; secure?: SecureSave; reveal?: SecureReveal; secureKey?: string }) {
   const id = `iv-${idp}-${q.id}`;
   const pill = (on: boolean) => `rounded-xl border px-4 py-2.5 text-left text-[14px] font-medium transition-colors ${on ? "border-accent bg-accent-soft text-accent-ink" : "border-line bg-surface text-ink-2 hover:border-line-strong"}`;
@@ -259,6 +286,9 @@ function Field({ q, idp, value, onChange, err, prefilled, changed, row, secure, 
     case "bank":
     case "ippin":
       input = <SecureNumber id={id} q={q} value={value} onChange={onChange} err={err} save={secure && secureKey ? (kind, v) => secure(secureKey, kind, v) : undefined} reveal={reveal && secureKey ? () => reveal(secureKey) : undefined} kind={q.type === "tin" ? (row?.okind && row.okind !== "Individual" ? "ein" : row?.okind === "Individual" ? "ssn" : "ein") : q.type === "ippin" ? "pin" : q.type} />;
+      break;
+    case "charges":
+      input = <ChargesInput id={id} value={value} onChange={onChange} err={err} />;
       break;
     default:
       input = <input id={id} type={q.type === "email" ? "email" : "text"} value={value} placeholder={q.placeholder} onChange={(e) => onChange(e.target.value)} className={inputCls(err)} />;
@@ -457,7 +487,7 @@ function Review({ r, sections, a, answers, by, goTo }: { r: TaxReturn; sections:
 }
 
 function Answered({ qs, get }: { qs: Q[]; get: (q: Q) => string | undefined }) {
-  return <dl className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">{qs.map((q) => <div key={q.id} className="min-w-0"><dt className="text-[12px] text-muted">{q.label}</dt><dd className="text-[13.5px] text-ink">{display(q, get(q))}</dd></div>)}</dl>;
+  return <dl className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">{qs.map((q) => <div key={q.id} className="min-w-0"><dt className="text-[12px] text-muted">{q.label}</dt><dd className="whitespace-pre-line text-[13.5px] text-ink">{display(q, get(q))}</dd></div>)}</dl>;
 }
 
 function Submitted({ r, by }: { r: TaxReturn; by: "client" | "staff" }) {

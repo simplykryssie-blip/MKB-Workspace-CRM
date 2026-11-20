@@ -106,7 +106,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       const id = `EXP-${nextNo}`;
       const c = clients().clients.find((x) => x.id === clientId)!;
       const [first, ...rest] = (c.type === "individual" ? c.name : c.contactName ?? c.name).split(" ");
-      const enrollmentId = clients().enroll(clientId, { service: "expunge", title: "Record expungement — no cases", staffId, fee: 0 });
+      const enrollmentId = clients().enroll(clientId, { service: "expunge", title: "Expungement Relief — no cases", staffId, fee: 0 });
       const m: ExpMatter = {
         id, number: id, clientId, enrollmentId, source, createdAt: nowIso(),
         intake: { status: "inquiry", step: 0, first, middle: "", last: rest.join(" "), aliases: [], currentAddress: [c.address.line1, c.address.city, c.address.state, c.address.zip].filter(Boolean).join(", "), previousAddresses: [], preferredContact: c.preferredContact, idDoc: "not_requested", additional: { pendingCharges: "unknown", onSupervision: "unknown", priorExpungements: "unknown", previousApplications: "unknown", deniedApplications: "unknown", hasRecords: "unknown" }, acks: {} },
@@ -116,11 +116,11 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       set((x) => ({ ...x, matters: [m, ...x.matters], nextMatter: nextNo + 1 }));
       return id;
     },
-    /** Opened from the client's Record Relief intake: remember it and copy their details (marked submitted). */
+    /** Opened from the client's Expungement Relief intake: remember it and copy their details (marked submitted). */
     exists: (kind: "matter" | "case", id: string) => (kind === "matter" ? get().matters : get().cases).some((x) => x.id === id),
     linkIntake(matterId: string, intakeId: string, details: Partial<Intake>) {
       upM(matterId, (m) => ({ ...m, intakeId, intake: { ...m.intake, ...details, additional: { ...m.intake.additional, ...(details.additional ?? {}) }, status: "submitted", submittedAt: nowIso() } }));
-      logClient(M(matterId).clientId, `${M(matterId).number}: opened from the client's Record Relief intake`);
+      logClient(M(matterId).clientId, `${M(matterId).number}: opened from the client's Expungement Relief intake`);
     },
     sendIntake(matterId: string) {
       const m = M(matterId);
@@ -504,7 +504,7 @@ function useExpSync(state: State, dispatch: React.Dispatch<Action>, setLive: (c:
         return next;
       } });
     } catch (e) {
-      if (!(e instanceof RemoteError && (e.status === 401 || e.status === 403))) notify("Couldn't load Record Expungement.");
+      if (!(e instanceof RemoteError && (e.status === 401 || e.status === 403))) notify("Couldn't load Expungement Relief.");
     }
   }, []);
   useEffect(() => {

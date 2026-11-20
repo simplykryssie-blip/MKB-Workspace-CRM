@@ -422,7 +422,7 @@ function EnrollmentRow({ c, e, compact }: { c: Client; e: Enrollment; compact?: 
       )}
       {isTax && !(e.service === "books" && !booksWs && !bizReq && !expMatter) && (
         <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
-          <span className="mr-auto text-[12px] text-muted">{expMatter ? `Managed in Record Expungement as ${expMatter.number}.` : bizReq ? `Managed in Business Services as ${bizReq.number}.` : booksWs ? "Monthly close is managed in the Bookkeeping workspace." : "Workflow is managed in the Tax Preparation Center."}</span>
+          <span className="mr-auto text-[12px] text-muted">{expMatter ? `Managed in Expungement Relief as ${expMatter.number}.` : bizReq ? `Managed in Business Services as ${bizReq.number}.` : booksWs ? "Monthly close is managed in the Bookkeeping workspace." : "Workflow is managed in the Tax Preparation Center."}</span>
           {expMatter ? (
             <Button size="sm" variant={compact ? "ghost" : "secondary"} href={`/services/record-expungement/matters/${expMatter.id}`}>Open expungement matter</Button>
           ) : bizReq ? (

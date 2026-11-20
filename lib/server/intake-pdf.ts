@@ -79,7 +79,7 @@ async function makeWriter(docTitle: string, headerRight: string, brand: { name: 
   };
   const row = (label: string, value: string) => {
     const lw = 270, vw = W - 2 * M - lw - 12;
-    const ll = wrap(label, reg, 9, lw), vl = wrap(value, bold, 9.5, vw);
+    const ll = wrap(label, reg, 9, lw), vl = value.split("\n").flatMap((part) => wrap(part, bold, 9.5, vw));
     const h = Math.max(ll.length, vl.length) * 12 + 4;
     need(h);
     ll.forEach((l, i) => page.drawText(l, { x: M, y: y - i * 12, size: 9, font: reg, color: MUTED }));

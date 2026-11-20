@@ -109,7 +109,7 @@ export async function seedDev(env: AppEnv) {
   for (const r of BIZ_REQUESTS) rec("biz_request", r.id, r.clientId, r);
   for (const i of COMPLIANCE_ITEMS) rec("biz_item", i.id, BIZ_ENTITIES.find((e) => e.id === i.entityId)?.clientId, i);
 
-  // Record Expungement: sample matters and cases, stored encrypted like real ones.
+  // Expungement Relief: sample matters and cases, stored encrypted like real ones.
   for (const m of EXP_MATTERS) add("INSERT INTO service_records (id, kind, client_id, data, encrypted, created_at, created_by, updated_at) VALUES (?, 'exp_matter', ?, ?, 1, ?, 's-mk', ?)", m.id, m.clientId, JSON.stringify(await encryptField(env.ENCRYPTION_KEY, JSON.stringify({ ...m, enrollmentId: expEnrollmentId(m) }), `service_record:${m.id}`)), t, t);
   for (const c of EXP_CASES) add("INSERT INTO service_records (id, kind, client_id, data, encrypted, created_at, created_by, updated_at) VALUES (?, 'exp_case', ?, ?, 1, ?, 's-mk', ?)", c.id, c.clientId, JSON.stringify(await encryptField(env.ENCRYPTION_KEY, JSON.stringify(c), `service_record:${c.id}`)), t, t);
 

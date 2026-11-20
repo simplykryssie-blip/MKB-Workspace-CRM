@@ -1,5 +1,5 @@
 /**
- * Private-link intakes for payroll, Business Solutions and MKB Record Relief.
+ * Private-link intakes for payroll, Business Solutions and MKB Expungement Relief.
  * Same flow as the bookkeeping intake: staff (or a website "Get Started" form)
  * send the client a private link; the client answers, signs and submits; MKB
  * gets the signed PDF in Documents, the documents to upload are requested in
@@ -180,7 +180,7 @@ export async function publicSubmitServiceIntake(env: AppEnv, token: string, ip: 
   await useLink(env, l.id);
   await env.FILES.put(`clients/${c.id}/signatures/${r.id}-intake.png`, sigPng, { httpMetadata: { contentType: "image/png" }, customMetadata: { intake: r.id, signedBy: consent, signedAt: t, sha256: await sha256Bytes(sigPng) } });
 
-  // Profile: business and contact details (payroll / Business Solutions), contact details (Record Relief).
+  // Profile: business and contact details (payroll / Business Solutions), contact details (Expungement Relief).
   const owners = Array.isArray(answers.owners) ? answers.owners : answers.contactName ? [{ name: answers.contactName as string, title: (answers.contactTitle as string) ?? "" }] : [];
   const forProfile: Record<string, unknown> = r.kind === "relief"
     ? { street: answers.street, city: answers.city, state: answers.state, zip: answers.zip, phone: answers.phone, email: answers.email }

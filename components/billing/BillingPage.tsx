@@ -21,7 +21,8 @@ import { BankImport } from "./BankImport";
 export type Row = Invoice & { clientId: string; clientName: string };
 type Payment = { id: string; amount: number; method: string; source: string; reference?: string; receivedAt: string; note?: string };
 const usd = (n: number) => `${n < 0 ? "-" : ""}$${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const SERVICE_LABEL: Record<ServiceKey, string> = { tax: "Tax", books: "Bookkeeping", biz: "Business services", expunge: "Expungement" };
+const SERVICE_LABEL: Record<ServiceKey, string> = { tax: "Tax", books: "Bookkeeping & payroll", biz: "Business Solutions", expunge: "Expungement Relief" };
+const DESC_HINT: Record<ServiceKey, string> = { tax: "e.g. 2025 tax preparation", books: "e.g. November bookkeeping", biz: "e.g. LLC formation", expunge: "e.g. Expungement Relief — document preparation" };
 const input = "h-10 w-full rounded-xl border border-line bg-surface px-3 text-[14px] text-ink";
 const owed = (i: Invoice) => Math.max(0, i.amount - i.paid);
 
@@ -32,7 +33,7 @@ export function BillingPage() {
   const { clients } = useClients();
   const [rows, setRows] = useState<Row[] | null>(null);
   const [q, setQ] = useState("");
-  const [status, setStatus] = useState<"all" | "unpaid" | "overdue" | "refund" | "paid" | "draft" | "void">("unpaid");
+  const [status, setStatus] = useState<"all" | "open" | "unpaid" | "overdue" | "refund" | "paid" | "draft" | "void">("open");
   const [service, setService] = useState<ServiceKey | "all">("all");
   const [open, setOpen] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -53,11 +54,18 @@ export function BillingPage() {
       overdue: live.filter((r) => r.status === "overdue").reduce((s, r) => s + owed(r), 0),
       refund: live.filter((r) => r.paymentMode === "bank_product").reduce((s, r) => s + owed(r), 0),
       collected: live.filter((r) => r.paidAt?.startsWith(month)).reduce((s, r) => s + r.paid, 0),
+      drafts: (rows ?? []).filter((r) => r.status === "draft").length,
+      byService: (Object.keys(SERVICE_LABEL) as ServiceKey[]).map((k) => {
+        const mine = (rows ?? []).filter((r) => r.service === k);
+        const open = mine.filter((r) => r.status !== "void" && r.status !== "draft" && r.paymentMode !== "bank_product");
+        return { k, count: mine.filter((r) => r.status !== "void").length, owed: open.reduce((s, r) => s + owed(r), 0), drafts: mine.filter((r) => r.status === "draft").length, collected: mine.filter((r) => r.status !== "void" && r.paidAt?.startsWith(month)).reduce((s, r) => s + r.paid, 0) };
+      }),
     };
   }, [rows]);
   const shown = useMemo(() => (rows ?? []).filter((r) => {
     if (service !== "all" && r.service !== service) return false;
     if (q && !`${r.number} ${r.clientName} ${r.description}`.toLowerCase().includes(q.toLowerCase())) return false;
+    if (status === "open") return r.status === "draft" || (["open", "partial", "overdue"].includes(r.status) && r.paymentMode !== "bank_product");
     if (status === "unpaid") return ["open", "partial", "overdue"].includes(r.status) && r.paymentMode !== "bank_product";
     if (status === "refund") return r.paymentMode === "bank_product" && owed(r) > 0 && r.status !== "void";
     if (status === "all") return true;
@@ -73,17 +81,27 @@ export function BillingPage() {
           <p className="mt-1 text-[14px] text-muted">Every invoice and payment across all services.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {canSettings && <Button icon={Settings2} onClick={() => setFeesOpen(true)}>Back-end fees</Button>}
+          {canSettings && <Button icon={Settings2} onClick={() => setFeesOpen(true)}>Tax back-end fees</Button>}
           {team.can("billing", "approve") && <Button icon={FileUp} onClick={() => setImportOpen(true)}>Import bank file</Button>}
           {can && <Button variant="primary" icon={Plus} onClick={() => setCreating(true)}>New invoice</Button>}
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        {[["Outstanding", stats.outstanding, "unpaid"], ["Overdue", stats.overdue, "overdue"], ["Waiting on refunds", stats.refund, "refund"], ["Collected this month", stats.collected, "paid"]].map(([l, v, f]) => (
-          <button key={String(l)} onClick={() => setStatus(f as typeof status)} className="rounded-2xl border border-line bg-surface p-4 text-left shadow-soft hover:border-accent/40">
-            <span className="block text-[22px] font-bold tabular-nums text-ink">{usd(v as number)}</span>
-            <span className="text-[12.5px] text-muted">{l as string}</span>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        {[["Outstanding", usd(stats.outstanding), "unpaid"], ["Overdue", usd(stats.overdue), "overdue"], ["Waiting on tax refunds", usd(stats.refund), "refund"], ["Collected this month", usd(stats.collected), "paid"], ["Drafts — not sent yet", String(stats.drafts), "draft"]].map(([l, v, f]) => (
+          <button key={l} onClick={() => setStatus(f as typeof status)} className={`rounded-2xl border bg-surface p-4 text-left shadow-soft hover:border-accent/40 ${f === "draft" && stats.drafts ? "border-warning/50" : "border-line"}`}>
+            <span className="block text-[22px] font-bold tabular-nums text-ink">{v}</span>
+            <span className="text-[12.5px] text-muted">{l}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label="By service">
+        {stats.byService.map((x) => (
+          <button key={x.k} onClick={() => { setService(service === x.k ? "all" : x.k); setStatus("all"); }} aria-pressed={service === x.k} className={`rounded-2xl border p-3.5 text-left hover:border-accent/40 ${service === x.k ? "border-accent bg-accent-soft/40" : "border-line bg-surface"}`}>
+            <span className="flex items-center gap-2 text-[13px] font-semibold text-ink"><span className="h-2 w-2 rounded-full" style={{ background: `var(--svc-${x.k})` }} />{SERVICE_LABEL[x.k]}</span>
+            <span className="mt-1 block text-[12.5px] text-muted">{x.count} invoice{x.count === 1 ? "" : "s"} · <b className="text-ink">{usd(x.owed)}</b> owed</span>
+            <span className="block text-[12px] text-muted">{usd(x.collected)} collected this month{x.drafts ? ` · ${x.drafts} draft${x.drafts === 1 ? "" : "s"}` : ""}</span>
           </button>
         ))}
       </div>
@@ -97,7 +115,7 @@ export function BillingPage() {
             <option value="all">All services</option>{(Object.keys(SERVICE_LABEL) as ServiceKey[]).map((s) => <option key={s} value={s}>{SERVICE_LABEL[s]}</option>)}
           </select>
           <div className="flex flex-wrap gap-1.5">
-            {([["unpaid", "Unpaid"], ["overdue", "Overdue"], ["refund", "Paid from refund"], ["paid", "Paid"], ["draft", "Drafts"], ["void", "Void"], ["all", "All"]] as const).map(([k, l]) => (
+            {([["open", "Open & drafts"], ["unpaid", "Unpaid"], ["overdue", "Overdue"], ["refund", "Paid from refund"], ["paid", "Paid"], ["draft", "Drafts"], ["void", "Void"], ["all", "All"]] as const).map(([k, l]) => (
               <button key={k} onClick={() => setStatus(k)} className={`rounded-full border px-3 py-1 text-[12.5px] font-semibold ${status === k ? "border-accent bg-accent-soft text-accent-ink" : "border-line text-ink-2"}`}>{l}</button>
             ))}
           </div>
@@ -288,14 +306,14 @@ export function InvoiceEditor({ open, onClose, onSaved, existing, preset }: { op
             <label className={`flex flex-1 cursor-pointer items-start gap-2 rounded-xl border p-3 text-[13px] ${mode === "bank_product" ? "border-accent bg-accent-soft/40" : "border-line"}`}><input type="radio" name="ie-mode" checked={mode === "bank_product"} onChange={() => setMode("bank_product")} className="mt-0.5 accent-[var(--accent)]" /><span><b>Pay from refund (bank product)</b><span className="block text-muted">Back-end fees are added, with the refund disclosure.</span></span></label>
           </fieldset>
         )}
-        <div><label htmlFor="ie-desc" className="mb-1 block text-[13px] font-medium text-ink-2">Description</label><input id="ie-desc" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="e.g. 2025 tax preparation" className={input} /></div>
+        <div><label htmlFor="ie-desc" className="mb-1 block text-[13px] font-medium text-ink-2">Description</label><input id="ie-desc" value={description} onChange={(e) => setDescription(e.target.value)} placeholder={DESC_HINT[service]} className={input} /></div>
         <div className="space-y-2">
           <span className="block text-[13px] font-medium text-ink-2">Lines</span>
           {lines.map((l, n) => (
             <div key={n} className="grid grid-cols-[1fr_110px_auto] gap-2 sm:grid-cols-[1fr_150px_110px_auto]">
               <input aria-label={`Line ${n + 1} description`} value={l.label} onChange={(e) => setLines(lines.map((x, j) => (j === n ? { ...x, label: e.target.value } : x)))} placeholder="Description" className={input} />
               <select aria-label={`Line ${n + 1} type`} value={l.kind} onChange={(e) => setLines(lines.map((x, j) => (j === n ? { ...x, kind: e.target.value as InvoiceLine["kind"] } : x)))} className={`${input} hidden sm:block`}>
-                <option value="service">MKB fee</option><option value="additional">Additional fee</option><option value="discount">Discount</option><option value="filing">Government fee</option><option value="third_party">Third-party fee</option><option value="late_fee">Late fee</option>
+                <option value="service">MKB fee</option><option value="additional">Additional fee</option><option value="discount">Discount</option><option value="filing">{service === "expunge" ? "Court filing fee" : "Government fee"}</option>{service === "expunge" && <><option value="clerk">Clerk fee</option><option value="records">Records fee</option><option value="government">Agency fee</option></>}<option value="third_party">Third-party fee</option><option value="late_fee">Late fee</option>
               </select>
               <input aria-label={`Line ${n + 1} amount`} type="number" step="0.01" value={l.amount} onChange={(e) => setLines(lines.map((x, j) => (j === n ? { ...x, amount: e.target.value } : x)))} placeholder="0.00" className={input} />
               <button type="button" aria-label={`Remove line ${n + 1}`} onClick={() => setLines(lines.filter((_, j) => j !== n))} className="grid h-10 w-10 place-items-center rounded-lg text-muted hover:bg-surface-hover"><Trash2 size={16} /></button>

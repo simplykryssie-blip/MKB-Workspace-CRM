@@ -64,7 +64,7 @@ export function ExpPortal({ clientId }: { clientId: string }) {
       <>
         {banner}
         <Card className="p-8 text-center">
-          <h1 className="text-[22px] font-bold text-ink">Record expungement help</h1>
+          <h1 className="text-[22px] font-bold text-ink">Expungement Relief</h1>
           <p className="mx-auto mt-2 max-w-xl text-[14px] text-ink-2">MKB can help you gather your records and prepare paperwork for cases in Louisiana and Texas. Start by telling us a little about your situation.</p>
           <Button className="mt-4" variant="primary" onClick={() => { exp.createInquiry(clientId, "portal"); toast("Started — complete your intake below"); }}>Get started</Button>
           <div className="mx-auto mt-5 max-w-2xl"><NotLegalAdvice compact /></div>

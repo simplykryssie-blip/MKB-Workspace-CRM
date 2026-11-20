@@ -209,8 +209,8 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
   },
   service_intake_link: {
     key: "service_intake_link",
-    name: "Service intake link (payroll, Business Solutions, Record Relief)",
-    when: "Sent when staff send a payroll, Business Solutions or Record Relief intake, or automatically after a website Get Started form. The button opens the client's private intake — no portal login.",
+    name: "Service intake link (payroll, Business Solutions, Expungement Relief)",
+    when: "Sent when staff send a payroll, Business Solutions or Expungement Relief intake, or automatically after a website Get Started form. The button opens the client's private intake — no portal login.",
     placeholders: ["firstName", "service", "expires", "days", "staffName"],
     subject: "Your MKB {{service}} intake — private link inside",
     heading: "Hi {{firstName}}, let's get started.",
@@ -223,8 +223,8 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
   },
   service_intake_received: {
     key: "service_intake_received",
-    name: "Service intake received (payroll, Business Solutions, Record Relief)",
-    when: "Sent right after a payroll, Business Solutions or Record Relief intake is submitted. The signed PDF copy is attached.",
+    name: "Service intake received (payroll, Business Solutions, Expungement Relief)",
+    when: "Sent right after a payroll, Business Solutions or Expungement Relief intake is submitted. The signed PDF copy is attached.",
     placeholders: ["firstName", "service", "date", "next"],
     subject: "We received your {{service}} intake — here's what happens next",
     heading: "Thank you, {{firstName}} — we received your intake.",

@@ -65,7 +65,7 @@ export const NAV: { section?: string; items: NavItem[] }[] = [
           { label: "Tax Preparation", href: "/services/tax-preparation", icon: FileText, dot: "var(--svc-tax)" },
           { label: "Bookkeeping", href: "/services/bookkeeping", icon: BarChart3, dot: "var(--svc-books)" },
           { label: "Business Services", href: "/services/business-services", icon: Briefcase, dot: "var(--svc-biz)" },
-          { label: "Record Expungement", href: "/services/record-expungement", icon: Scale, dot: "var(--svc-expunge)" },
+          { label: "Expungement Relief", href: "/services/record-expungement", icon: Scale, dot: "var(--svc-expunge)" },
         ],
       },
     ],

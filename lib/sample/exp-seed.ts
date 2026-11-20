@@ -335,7 +335,7 @@ export function expClientRecords(clientId: string): { documents: ClientDocument[
     (INVOICES[m.id] ?? []).forEach((iv) => {
       const total = iv.lines.reduce((s, l) => s + l.amount, 0);
       const paid = iv.paid === "all" ? total : iv.paid;
-      const inv: Invoice = { id: iv.id, number: iv.number, service: "expunge", description: `Record expungement assistance — ${m.number}`, amount: total, paid, status: paid >= total ? "paid" : iv.due < 0 ? (paid > 0 ? "partial" : "overdue") : paid > 0 ? "partial" : "open", issuedAt: d(iv.issued), dueAt: d(iv.due), lines: iv.lines, paidAt: iv.paidAt != null ? d(iv.paidAt) : undefined, expMatterId: m.id };
+      const inv: Invoice = { id: iv.id, number: iv.number, service: "expunge", description: `Expungement Relief — ${m.number}`, amount: total, paid, status: paid >= total ? "paid" : iv.due < 0 ? (paid > 0 ? "partial" : "overdue") : paid > 0 ? "partial" : "open", issuedAt: d(iv.issued), dueAt: d(iv.due), lines: iv.lines, paidAt: iv.paidAt != null ? d(iv.paidAt) : undefined, expMatterId: m.id };
       if (iv.refund) {
         inv.adjustments = [{ id: `${iv.id}-adj`, kind: "refund", amount: iv.refund, note: "Unused records fee refunded (sample)", at: d(-100), byId: "s-mk" }];
         inv.amount = total - iv.refund;

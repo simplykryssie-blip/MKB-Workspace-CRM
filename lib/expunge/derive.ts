@@ -65,7 +65,7 @@ export function matterEnrollment(m: ExpMatter, cases: ExpCase[]): { title: strin
     p === "On hold" ? "Screening" : "Completed";
   const allDone = cases.length > 0 && cases.every((c) => ["Completed", "Denied", "Withdrawn"].includes(c.status));
   const status = allDone ? "complete" : p === "On hold" ? "on_hold" : p === "Intake awaiting completion" || p === "Awaiting client approval" ? "waiting_on_client" : p === "Awaiting eligibility review" || p === "Flagged for legal review" ? "in_review" : "active";
-  return { title: `Record expungement — ${n || "no"} case${n === 1 ? "" : "s"}`, stage, status, progress: Math.max(5, Math.round((EXP_STAGES.indexOf(stage as (typeof EXP_STAGES)[number]) / (EXP_STAGES.length - 1)) * 100)) };
+  return { title: `Expungement Relief — ${n || "no"} case${n === 1 ? "" : "s"}`, stage, status, progress: Math.max(5, Math.round((EXP_STAGES.indexOf(stage as (typeof EXP_STAGES)[number]) / (EXP_STAGES.length - 1)) * 100)) };
 }
 
 /** Why screening can't be marked "Administrative Processing Approved" yet. */

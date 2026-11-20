@@ -6,7 +6,7 @@
 export type Brand = "mkb" | "monarch";
 export type Location = "video" | "phone" | "in_person";
 export const LOCATIONS: Record<Location, string> = { video: "Video call", phone: "Phone call", in_person: "In person" };
-export const SERVICES: Record<string, string> = { other: "General", tax: "Tax", books: "Bookkeeping & payroll", biz: "Business Solutions", expunge: "Record Relief", monarch: "Monarch" };
+export const SERVICES: Record<string, string> = { other: "General", tax: "Tax", books: "Bookkeeping & payroll", biz: "Business Solutions", expunge: "Expungement Relief", monarch: "Monarch" };
 export const PRIORITIES = { low: "Low", normal: "Normal", high: "High", urgent: "Urgent" } as const;
 export type Priority = keyof typeof PRIORITIES;
 export const REPEATS = { none: "Doesn't repeat", daily: "Every day", weekly: "Every week", monthly: "Every month", quarterly: "Every 3 months", yearly: "Every year" } as const;

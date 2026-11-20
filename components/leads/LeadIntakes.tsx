@@ -208,7 +208,7 @@ export function LeadIntakesCard({ lead, intakes: h }: { lead: Lead; intakes: Ret
   );
 }
 
-/** Payroll, Business Solutions and Record Relief intakes: status, and the signed PDF once submitted. Shared with the client page. */
+/** Payroll, Business Solutions and Expungement Relief intakes: status, and the signed PDF once submitted. Shared with the client page. */
 export function ServiceIntakeRows({ items, clientId, action }: { items: SvcItem[]; clientId?: string; action?: (x: SvcItem) => React.ReactNode }) {
   return (
     <ul className="divide-y divide-line border-t border-line">

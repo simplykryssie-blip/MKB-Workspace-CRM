@@ -1,5 +1,5 @@
 /**
- * Record Expungement — server side. Matters and cases hold criminal-history
+ * Expungement Relief — server side. Matters and cases hold criminal-history
  * details, so each record is stored encrypted (AES-GCM, bound to its id) and
  * every load of the module is written to the audit log. Reading needs Record
  * Expungement "view" plus access to the client; new matters and cases need
@@ -67,7 +67,7 @@ export async function listExp(env: AppEnv, a: Actor) {
   const ok = await accessible(env, s, rows.map((r) => r.client_id));
   const mine = rows.filter((r) => ok.has(r.client_id));
   const out = await Promise.all(mine.map(async (r) => ({ kind: r.kind, rec: { ...(await open<Rec>(env, r)), rev: r.rev } })));
-  if (mine.length) await audit(env.DB, s, { action: "Client record access", resource: "Record Expungement", department: "exp", meta: `Opened ${mine.filter((r) => r.kind === "exp_matter").length} matter(s) and ${mine.filter((r) => r.kind === "exp_case").length} case(s)` });
+  if (mine.length) await audit(env.DB, s, { action: "Client record access", resource: "Expungement Relief", department: "exp", meta: `Opened ${mine.filter((r) => r.kind === "exp_matter").length} matter(s) and ${mine.filter((r) => r.kind === "exp_case").length} case(s)` });
   return { matters: out.filter((x) => x.kind === "exp_matter").map((x) => x.rec), cases: out.filter((x) => x.kind === "exp_case").map((x) => x.rec), config: await loadExpConfig(env) };
 }
 
@@ -237,7 +237,7 @@ export async function saveExpConfig(env: AppEnv, a: Actor, b: { config?: Partial
   const t = JSON.stringify(clean);
   if (t.length > MAX_JSON) throw new HttpError(413, "These settings are too large to save.");
   await env.DB.prepare("INSERT INTO service_settings (key, data, updated_at, updated_by) VALUES ('exp', ?, ?, ?) ON CONFLICT(key) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at, updated_by = excluded.updated_by").bind(t, now(), s.member.id).run();
-  await audit(env.DB, s, { action: "Record update", resource: "Record Expungement settings", department: "exp", meta: "Jurisdictions, services or prices updated" });
+  await audit(env.DB, s, { action: "Record update", resource: "Expungement Relief settings", department: "exp", meta: "Jurisdictions, services or prices updated" });
   return { config: await loadExpConfig(env) };
 }
 
@@ -245,7 +245,7 @@ export async function saveExpConfig(env: AppEnv, a: Actor, b: { config?: Partial
 const longDate = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "America/Chicago" });
 async function letterVars(env: AppEnv, m: ExpMatter, at: string) {
   const c = await one<{ name: string; contact_name: string | null }>(env.DB, "SELECT name, contact_name FROM clients WHERE id = ?", m.clientId);
-  return { ...feeWords(await loadFees(env)), clientName: c?.contact_name || c?.name || "Client", service: "Record expungement", fee: "", taxYear: "", date: longDate(at) };
+  return { ...feeWords(await loadFees(env)), clientName: c?.contact_name || c?.name || "Client", service: "Expungement Relief", fee: "", taxYear: "", date: longDate(at) };
 }
 async function saveEngagementPdf(env: AppEnv, a: Staff, m: ExpMatter) {
   const e = m.engagement;
@@ -255,7 +255,7 @@ async function saveEngagementPdf(env: AppEnv, a: Staff, m: ExpMatter) {
   const vars = await letterVars(env, m, e.acceptedAt);
   const recorder = (await one<{ name: string }>(env.DB, "SELECT name FROM members WHERE id = ?", e.recordedBy ?? ""))?.name;
   const pdf = await buildLetterPdf({ clientName: vars.clientName, parts: [{ title: fillLetter(l.title, vars), body: fillLetter(l.body, vars), version: l.version }, { title: fillLetter(t.title, vars), body: fillLetter(t.body, vars), version: t.version }], acceptedName: e.acceptedName, acceptedAt: e.acceptedAt, method: e.method, recordedBy: recorder });
-  await storeClientPdf(env, a, m.clientId, pdf, { name: `${m.number} engagement letter — record expungement (accepted ${longDate(e.acceptedAt)})`, fileName: `MKB-Engagement-Letter-${m.number}.pdf`, category: "Engagement letter", service: "expunge", activity: `Saved the signed engagement letter for ${m.number} to Documents` });
+  await storeClientPdf(env, a, m.clientId, pdf, { name: `${m.number} engagement letter — Expungement Relief (accepted ${longDate(e.acceptedAt)})`, fileName: `MKB-Engagement-Letter-${m.number}.pdf`, category: "Engagement letter", service: "expunge", activity: `Saved the signed engagement letter for ${m.number} to Documents` });
 }
 export async function expLetter(env: AppEnv, a: Actor, id: string) {
   requirePermission(a, "exp", "view");

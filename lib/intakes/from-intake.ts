@@ -1,12 +1,12 @@
 /**
- * Turns a submitted Business Solutions or Record Relief intake into the staff
+ * Turns a submitted Business Solutions or Expungement Relief intake into the staff
  * work record: a Business Services request (pre-filled request form) or an
  * Expungement matter with the client's records as draft cases for staff review.
  * Nothing here decides eligibility or files anything.
  */
 import type { EntityType } from "@/lib/biz/config";
 import type { Disposition } from "@/lib/expunge/config";
-import type { Answers, Row } from "@/lib/tax/interview/engine";
+import { parseCharges, type Answers, type Row } from "@/lib/tax/interview/engine";
 
 const s = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 const rows = (a: Answers, id: string): Row[] => (Array.isArray(a[id]) ? (a[id] as Row[]) : []);
@@ -65,6 +65,17 @@ const OUTCOME: Record<string, Disposition> = {
   "Pleaded or found guilty — sentence completed": "Convicted",
   "Still on probation or parole": "Convicted",
 };
+/** The client's words for how a charge ended → the case's disposition. */
+const CHARGE_OUTCOME: Record<string, Disposition> = {
+  Dismissed: "Dismissed",
+  "Not prosecuted (NPO / nolle prosequi / refused)": "Refused / not prosecuted",
+  "Pleaded guilty": "Convicted",
+  "Pleaded no contest": "Convicted",
+  "Found guilty at trial": "Convicted",
+  "Found not guilty": "Acquitted / not guilty",
+  "Deferred / pretrial diversion": "Deferred adjudication",
+  "Still pending": "Pending",
+};
 const tri = (v: unknown) => (s(v) === "Yes" ? "yes" : s(v) === "No" ? "no" : "unknown") as "yes" | "no" | "unknown";
 
 /** Matter intake details + one draft case per record the client listed (staff review each before it opens). */
@@ -83,18 +94,25 @@ export function reliefFrom(a: Answers) {
   const cases = rows(a, "records").map((r) => {
     const inLa = s(r.inLa) !== "No";
     const parish = s(r.parish);
-    const disposition: Disposition = s(r.stage) === "Arrest only — no charges filed" ? "Refused / not prosecuted" : OUTCOME[s(r.outcome)] ?? "Unknown";
+    const listed = parseCharges(s(r.charges));
+    // Older intakes (before charges were listed one by one) had one outcome for the whole record.
+    const oldDisposition: Disposition = s(r.stage) === "Arrest only — no charges filed" ? "Refused / not prosecuted" : OUTCOME[s(r.outcome)] ?? "Unknown";
+    const charges = listed.length
+      ? listed.map((e) => ({ id: `ch-${Math.random().toString(36).slice(2, 9)}`, description: e.c || "Charge to confirm from records", disposition: CHARGE_OUTCOME[e.o] ?? ("Unknown" as Disposition), notes: e.o ? `Client says: ${e.o}` : undefined }))
+      : [{ id: `ch-${Math.random().toString(36).slice(2, 9)}`, description: "Charge details to confirm from records", disposition: oldDisposition }];
+    const done = s(r.sentenceDone);
+    const sentenceCompleted = done.startsWith("Yes") || s(r.outcome) === "Pleaded or found guilty — sentence completed" ? ("yes" as const) : done.startsWith("No") || s(r.outcome) === "Still on probation or parole" ? ("no" as const) : ("unknown" as const);
     return {
-      // MKB Record Relief works Louisiana records; a non-Louisiana record is flagged in the notes for staff.
+      // MKB Expungement Relief works Louisiana records; a non-Louisiana record is flagged in the notes for staff.
       jurisdictionId: "J-LA",
       state: "LA",
       remedyId: undefined,
       locality: parish ? `${parish} Parish` : "",
       arrestingAgency: s(r.agency),
       arrestingJurisdiction: parish ? `${parish} Parish` : undefined,
-      sentenceCompleted: s(r.outcome) === "Pleaded or found guilty — sentence completed" ? ("yes" as const) : s(r.outcome) === "Still on probation or parole" ? ("no" as const) : ("unknown" as const),
-      notes: [s(r.when) && `About when: ${s(r.when)}`, s(r.stage) && `How far it went: ${s(r.stage)}`, s(r.outcome) && `Outcome (client's understanding): ${s(r.outcome)}`, s(r.papers) && `Has court papers: ${s(r.papers)}`, !inLa && "Client says this record is NOT in Louisiana."].filter(Boolean).join("\n"),
-      dockets: [{ id: `dk-${Math.random().toString(36).slice(2, 9)}`, court: s(r.agency), docketNumber: s(r.caseNo), charges: [{ id: `ch-${Math.random().toString(36).slice(2, 9)}`, description: "Charge details to confirm from records", disposition }] }],
+      sentenceCompleted,
+      notes: [s(r.when) && `Arrest date (about): ${s(r.when)}`, done && `Sentence finished: ${done}`, s(r.stage) && `How far it went: ${s(r.stage)}`, s(r.outcome) && `Outcome (client's understanding): ${s(r.outcome)}`, s(r.papers) && `Has court papers: ${s(r.papers)}`, !inLa && "Client says this record is NOT in Louisiana."].filter(Boolean).join("\n"),
+      dockets: [{ id: `dk-${Math.random().toString(36).slice(2, 9)}`, court: s(r.agency), docketNumber: s(r.caseNo), charges }],
     };
   });
   const notes = [s(a.why) && `Why they're seeking relief: ${s(a.why).split("|").join(", ")}`, s(a.notes) && `Client's notes: ${s(a.notes)}`].filter(Boolean).join("\n");

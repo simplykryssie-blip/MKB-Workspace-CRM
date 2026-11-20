@@ -18,7 +18,7 @@ export const LETTER_INFO: Record<LetterKey, { name: string; when: string }> = {
   tax_business: { name: "Business tax preparation", when: "Accepted with the business tax interview (1065, 1120-S, 1120, 990)." },
   books: { name: "Bookkeeping", when: "Accepted when a bookkeeping plan starts." },
   biz: { name: "Business services", when: "Accepted when a business service request starts." },
-  exp: { name: "Record expungement", when: "Accepted when an expungement matter opens." },
+  exp: { name: "Expungement Relief", when: "Accepted when an expungement matter opens." },
 };
 
 export const LETTER_KEYS = Object.keys(LETTER_INFO) as LetterKey[];
@@ -240,7 +240,7 @@ MKB Financial Group LLC
 {{date}}
 `),
 
-  exp: T("Engagement Letter — Record Expungement Services", `
+  exp: T("Engagement Letter — Expungement Relief", `
 Dear {{clientName}},
 
 Thank you for choosing MKB Financial Group LLC. This letter explains the expungement support services we will provide.

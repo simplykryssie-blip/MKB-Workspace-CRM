@@ -1,5 +1,5 @@
 /**
- * Service intakes for payroll, Business Solutions and MKB Record Relief — the
+ * Service intakes for payroll, Business Solutions and MKB Expungement Relief — the
  * same guided-interview engine as the tax interview and bookkeeping intake
  * (branching questions, repeating rows, document list). The client fills them
  * in on a private link (no login), signs and submits; MKB gets a signed PDF,
@@ -10,7 +10,7 @@
  * uploads in the secure client portal.
  */
 import type { DocSpec } from "@/lib/tax/config";
-import { has, is, not, yes, type Answers, type Section } from "@/lib/tax/interview/engine";
+import { anyGuilty, has, is, not, parseCharges, yes, type Answers, type Section } from "@/lib/tax/interview/engine";
 
 export type ServiceIntakeKind = "payroll" | "biz" | "relief";
 const YN = "yesno" as const;
@@ -185,10 +185,10 @@ const bFinish: Section = {
   questions: [{ id: "notes", label: "Anything else we should know?", type: "textarea", optional: true }],
 };
 
-/* ================================================================ MKB Record Relief (Louisiana) */
+/* ================================================================ MKB Expungement Relief (Louisiana) */
 const rAbout: Section = {
   id: "about", title: "About you", group: "About you", covers: ["Identity", "Contact"],
-  intro: "We use this to organize your paperwork and request your records. MKB Record Relief currently assists with Louisiana records only.",
+  intro: "We use this to organize your paperwork and request your records. MKB Expungement Relief currently assists with Louisiana records only.",
   questions: [
     { id: "fullName", label: "Full legal name", type: "text", prefill: "firstName" },
     { id: "otherNames", label: "Other names you've used (maiden name, nicknames on records)", type: "text", optional: true },
@@ -202,18 +202,18 @@ const rAbout: Section = {
   ],
 };
 const rRecords: Section = {
-  id: "records", title: "Your records", group: "Records", covers: ["Records"],
-  intro: "Add each record you're asking about. Share what you know — it's okay to estimate dates. Helping you request what's missing is part of what we do.",
-  repeat: { noun: "record", min: 1, rowTitle: (r, i) => (r.parish ? `${r.parish} Parish${r.when ? ` · ${r.when}` : ""}` : `Record ${i + 1}`), rowDocs: (r) => (r.papers === "Yes" ? [doc(`Court papers you have — ${r.parish || "record"} ${r.when || ""}`.trim(), "Records")] : []) },
+  id: "records", title: "Your arrests and charges", group: "Records", covers: ["Records"],
+  intro: "Add each arrest separately. One arrest can have several charges — list every charge from that arrest and how each one ended. It's okay to estimate dates, and you don't need a docket number: helping you request what's missing is part of what we do.",
+  repeat: { noun: "arrest", min: 1, rowTitle: (r, i) => [r.parish ? `${r.parish} Parish` : `Arrest ${i + 1}`, r.when, (() => { const n = parseCharges(r.charges).length; return n ? `${n} charge${n === 1 ? "" : "s"}` : ""; })()].filter(Boolean).join(" · "), rowDocs: (r) => (r.papers === "Yes" ? [doc(`Court papers you have — ${r.parish || "arrest"} ${r.when || ""}`.trim(), "Records")] : []) },
   questions: [
-    { id: "inLa", label: "Is this record in Louisiana?", type: YN, warn: "We currently assist with Louisiana records only, so we may not be able to help with this one. We'll let you know.", warnWhen: "No" },
+    { id: "inLa", label: "Was this arrest in Louisiana?", type: YN, warn: "We currently assist with Louisiana records only, so we may not be able to help with this one. We'll let you know.", warnWhen: "No" },
     { id: "parish", label: "Parish", type: "text", placeholder: "e.g. Caddo", show: is("inLa", "Yes") },
-    { id: "when", label: "About when did it happen?", type: "text", placeholder: "e.g. Summer 2016" },
+    { id: "when", label: "When was the arrest?", type: "text", placeholder: "e.g. March 2013", help: "An estimate is fine." },
     { id: "agency", label: "Arresting agency or court, if you know it", type: "text", optional: true },
-    { id: "caseNo", label: "Case or docket number, if you have it", type: "text", optional: true },
-    { id: "stage", label: "How far did it go?", type: "choice", options: ["Arrest only — no charges filed", "Charges filed", "Not sure"] },
-    { id: "outcome", label: "How did it end, as you understand it?", type: "choice", options: ["Dismissed or not prosecuted", "Found not guilty", "Pleaded or found guilty — sentence completed", "Still on probation or parole", "Not sure"], show: not(is("stage", "Arrest only — no charges filed")) },
-    { id: "papers", label: "Do you have any court papers for this record?", type: YN },
+    { id: "caseNo", label: "Docket or case number, if you have it", type: "text", optional: true, help: "Not required — we can find it from your records." },
+    { id: "charges", label: "List every charge from this arrest and how each one ended", type: "charges", help: "Example: one arrest with 3 charges — 2 were not prosecuted (NPO) and 1 was a guilty plea. Add all 3 charges here, each with its own outcome." },
+    { id: "sentenceDone", label: "For the guilty charge(s): is the sentence finished (jail, probation or parole, fines and fees)?", type: "choice", options: ["Yes — all finished", "No — still on probation or parole", "No — fines or fees still owed", "Not sure"], show: anyGuilty("charges") },
+    { id: "papers", label: "Do you have any court papers for this arrest?", type: YN },
   ],
 };
 const rSituation: Section = {
@@ -222,7 +222,7 @@ const rSituation: Section = {
     { id: "pending", label: "Do you have any open or pending cases right now, anywhere?", type: YN, warn: "Pending cases can affect what's possible. Please talk with a licensed attorney — we'll point you to the Louisiana State Bar Association's lawyer referral service.", warnWhen: "Yes" },
     { id: "supervision", label: "Are you currently on probation or parole?", type: YN },
     { id: "prior", label: "Have you had a record expunged before?", type: YN },
-    { id: "why", label: "What's prompting you to seek record relief? (optional)", type: "multi", optional: true, options: ["Employment", "Housing", "Professional license", "School", "Peace of mind", "Other"] },
+    { id: "why", label: "What's prompting you to seek expungement relief? (optional)", type: "multi", optional: true, options: ["Employment", "Housing", "Professional license", "School", "Peace of mind", "Other"] },
   ],
   docs: () => [doc("Government-issued photo ID", "Identity", true)],
 };
@@ -238,7 +238,7 @@ const rAck: Section = {
 export const SERVICE_INTAKES: Record<ServiceIntakeKind, { label: string; title: string; sections: Section[]; module: "books" | "biz" | "exp"; service: "books" | "biz" | "expunge"; next: string }> = {
   payroll: { label: "Payroll", title: "Payroll Intake", sections: [pBusiness, pSetup, pPeople, pRoster, pTaxes, pFinish], module: "books", service: "books", next: "We review your answers, confirm your payroll setup and price, and schedule your first payroll." },
   biz: { label: "Business Solutions", title: "Business Solutions Intake", sections: [bNeed, bBusiness, bOwners, bAgent, bExisting, bEin, bFinish], module: "biz", service: "biz", next: "We review your answers, confirm the state filing fees with you, and prepare your filings for your approval." },
-  relief: { label: "Record Relief", title: "Record Relief Intake", sections: [rAbout, rRecords, rSituation, rAck], module: "exp", service: "expunge", next: "We review your answers, go over our fees with you, and start requesting your records." },
+  relief: { label: "Expungement Relief", title: "Expungement Relief Intake", sections: [rAbout, rRecords, rSituation, rAck], module: "exp", service: "expunge", next: "We review your answers, go over our fees with you, and start requesting your records." },
 };
 export const SERVICE_INTAKE_KINDS = Object.keys(SERVICE_INTAKES) as ServiceIntakeKind[];
 export const isServiceIntakeKind = (k: unknown): k is ServiceIntakeKind => typeof k === "string" && k in SERVICE_INTAKES;

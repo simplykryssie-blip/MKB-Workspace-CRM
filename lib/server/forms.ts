@@ -36,7 +36,7 @@ async function sendAutoIntake(env: AppEnv, f: LeadForm, leadId: string, data: Re
   if (!ai) return;
   const db = env.DB;
   const note = (body: string) => db.prepare("INSERT INTO lead_notes (id, lead_id, author_id, body, at) VALUES (?, ?, (SELECT owner_id FROM leads WHERE id = ?), ?, ?)").bind(randomId("n"), leadId, leadId, body, now()).run();
-  const label = ({ tax: "tax interview", books: "bookkeeping intake", payroll: "payroll intake", biz: "Business Solutions intake", relief: "Record Relief intake" } as const)[ai.kind];
+  const label = ({ tax: "tax interview", books: "bookkeeping intake", payroll: "payroll intake", biz: "Business Solutions intake", relief: "Expungement Relief intake" } as const)[ai.kind];
   if (ai.onlyIfFieldId && data[ai.onlyIfFieldId] !== ai.onlyIfEquals) {
     const q = f.fields.find((x) => x.id === ai.onlyIfFieldId);
     await note(`The ${label} wasn't sent automatically (${q ? `“${q.label}” was answered “${data[ai.onlyIfFieldId] || "—"}”` : "a condition wasn't met"}). Follow up, then send it from this lead if it applies.`);

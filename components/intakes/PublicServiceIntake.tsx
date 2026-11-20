@@ -12,7 +12,7 @@ import { docsFor, missingIn, sectionVisible, type Answers, type Row, type Sectio
 import { SignaturePad } from "@/components/ui/SignaturePad";
 
 /**
- * The client's payroll, Business Solutions or Record Relief intake, opened from
+ * The client's payroll, Business Solutions or Expungement Relief intake, opened from
  * the private link MKB emailed them — no portal login. Answers save as they go;
  * at the end they sign and submit, and the link closes. (Built like the
  * bookkeeping intake page.) No Social Security or account numbers are asked here.

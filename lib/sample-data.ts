@@ -15,7 +15,7 @@ export const SERVICES: Record<
   tax: { label: "Tax Preparation", short: "Tax", href: "/services/tax-preparation" },
   books: { label: "Bookkeeping", short: "Bookkeeping", href: "/services/bookkeeping" },
   biz: { label: "Business Services", short: "Business", href: "/services/business-services" },
-  expunge: { label: "Record Expungement", short: "Expungement", href: "/services/record-expungement" },
+  expunge: { label: "Expungement Relief", short: "Expungement", href: "/services/record-expungement" },
 };
 
 export const SERVICE_ORDER: ServiceKey[] = ["tax", "books", "biz", "expunge"];

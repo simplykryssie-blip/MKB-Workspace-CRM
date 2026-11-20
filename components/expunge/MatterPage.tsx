@@ -53,7 +53,7 @@ export function MatterPage({ id }: { id: string }) {
       <div className="py-20 text-center">
         <h1 className="text-[20px] font-bold text-ink">Matter not found</h1>
         <p className="mt-1 text-[14px] text-muted">Sample data resets when the page reloads.</p>
-        <Link href="/services/record-expungement" className="mt-4 inline-block text-[14px] font-semibold text-accent">Back to Record Expungement</Link>
+        <Link href="/services/record-expungement" className="mt-4 inline-block text-[14px] font-semibold text-accent">Back to Expungement Relief</Link>
       </div>
     );
   const cs = matterCases(exp, m.id);
@@ -61,7 +61,7 @@ export function MatterPage({ id }: { id: string }) {
   const im = INTAKE_META[m.intake.status];
   return (
     <>
-      <Breadcrumbs crumbs={[{ label: "Record Expungement", href: "/services/record-expungement" }, { label: "Clients & matters", href: "/services/record-expungement#matters" }, { label: m.number }]} />
+      <Breadcrumbs crumbs={[{ label: "Expungement Relief", href: "/services/record-expungement" }, { label: "Clients & matters", href: "/services/record-expungement#matters" }, { label: m.number }]} />
       <section className="rounded-2xl border border-line bg-surface p-5 shadow-soft sm:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
           <div className="min-w-0 flex-1">
@@ -90,7 +90,7 @@ export function MatterPage({ id }: { id: string }) {
       <div className="mt-5">
         {tab === "cases" && (
           <div className="space-y-5">
-            <ServiceEngagementCard e={m.engagement} letterName="Record expungement letter" letterUrl={`/api/exp/matters/${encodeURIComponent(m.id)}/letter`} when="The client accepts the letter before MKB prepares any documents" canRecord={exp.can.edit} onAccept={(a) => exp.acceptEngagement(m.id, a)} />
+            <ServiceEngagementCard e={m.engagement} letterName="Expungement Relief letter" letterUrl={`/api/exp/matters/${encodeURIComponent(m.id)}/letter`} when="The client accepts the letter before MKB prepares any documents" canRecord={exp.can.edit} onAccept={(a) => exp.acceptEngagement(m.id, a)} />
             <CasesTab m={m} />
           </div>
         )}

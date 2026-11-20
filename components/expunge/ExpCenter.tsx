@@ -59,7 +59,7 @@ export function ExpCenter() {
   return (
     <>
       <PageHeader
-        title="Record Expungement"
+        title="Expungement Relief"
         subtitle="Administrative assistance from inquiry through records, screening, document preparation, filing coordination and completion."
         actions={
           <>
@@ -70,7 +70,7 @@ export function ExpCenter() {
         }
       />
       <div className="sticky top-16 z-20 -mx-4 mb-5 border-b border-line bg-bg/90 px-4 backdrop-blur-md sm:-mx-6 sm:px-6 lg:top-[72px] lg:-mx-8 lg:px-8">
-        <div role="tablist" aria-label="Record Expungement" className="scrollbar-thin -mb-px flex gap-1 overflow-x-auto">
+        <div role="tablist" aria-label="Expungement Relief" className="scrollbar-thin -mb-px flex gap-1 overflow-x-auto">
           {TABS.map((t) => (
             <button key={t.key} role="tab" aria-selected={tab === t.key} onClick={() => go(t.key)} className={`inline-flex shrink-0 items-center gap-2 border-b-2 px-3 py-3 text-[13.5px] font-medium ${tab === t.key ? "border-accent text-accent" : "border-transparent text-muted hover:text-ink"}`}>
               <t.icon size={16} /> {t.label}

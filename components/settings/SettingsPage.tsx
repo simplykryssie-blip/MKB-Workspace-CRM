@@ -399,7 +399,7 @@ function FeesEditor() {
         </div>
       </FeeSection>
 
-      <FeeSection title="Record expungement" subtitle="Basic expungements only. Third-party fees (court, clerk, fingerprinting, records) are billed separately." summary={`${money(f.expunge.baseFee)} up to ${f.expunge.chargesIncluded} charges · ${money(f.expunge.extraChargeFee)} each additional`}>
+      <FeeSection title="Expungement Relief" subtitle="Basic expungements only. Third-party fees (court, clerk, fingerprinting, records) are billed separately." summary={`${money(f.expunge.baseFee)} up to ${f.expunge.chargesIncluded} charges · ${money(f.expunge.extraChargeFee)} each additional`}>
         <div className="space-y-3 px-5 pb-5 sm:px-6">
           <div className="grid gap-4 sm:grid-cols-3">
             <Num id="ex-base" label="MKB fee" prefix="$" value={f.expunge.baseFee} disabled={ro} onChange={(n) => setF({ ...f, expunge: { ...f.expunge, baseFee: n } })} />

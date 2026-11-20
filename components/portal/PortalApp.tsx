@@ -241,7 +241,7 @@ function UploadButton({ doc, service, note, label = "Upload", onDone, variant = 
 }
 
 /* ---------------------------------------------------------------- documents */
-const SERVICES = [{ v: "tax", l: "Tax preparation" }, { v: "books", l: "Bookkeeping" }, { v: "biz", l: "Business services" }, { v: "expunge", l: "Record expungement" }];
+const SERVICES = [{ v: "tax", l: "Tax preparation" }, { v: "books", l: "Bookkeeping" }, { v: "biz", l: "Business services" }, { v: "expunge", l: "Expungement Relief" }];
 
 function DocumentsTab() {
   const { data, err, load } = useLoad<{ requested: Doc[]; files: Doc[] }>("/api/portal/documents");
