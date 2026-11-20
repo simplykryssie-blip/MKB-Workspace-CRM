@@ -8,7 +8,8 @@
  * file, staff are notified. Server-only.
  */
 import { json, now, one, run, type AppEnv } from "./core";
-import { randomId } from "./crypto";
+import { decryptField, encryptField, randomId } from "./crypto";
+import { aad as vaultAad, vaultKey } from "./clients";
 import { audit, type Actor, type LinkActor } from "./identity";
 import { notify } from "./notifications";
 
@@ -69,6 +70,23 @@ export async function applyBooksIntakeToProfile(env: AppEnv, clientId: string, a
   const ownerName = s(owner.name);
   const contactAdded = !c.contact_name && !!ownerName && track("contact person", "", ownerName);
   if (ownerName && !(next.responsibleParty as { name?: string } | undefined)?.name) next.responsibleParty = { name: ownerName, title: s(owner.title) || "Owner" };
+
+  // Date of birth (individuals): kept encrypted in the vault, like the tax interview does it.
+  const dob = s(answers.dob);
+  if (c.type !== "business" && /^\d{4}-\d{2}-\d{2}$/.test(dob) && !isNaN(Date.parse(dob)) && env.ENCRYPTION_KEY) {
+    const { key, version } = vaultKey(env);
+    const v = await one<{ ciphertext: string; iv: string }>(env.DB, "SELECT ciphertext, iv FROM vault WHERE owner_type = 'client' AND owner_id = ? AND field = 'dob'", clientId);
+    const cur = v ? await decryptField(key, v, vaultAad(clientId, "dob")).catch(() => null) : null;
+    if (cur !== dob) {
+      const by = o.memberId ?? (o.actor.kind === "link" ? `link:${o.actor.linkId}` : "system");
+      const e = await encryptField(key, dob, vaultAad(clientId, "dob"));
+      const t2 = now();
+      await run(env.DB, "INSERT INTO vault (owner_type, owner_id, field, ciphertext, iv, key_version, last4, kind, updated_at, updated_by) VALUES ('client', ?, 'dob', ?, ?, ?, NULL, NULL, ?, ?) ON CONFLICT(owner_type, owner_id, field) DO UPDATE SET ciphertext = excluded.ciphertext, iv = excluded.iv, key_version = excluded.key_version, updated_at = excluded.updated_at, updated_by = excluded.updated_by", clientId, e.ciphertext, e.iv, version, t2, by);
+      await run(env.DB, "INSERT INTO vault (owner_type, owner_id, field, ciphertext, iv, key_version, last4, kind, updated_at, updated_by) VALUES ('client', ?, 'dob_year', '', '', 0, ?, NULL, ?, ?) ON CONFLICT(owner_type, owner_id, field) DO UPDATE SET last4 = excluded.last4, updated_at = excluded.updated_at", clientId, dob.slice(0, 4), t2, by);
+      // The date itself stays out of the activity log.
+      changes.push({ label: "date of birth", kind: cur ? "changed" : "added", from: cur ? "the one on file" : undefined, to: "saved securely" });
+    }
+  }
 
   if (!changes.length && JSON.stringify(next) === JSON.stringify(biz)) return { changed: changes };
   await run(env.DB, "UPDATE clients SET business = ?, address = ?, phone = ?, email = ?, contact_name = ?, rev = rev + 1, updated_at = ? WHERE id = ?",

@@ -184,7 +184,7 @@ export async function publicSubmitServiceIntake(env: AppEnv, token: string, ip: 
   // Profile: business and contact details (payroll / Business Solutions), contact details (Expungement Relief).
   const owners = Array.isArray(answers.owners) ? answers.owners : answers.contactName ? [{ name: answers.contactName as string, title: (answers.contactTitle as string) ?? "" }] : [];
   const forProfile: Record<string, unknown> = r.kind === "relief"
-    ? { street: answers.street, city: answers.city, state: answers.state, zip: answers.zip, phone: answers.phone, email: answers.email }
+    ? { street: answers.street, city: answers.city, state: answers.state, zip: answers.zip, phone: answers.phone, email: answers.email, dob: answers.dob }
     : { legalName: answers.legalName, entity: answers.entity, formState: answers.formState, street: answers.street, city: answers.city, state: answers.state, zip: answers.zip, phone: answers.phone, email: answers.email, owners };
   await applyBooksIntakeToProfile(env, c.id, forProfile, { actor, memberId: null, byClient: true, source: `${meta.label} intake`, module: meta.module }).catch((e) => console.error("service profile sync", e instanceof Error ? e.message : e));
 
@@ -283,7 +283,7 @@ export async function manualSubmitServiceIntake(env: AppEnv, a: Actor, id: strin
 
   const owners = Array.isArray(answers.owners) ? answers.owners : answers.contactName ? [{ name: answers.contactName as string, title: (answers.contactTitle as string) ?? "" }] : [];
   const forProfile: Record<string, unknown> = r.kind === "relief"
-    ? { street: answers.street, city: answers.city, state: answers.state, zip: answers.zip, phone: answers.phone, email: answers.email }
+    ? { street: answers.street, city: answers.city, state: answers.state, zip: answers.zip, phone: answers.phone, email: answers.email, dob: answers.dob }
     : { legalName: answers.legalName, entity: answers.entity, formState: answers.formState, street: answers.street, city: answers.city, state: answers.state, zip: answers.zip, phone: answers.phone, email: answers.email, owners };
   await applyBooksIntakeToProfile(env, c.id, forProfile, { actor: a, memberId: a.member.id, byClient: false, source: `${meta.label} intake`, module: meta.module }).catch((e) => console.error("service profile sync", e instanceof Error ? e.message : e));
 
@@ -313,18 +313,30 @@ export async function manualSubmitServiceIntake(env: AppEnv, a: Actor, id: strin
   return { submitted: true, documents: docs, emailed, intakeId: r.id, clientId: c.id };
 }
 
-/** Every unfinished intake of one kind, for clients and leads (a lead's intake sits on its prospect record). Staff with view access to that service. */
+/** Every unfinished (and recently submitted) intake of one kind, for clients and leads (a lead's intake sits on its prospect record). Staff with view access to that service. */
 export async function openServiceIntakes(env: AppEnv, a: Actor, kind: ServiceIntakeKind) {
   requireStaff(a);
   requirePermission(a, SERVICE_INTAKES[kind].module, "view");
-  const rows = await all<ClientRow & { si_id: string; si_created: string; si_updated: string; si_by: string }>(env.DB,
-    `${CLIENT_SQL.replace(/^SELECT /i, "SELECT si.id si_id, si.created_at si_created, si.updated_at si_updated, si.entered_by si_by, ")} JOIN service_intakes si ON si.client_id = c.id WHERE si.kind = ? AND si.status = 'in_progress' AND c.status != 'declined' ORDER BY si.created_at DESC`, kind);
+  const rows = await all<ClientRow & { si_id: string; si_created: string; si_updated: string; si_by: string; si_status: string; si_submitted: string | null }>(env.DB,
+    `${CLIENT_SQL.replace(/^SELECT /i, "SELECT si.id si_id, si.created_at si_created, si.updated_at si_updated, si.entered_by si_by, si.status si_status, si.submitted_at si_submitted, ")} JOIN service_intakes si ON si.client_id = c.id WHERE si.kind = ? AND (si.status = 'in_progress' OR si.submitted_at > ?) AND c.status != 'declined' ORDER BY si.created_at DESC`, kind, new Date(Date.now() - 365 * 86400000).toISOString());
   const seeLeads = canDo(a.policy, a.member, "leads", "view");
   const out = [];
   for (const r of rows) {
     const prospect = r.status === "prospect";
     if (prospect ? !seeLeads : !(await canOpen(env, a, r))) continue;
-    out.push({ id: r.si_id, clientId: r.id, name: r.name, leadId: prospect ? (r as { lead_id?: string | null }).lead_id ?? null : null, isLead: prospect, createdAt: r.si_created, updatedAt: r.si_updated, link: await latestLink(env, "service_intake", r.si_id) });
+    out.push({ id: r.si_id, clientId: r.id, name: r.name, leadId: prospect ? (r as { lead_id?: string | null }).lead_id ?? null : null, isLead: prospect, status: r.si_status, submittedAt: r.si_submitted, createdAt: r.si_created, updatedAt: r.si_updated, link: await latestLink(env, "service_intake", r.si_id) });
   }
   return { intakes: out };
+}
+
+/** Staff: copy a submitted Expungement Relief intake's contact details and date of birth onto the client's profile again. */
+export async function applyIntakeToProfile(env: AppEnv, a: Actor, id: string) {
+  const { r, c } = await manualRow(env, a, id);
+  if (r.status !== "submitted") throw badRequest("Only submitted intakes can be copied to the profile.");
+  if (a.kind !== "staff") throw badRequest("Staff only.");
+  if (r.kind !== "relief") throw badRequest("This intake updates the profile when it's submitted.");
+  const answers = json<Record<string, unknown>>(r.answers, {});
+  const meta = SERVICE_INTAKES[r.kind];
+  const res = await applyBooksIntakeToProfile(env, c.id, { street: answers.street, city: answers.city, state: answers.state, zip: answers.zip, phone: answers.phone, email: answers.email, dob: answers.dob }, { actor: a, memberId: a.member.id, byClient: false, source: `${meta.label} intake`, module: meta.module });
+  return { changed: res.changed.map((x) => x.label) };
 }

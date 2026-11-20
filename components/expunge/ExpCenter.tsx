@@ -127,7 +127,7 @@ function NewInquiryDialog({ open, onClose }: { open: boolean; onClose: () => voi
 
 /* ================================================================== */
 
-type OpenIntake = { id: string; clientId: string; name: string; leadId: string | null; isLead: boolean; createdAt: string; updatedAt: string; link?: { usedAt?: string; openedAt?: string } | null };
+type OpenIntake = { id: string; clientId: string; name: string; leadId: string | null; isLead: boolean; status: "in_progress" | "submitted"; submittedAt?: string | null; createdAt: string; updatedAt: string; link?: { usedAt?: string; openedAt?: string } | null };
 
 function Overview({ byId }: { byId: Map<string, Client> }) {
   const exp = useExp();
@@ -139,7 +139,9 @@ function Overview({ byId }: { byId: Map<string, Client> }) {
   const [open, setOpen] = useState<OpenIntake[]>([]);
   useEffect(() => { if (BACKEND) call<{ intakes: OpenIntake[] }>("GET", "/api/service-intakes/open?kind=relief").then((r) => setOpen(r.intakes)).catch(() => setOpen([])); }, []);
   const matterClients = new Set(exp.matters.filter((m) => m.intake.status === "sent" || m.intake.status === "in_progress").map((m) => m.clientId));
-  const extraIntakes = open.filter((x) => !matterClients.has(x.clientId));
+  const extraIntakes = open.filter((x) => x.status === "in_progress" && !matterClients.has(x.clientId));
+  // Submitted, but no matter opened from it yet: staff open the matter from the client's profile.
+  const submitted = open.filter((x) => x.status === "submitted" && !exp.matters.some((m) => m.intakeId === x.id));
   const leadInquiries = leads.filter((l) => l.status === "open" && l.interests?.includes("expunge") && !open.some((x) => x.leadId === l.id));
   // Phase counts: cases, plus matters with no working cases (inquiries / intake).
   const counts = new Map<Phase, number>();
@@ -151,7 +153,7 @@ function Overview({ byId }: { byId: Map<string, Client> }) {
     } else cs.forEach((c) => counts.set(casePhase(c, m), (counts.get(casePhase(c, m)) ?? 0) + 1));
   });
   counts.set("Intake awaiting completion", (counts.get("Intake awaiting completion") ?? 0) + extraIntakes.length);
-  counts.set("New inquiry", (counts.get("New inquiry") ?? 0) + leadInquiries.length);
+  counts.set("New inquiry", (counts.get("New inquiry") ?? 0) + leadInquiries.length + submitted.length);
   const rows = exp.matters
     .map((m) => {
       const cs = matterCases(exp, m.id);
@@ -181,6 +183,25 @@ function Overview({ byId }: { byId: Map<string, Client> }) {
                   </span>
                   <Badge tone={x.isLead ? "info" : "neutral"}>{x.isLead ? "Lead" : "Client"}</Badge>
                   <Badge tone="warning">Not submitted</Badge>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+      {(phase === "New inquiry" || phase === "all") && submitted.length > 0 && (
+        <Card>
+          <CardHeader icon={CheckCircle2} title="Intakes submitted — ready to open a matter" subtitle={`${submitted.length} · open the matter from the client's profile (Service intakes → Open matter)`} />
+          <ul className="divide-y divide-line border-t border-line">
+            {submitted.map((x) => (
+              <li key={x.id}>
+                <Link href={x.isLead && x.leadId ? `/leads/${x.leadId}` : `/clients/${x.clientId}`} className="flex flex-wrap items-center gap-3 px-5 py-3 hover:bg-surface-hover sm:px-6">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[14px] font-medium text-ink">{x.name}</span>
+                    <span className="block text-[12px] text-muted">Submitted {x.submittedAt ? fmtDate(x.submittedAt) : ""}</span>
+                  </span>
+                  <Badge tone={x.isLead ? "info" : "neutral"}>{x.isLead ? "Lead" : "Client"}</Badge>
+                  <Badge tone="success">Submitted</Badge>
                 </Link>
               </li>
             ))}

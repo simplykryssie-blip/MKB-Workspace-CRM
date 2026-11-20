@@ -67,6 +67,16 @@ export function ClientServiceIntakesCard({ c }: { c: Client }) {
     try { const r = await call<{ intakeId: string }>("POST", `/api/clients/${c.id}/service-intakes/manual`, { kind }); router.push(`/clients/${c.id}/intakes/${r.intakeId}`); }
     catch (e) { toast(e instanceof Error ? e.message : "Couldn't open the intake", "info"); setBusy(false); }
   };
+  /** Copies the submitted intake's contact details and date of birth to the profile (again). */
+  const copyToProfile = async (x: SvcItem) => {
+    setStarting(x.id);
+    try {
+      const r = await call<{ changed: string[] }>("POST", `/api/service-intakes/${x.id}/apply-profile`, {});
+      toast(r.changed.length ? `Profile updated: ${r.changed.join(", ")}` : "The profile already matches this intake");
+      window.dispatchEvent(new CustomEvent("mkb:client-changed", { detail: c.id }));
+    } catch (e) { toast(e instanceof Error ? e.message : "Couldn't update the profile", "info"); }
+    setStarting(null);
+  };
   const rowAction = (x: SvcItem) => {
     if (x.status === "in_progress" && can(x.kind)) return <Button size="sm" icon={PenLine} onClick={() => router.push(`/clients/${c.id}/intakes/${x.id}`)}>Enter manually</Button>;
     if (x.kind === "biz" && team.can("biz", "create")) {
@@ -76,8 +86,9 @@ export function ClientServiceIntakesCard({ c }: { c: Client }) {
     }
     if (x.kind === "relief" && team.can("exp", "create")) {
       const m = exp.matters.find((q) => q.intakeId === x.id);
-      return m ? <Button size="sm" icon={ArrowRight} href={`/services/record-expungement/matters/${encodeURIComponent(m.id)}`}>Open {m.number}</Button>
-        : <Button size="sm" variant="primary" icon={Play} disabled={starting === x.id} onClick={() => void openMatter(x)}>Open matter</Button>;
+      const copy = x.status === "submitted" ? <Button size="sm" variant="ghost" disabled={starting === x.id} onClick={() => void copyToProfile(x)}>Copy to profile</Button> : null;
+      return <span className="flex flex-wrap justify-end gap-2">{copy}{m ? <Button size="sm" icon={ArrowRight} href={`/services/record-expungement/matters/${encodeURIComponent(m.id)}`}>Open {m.number}</Button>
+        : <Button size="sm" variant="primary" icon={Play} disabled={starting === x.id} onClick={() => void openMatter(x)}>Open matter</Button>}</span>;
     }
     return null;
   };

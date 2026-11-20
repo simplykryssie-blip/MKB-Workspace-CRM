@@ -607,12 +607,19 @@ export function SignatureDialog({ client: c, open, onClose }: DialogProps) {
     onClose();
   };
   return (
-    <Modal open={open} onClose={onClose} title="Send for signature" description="The client signs in their portal." footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" onClick={save}>Send</Button></>}>
+    <Modal open={open} onClose={onClose} title="Send for signature" description={BACKEND ? "Online signature requests aren't connected yet." : "The client signs in their portal."} footer={BACKEND ? <Button onClick={onClose}>Close</Button> : <><Button onClick={onClose}>Cancel</Button><Button variant="primary" onClick={save}>Send</Button></>}>
+      {BACKEND ? (
+        <div className="space-y-2 text-[14px] text-ink-2">
+          <p>Sending documents for e-signature from here isn&rsquo;t built yet, so nothing would reach the client.</p>
+          <p>For now: engagement letters are accepted from the service (e.g. the Expungement Relief matter → Engagement letter), and intakes are signed when the client submits them.</p>
+        </div>
+      ) : (
       <div className="space-y-4">
         <SelectField label="Service" value={service} onChange={(e) => { const s = e.target.value as ServiceKey; setService(s); setDoc(SIGN_PRESETS[s][0]); }} options={svcOptions(svcs)} />
         <SelectField label="Document" value={doc} onChange={(e) => setDoc(e.target.value)} options={SIGN_PRESETS[service].map((d) => [d, d])} />
         <TextArea label="Message to client (optional)" value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Please review and sign at your convenience." />
       </div>
+      )}
     </Modal>
   );
 }
