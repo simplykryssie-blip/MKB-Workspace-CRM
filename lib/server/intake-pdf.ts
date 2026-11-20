@@ -176,8 +176,9 @@ export async function buildIntakePdf(x: IntakePdfInput): Promise<Uint8Array> {
 
 
 /** A signed engagement letter: service letter + standard terms + acceptance record. */
-export async function buildLetterPdf(x: { clientName: string; parts: { title: string; body: string; version: number }[]; acceptedName: string; acceptedAt: string; method: "online" | "in_office" | "paper"; recordedBy?: string; signaturePng?: Uint8Array }): Promise<Uint8Array> {
-  const { text, heading, row, space, finish, signature, fonts: { bold, serif } } = await makeWriter(`Engagement letter — ${x.clientName}`, "Engagement Letter");
+export async function buildLetterPdf(x: { clientName: string; parts: { title: string; body: string; version: number }[]; acceptedName: string; acceptedAt: string; method: "online" | "in_office" | "paper"; recordedBy?: string; signaturePng?: Uint8Array; docTitle?: string; extraRows?: [string, string][] }): Promise<Uint8Array> {
+  const docTitle = x.docTitle ?? "Engagement Letter";
+  const { text, heading, row, space, finish, signature, fonts: { bold, serif } } = await makeWriter(`${docTitle} — ${x.clientName}`, docTitle);
   x.parts.forEach((part, n) => {
     if (n) space(16);
     text(part.title, { size: 17, font: serif, gap: 6 });
@@ -194,7 +195,8 @@ export async function buildLetterPdf(x: { clientName: string; parts: { title: st
   row("Date and time", `${new Date(x.acceptedAt).toLocaleString("en-US", { dateStyle: "long", timeStyle: "short", timeZone: "America/Chicago" })} (Central)`);
   row("How", x.method === "online" ? (x.signaturePng ? "Signed online by the client (drawn signature)" : "Accepted online by the client") : x.method === "in_office" ? (x.signaturePng ? "Signed in the office with MKB staff (drawn signature)" : "Accepted in the office with MKB staff") : "Signed on paper; recorded by MKB staff");
   if (x.recordedBy) row("Recorded by", x.recordedBy);
-  row("Letters accepted", x.parts.map((p) => `${p.title} (v${p.version})`).join("; "));
+  row(x.docTitle ? "Documents signed" : "Letters accepted", x.parts.map((p) => `${p.title} (v${p.version})`).join("; "));
+  (x.extraRows ?? []).forEach(([k, v]) => row(k, v));
   void bold;
   return finish(x.clientName);
 }

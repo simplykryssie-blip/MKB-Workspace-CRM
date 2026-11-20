@@ -13,6 +13,7 @@ import { decryptField, encryptField } from "./crypto";
 import { audit, hasSensitivePerm, requirePermission, sendEmail, type Actor, type LinkActor } from "./identity";
 import { aad as vaultAad, assignmentSets, vaultKey, type VaultField } from "./clients";
 import { notify } from "./notifications";
+import { compareName } from "./name-sync";
 import { sendTemplate } from "./email";
 import { buildIntakePdf, buildLetterPdf } from "./intake-pdf";
 import { letterVersion } from "./engagement";
@@ -446,7 +447,7 @@ export async function applyInterviewToProfile(env: AppEnv, r: TaxReturn, o: { ac
     const ssn = await fromInterview("you.ssn");
     if (ssn && digitsOf(ssn).length === 9) { const d = digitsOf(ssn); await ident("SSN/ITIN", "tax_id", `${d.slice(0, 3)}-${d.slice(3, 5)}-${d.slice(5)}`, d.startsWith("9") ? "ITIN" : "SSN", ssnMask); }
     if (/^\d{4}-\d{2}-\d{2}$/.test(val("dob")) && !isNaN(Date.parse(val("dob")))) await ident("date of birth", "dob", val("dob"), null, (v) => new Date(`${v}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }));
-    const cur = await one<{ phone: string | null; email: string | null; address: string | null }>(env.DB, "SELECT phone, email, address FROM clients WHERE id = ?", r.clientId);
+    const cur = await one<{ name: string; phone: string | null; email: string | null; address: string | null }>(env.DB, "SELECT name, phone, email, address FROM clients WHERE id = ?", r.clientId);
     if (cur) {
       const addrNow = json<Record<string, string>>(cur.address, {});
       const addrNew = val("street") && val("city") && val("state") ? { line1: val("street"), city: val("city"), state: val("state"), zip: val("zip") } : null;
@@ -456,10 +457,14 @@ export async function applyInterviewToProfile(env: AppEnv, r: TaxReturn, o: { ac
       if (phone && digitsOf(phone) !== digitsOf(cur.phone ?? "")) diffs.push({ label: "phone", kind: cur.phone ? "changed" : "added", from: cur.phone || undefined, to: phone });
       if (email && email !== (cur.email ?? "").toLowerCase()) diffs.push({ label: "email", kind: cur.email ? "changed" : "added", from: cur.email || undefined, to: email });
       if (addrNew && fmtAddr(addrNew).toLowerCase() !== fmtAddr(addrNow).toLowerCase()) diffs.push({ label: "home address", kind: fmtAddr(addrNow) ? "changed" : "added", from: fmtAddr(addrNow) || undefined, to: fmtAddr(addrNew) });
+      // A first-name-only (or placeholder) contact gets the full name from the interview; a different name is only flagged.
+      const nm = compareName(cur.name, [val("fname"), val("lname")].filter(Boolean).join(" "));
+      if (nm.kind === "upgrade") diffs.push({ label: "name", kind: "changed", from: cur.name, to: nm.name });
+      else if (nm.kind === "different") skipped.push(`name: the interview says "${nm.name}" — different from the profile, so it wasn't changed`);
       if (diffs.length) {
         if (!o.contact) skipped.push("contact details: your role can't edit client details");
         else {
-          await run(env.DB, "UPDATE clients SET phone = ?, email = ?, address = ?, rev = rev + 1, updated_at = ? WHERE id = ?", phone || cur.phone, email || cur.email, addrNew ? JSON.stringify(addrNew) : cur.address, t, r.clientId);
+          await run(env.DB, "UPDATE clients SET name = ?, phone = ?, email = ?, address = ?, rev = rev + 1, updated_at = ? WHERE id = ?", nm.kind === "upgrade" ? nm.name : cur.name, phone || cur.phone, email || cur.email, addrNew ? JSON.stringify(addrNew) : cur.address, t, r.clientId);
           updated.push("contact details");
           changes.push(...diffs);
         }

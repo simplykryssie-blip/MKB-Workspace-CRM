@@ -6,7 +6,7 @@
  * document contents in an email.
  */
 
-export type TemplateKey = "tax_intake_received" | "tax_document_reminder" | "document_reminder" | "tax_document_request" | "tax_extension_filed" | "invoice_sent" | "books_intake_received" | "books_intake_link" | "books_proposal" | "books_proposal_signed" | "tax_interview_link" | "portal_invite" | "portal_message" | "books_items" | "books_reminder" | "books_reports_ready" | "service_intake_link" | "service_intake_received" | "booking_confirmed" | "booking_reminder" | "booking_changed" | "booking_cancelled";
+export type TemplateKey = "tax_intake_received" | "tax_document_reminder" | "document_reminder" | "tax_document_request" | "tax_extension_filed" | "invoice_sent" | "books_intake_received" | "books_intake_link" | "books_proposal" | "books_proposal_signed" | "tax_interview_link" | "portal_invite" | "portal_message" | "books_items" | "books_reminder" | "books_reports_ready" | "service_intake_link" | "service_intake_received" | "booking_confirmed" | "booking_reminder" | "booking_changed" | "booking_cancelled" | "signature_request" | "signature_signed";
 
 export type EmailWording = {
   subject: string;
@@ -206,6 +206,34 @@ export const EMAIL_TEMPLATES: Record<TemplateKey, TemplateDef> = {
     steps: "We connect your accounts and review your books, including any catch-up months.\nWe confirm your first monthly close date.\nEach month you get your reports and a list of anything we need from you.",
     button: "Open your client portal",
     closing: "Questions? Reply through your portal or call us at 888-379-9372.",
+  },
+  signature_request: {
+    key: "signature_request",
+    name: "Document to sign",
+    when: "Sent when staff send a client a document to read and sign online (engagement letter, records release, a custom document or a manually entered intake to review).",
+    placeholders: ["firstName", "document", "expires", "days", "staffName", "message"],
+    subject: "Please review and sign: {{document}}",
+    heading: "Hi {{firstName}}, a document is ready for your signature.",
+    intro: "MKB Financial Group sent you \"{{document}}\" to read and sign on your phone or computer — no account or password needed. {{message}}",
+    docsTitle: "",
+    docsNote: "",
+    steps: "Open the document and read it.\nType your full name and sign with your finger or mouse.\nYou'll get a signed copy by email.",
+    button: "Review and sign",
+    closing: "This link is just for you — please don't forward it. It expires on {{expires}} ({{days}} days) and stops working once you sign. Questions? Call us at 888-379-9372.",
+  },
+  signature_signed: {
+    key: "signature_signed",
+    name: "Signed document copy",
+    when: "Sent right after a client signs a document online. The signed PDF is attached.",
+    placeholders: ["firstName", "document", "date"],
+    subject: "Your signed copy: {{document}}",
+    heading: "Thank you, {{firstName}} — it's signed.",
+    intro: "You signed \"{{document}}\" on {{date}}. Your signed copy is attached for your records.",
+    docsTitle: "",
+    docsNote: "",
+    steps: "",
+    button: "Open your client portal",
+    closing: "Questions? Call us at 888-379-9372.",
   },
   service_intake_link: {
     key: "service_intake_link",

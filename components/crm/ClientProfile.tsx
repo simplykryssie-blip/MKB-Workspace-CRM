@@ -40,6 +40,7 @@ import { useToast } from "@/components/ui/Toast";
 import { balanceDue, openRequirements, staffById, SAMPLE_NOW } from "@/lib/sample/clients";
 import { useClient, useClients } from "@/lib/store/clients-store";
 import { BACKEND, call } from "@/lib/sync/remote";
+import { LiveSignatures } from "@/components/signatures/LiveSignatures";
 import { clientStatus, portalStatus } from "@/lib/status";
 import { fmtDate, fmtDateTime, usd } from "@/lib/format";
 import { formatPhone } from "@/lib/validation";
@@ -163,7 +164,7 @@ export function ClientProfile({ id }: { id: string }) {
     services: c.enrollments.length,
     documents: c.documents.length,
     messages: unread || undefined,
-    signatures: c.signatures.filter((s) => s.status === "pending").length || undefined,
+    signatures: BACKEND ? undefined : c.signatures.filter((s) => s.status === "pending").length || undefined,
     notes: c.notes.length || undefined,
   };
 
@@ -310,7 +311,7 @@ export function ClientProfile({ id }: { id: string }) {
         {tab === "messages" && <MessagesTab c={c} />}
         {tab === "appointments" && (BACKEND ? <ContactCalendar key={calKey} contact={{ type: "client", id: c.id, name: c.name }} /> : <AppointmentsTab c={c} act={act} />)}
         {tab === "invoices" && <InvoicesTab c={c} act={act} />}
-        {tab === "signatures" && <SignaturesTab c={c} act={act} />}
+        {tab === "signatures" && (BACKEND ? <LiveSignatures c={c} /> : <SignaturesTab c={c} act={act} />)}
         {tab === "notes" && <NotesTab c={c} />}
         {tab === "activity" && <ActivityTab c={c} />}
       </div>

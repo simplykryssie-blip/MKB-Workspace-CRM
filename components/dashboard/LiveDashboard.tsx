@@ -30,6 +30,8 @@ export function LiveDashboard() {
   const first = team.me?.name?.split(" ")[0] ?? "";
   const canBilling = team.can("billing", "view");
   const [invoices, setInvoices] = useState<Invoice[] | null>(null);
+  const [sigs, setSigs] = useState<{ service: ServiceKey }[]>([]);
+  useEffect(() => { call<{ requests: { service: ServiceKey }[] }>("GET", "/api/signatures/pending").then((r) => setSigs(r.requests)).catch(() => setSigs([])); }, []);
   useEffect(() => { if (canBilling) call<{ invoices: Invoice[] }>("GET", "/api/billing/invoices").then((r) => setInvoices(r.invoices)).catch(() => setInvoices(null)); }, [canBilling]);
 
   const stats = useMemo(() => {
@@ -102,6 +104,7 @@ export function LiveDashboard() {
               <span className="mt-2 block text-[24px] font-bold leading-none tracking-tight text-ink">{x.active}</span>
               <span className="block text-[12.5px] text-muted">{x.k === "tax" ? "returns in progress" : `in progress · ${x.clients} client${x.clients === 1 ? "" : "s"}`}</span>
               <span className="mt-2 block text-[12px] text-muted">{x.waiting} waiting on client · {x.review} in review</span>
+              {sigs.some((g) => g.service === x.k) && <span className="block text-[12px] font-medium text-warning-ink">{sigs.filter((g) => g.service === x.k).length} waiting for signature</span>}
               {canBilling && invoices && <span className="block text-[12px] text-muted">{usd(x.owed)} owed · {usd(x.collected)} collected this month</span>}
             </Link>
           ))}

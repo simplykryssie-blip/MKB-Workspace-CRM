@@ -193,6 +193,8 @@ export type RecordItem = {
   feePaid?: boolean;
   receivedAt?: string;
   docId?: string;
+  /** The 21-day follow-up task on the calendar (live CRM). */
+  followUpTaskId?: string;
   status: RecordVerification;
   missingInfo?: string;
 };

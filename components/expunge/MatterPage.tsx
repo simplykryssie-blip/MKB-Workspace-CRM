@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useClientGate } from "@/components/team/AccessGuard";
 import { useEffect, useState } from "react";
+import { BACKEND, call } from "@/lib/sync/remote";
+import type { SigItem } from "@/components/signatures/LiveSignatures";
 import { CheckCircle2, CircleDot, ClipboardList, CreditCard, Eye, FilePlus2, FileText, Lock, MessageSquare, Plus, Receipt, RotateCcw, Send, ShieldCheck, UploadCloud, UserRound, Users } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -44,6 +46,16 @@ export function MatterPage({ id }: { id: string }) {
   const m = exp.matters.find((x) => x.id === id);
   const c = clientStore.clients.find((x) => x.id === m?.clientId);
   const [tab, go] = useHashTab(TABS.map((t) => t.key), "cases" as Tab);
+  // An engagement letter the client signed online (Signatures) counts as accepted on the matter.
+  const mid = m?.id, hasEng = !!m?.engagement, cid = m?.clientId;
+  useEffect(() => {
+    if (!BACKEND || !mid || hasEng || !cid || !exp.can.edit) return;
+    call<{ requests: SigItem[] }>("GET", `/api/clients/${encodeURIComponent(cid)}/signatures`).then((r) => {
+      const s = r.requests.find((x) => x.status === "signed" && x.kind === "engagement" && (x as SigItem & { letter?: string }).letter?.startsWith("exp:"));
+      const [, v, tv] = ((s as SigItem & { letter?: string } | undefined)?.letter ?? "").split(":");
+      if (s && v && tv) exp.acceptEngagement(mid, { name: s.signedName ?? "", version: Number(v), termsVersion: Number(tv), method: "online" });
+    }).catch(() => {});
+  }, [mid, hasEng, cid]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (m && exp.can.criminalHistory) exp.logAccess(m.id, "Opened client matter");
   }, [m?.id, exp.role]); // eslint-disable-line react-hooks/exhaustive-deps

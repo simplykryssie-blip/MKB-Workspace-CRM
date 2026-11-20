@@ -12,6 +12,7 @@ import { decryptField, encryptField, randomId } from "./crypto";
 import { aad as vaultAad, vaultKey } from "./clients";
 import { audit, type Actor, type LinkActor } from "./identity";
 import { notify } from "./notifications";
+import { compareName } from "./name-sync";
 
 type Change = { label: string; kind: "added" | "changed"; from?: string; to: string };
 type Biz = { legalName?: string; entityType?: string; state?: string; formedAt?: string; industry?: string; fiscalYearEnd?: string; [k: string]: unknown };
@@ -68,6 +69,14 @@ export async function applyBooksIntakeToProfile(env: AppEnv, clientId: string, a
   // First owner becomes the contact person when there isn't one yet.
   const owner = (Array.isArray(answers.owners) ? (answers.owners as Record<string, unknown>[]) : [])[0] ?? {};
   const ownerName = s(owner.name);
+  // Individuals: the client's own full name (from "Full legal name", or the owner on a sole proprietor's intake).
+  let newName = c.name;
+  let differentName = "";
+  if (c.type !== "business") {
+    const nm = compareName(c.name, s(answers.fullName) || ownerName);
+    if (nm.kind === "upgrade" && track("name", c.name, nm.name, () => false)) newName = nm.name;
+    else if (nm.kind === "different") differentName = nm.name;
+  }
   const contactAdded = !c.contact_name && !!ownerName && track("contact person", "", ownerName);
   if (ownerName && !(next.responsibleParty as { name?: string } | undefined)?.name) next.responsibleParty = { name: ownerName, title: s(owner.title) || "Owner" };
 
@@ -88,7 +97,14 @@ export async function applyBooksIntakeToProfile(env: AppEnv, clientId: string, a
     }
   }
 
+  if (differentName) {
+    // Never overwrite a different name — tell staff instead.
+    await run(env.DB, "INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'status', ?, ?, ?, ?)", randomId("x"), clientId, `The ${o.source ?? "bookkeeping intake"} gives the name "${differentName}", which is different from the name on file — check it and update the profile if needed`, o.byClient ? "client" : "staff", o.memberId, now());
+    await notify(env, { module: o.module ?? "books" }, { kind: "intake", title: `Name check: ${c.name}`, body: `The ${o.source ?? "bookkeeping intake"} gives the name "${differentName}". The profile wasn't changed.`, href: `/clients/${clientId}` });
+  }
+
   if (!changes.length && JSON.stringify(next) === JSON.stringify(biz)) return { changed: changes };
+  if (newName !== c.name) await run(env.DB, "UPDATE clients SET name = ? WHERE id = ?", newName, clientId);
   await run(env.DB, "UPDATE clients SET business = ?, address = ?, phone = ?, email = ?, contact_name = ?, rev = rev + 1, updated_at = ? WHERE id = ?",
     c.business === null && !Object.keys(next).length ? null : JSON.stringify(next), addrChanged && addrNew ? JSON.stringify(addrNew) : c.address, phoneChanged ? phone : c.phone, emailChanged ? email : c.email, contactAdded ? ownerName : c.contact_name, t, clientId);
   if (changes.length) {

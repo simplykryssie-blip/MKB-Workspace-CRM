@@ -80,6 +80,27 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
   const upC = (id: string, fn: (c: ExpCase) => ExpCase) => set((s) => ({ ...s, cases: s.cases.map((c) => (c.id === id ? fn(c) : c)) }));
   const msg = (m: ExpMatter, body: string, from: "staff" | "client" = "staff") => clients().sendMessage(m.clientId, body, "expunge", { expMatterId: m.id, from, author: from === "staff" ? staffById(m.assignments["Client follow-up"]).name : undefined });
   const logClient = (clientId: string, text: string, actor: "staff" | "client" = "staff") => clients().logActivity(clientId, "status", text, actor);
+  /** Live CRM: a records request puts a follow-up task on the calendar 21 days out; it's ticked off when the record comes in. */
+  const followUpTask = async (caseId: string, recId: string) => {
+    const c = C(caseId);
+    const rec = c.records.find((x) => x.id === recId);
+    if (!rec?.requestedAt) return;
+    const due = new Date(new Date(`${rec.requestedAt.slice(0, 10)}T12:00`).getTime() + 21 * 86400000).toISOString().slice(0, 10);
+    try {
+      if (rec.followUpTaskId) await call("DELETE", `/api/calendar/tasks/${encodeURIComponent(rec.followUpTaskId)}`).catch(() => {});
+      const r = await call<{ task: { id: string } }>("POST", "/api/calendar/tasks", {
+        title: `Follow up: ${rec.docType} from ${rec.custodianName || "the custodian"} (${c.number})`, dueAt: due, priority: "normal", service: "expunge",
+        assigneeId: c.assignedTo || undefined, contact: { type: "client", id: c.clientId }, notes: `Requested ${rec.requestedAt.slice(0, 10)}${rec.method ? ` by ${rec.method}` : ""}. Expected within about 21 days.`,
+      });
+      upC(caseId, (x) => ({ ...x, records: x.records.map((y) => (y.id === recId ? { ...y, followUpTaskId: r.task.id } : y)) }));
+    } catch (e) {
+      notify(`The request was saved, but its follow-up couldn't be added to the calendar — ${e instanceof Error ? e.message : "add it there by hand"}.`);
+    }
+  };
+  const closeFollowUp = (taskId?: string, remove = false) => {
+    if (!BACKEND || !taskId) return;
+    void (remove ? call("DELETE", `/api/calendar/tasks/${encodeURIComponent(taskId)}`) : call("POST", `/api/calendar/tasks/${encodeURIComponent(taskId)}/done`, { done: true })).catch(() => {});
+  };
   /** Live CRM: the court date goes on the assigned staff member's calendar (and moves if the court changes it). */
   const putHearingOnCalendar = async (caseId: string, hearingAt: string, note: string) => {
     const c = C(caseId);
@@ -253,11 +274,13 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     },
     requestRecord(caseId: string, recId: string, r: Pick<RecordItem, "custodianId" | "custodianName" | "method" | "fee" | "requestedAt">) {
       upC(caseId, (c) => ({ ...c, records: c.records.map((x) => (x.id === recId ? { ...x, ...r, status: "requested", feePaid: r.fee ? false : undefined } : x)) }));
+      if (BACKEND) void followUpTask(caseId, recId);
     },
     receiveRecord(caseId: string, recId: string, f: FileIn, by: "client" | "staff" = "staff") {
       const c = C(caseId);
       const rec = c.records.find((x) => x.id === recId)!;
       const docId = upload(c, f, "Court & agency records", `${rec.docType} — ${c.number}`, by);
+      closeFollowUp(rec.followUpTaskId);
       upC(caseId, (x) => ({ ...x, records: x.records.map((r) => (r.id === recId ? { ...r, docId, status: "received", receivedAt: nowIso().slice(0, 10), method: r.method ?? (by === "client" ? "Client provided" : r.method) } : r)) }));
     },
     verifyRecord(caseId: string, recId: string, ok: boolean, missingInfo?: string) {
@@ -267,6 +290,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       upC(caseId, (c) => ({ ...c, records: c.records.map((r) => (r.id === recId ? { ...r, feePaid: true } : r)) }));
     },
     removeRecord(caseId: string, recId: string) {
+      closeFollowUp(C(caseId).records.find((r) => r.id === recId)?.followUpTaskId, true);
       upC(caseId, (c) => ({ ...c, records: c.records.filter((r) => r.id !== recId) }));
     },
 

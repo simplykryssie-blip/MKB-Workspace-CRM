@@ -187,7 +187,7 @@ export async function publicSubmitServiceIntake(env: AppEnv, token: string, ip: 
   // Profile: business and contact details (payroll / Business Solutions), contact details (Expungement Relief).
   const owners = Array.isArray(answers.owners) ? answers.owners : answers.contactName ? [{ name: answers.contactName as string, title: (answers.contactTitle as string) ?? "" }] : [];
   const forProfile: Record<string, unknown> = r.kind === "relief"
-    ? { street: answers.street, city: answers.city, state: answers.state, zip: answers.zip, phone: answers.phone, email: answers.email, dob: answers.dob }
+    ? { street: answers.street, city: answers.city, state: answers.state, zip: answers.zip, phone: answers.phone, email: answers.email, dob: answers.dob, fullName: answers.fullName }
     : { legalName: answers.legalName, entity: answers.entity, formState: answers.formState, street: answers.street, city: answers.city, state: answers.state, zip: answers.zip, phone: answers.phone, email: answers.email, owners };
   await applyBooksIntakeToProfile(env, c.id, forProfile, { actor, memberId: null, byClient: true, source: `${meta.label} intake`, module: meta.module }).catch((e) => console.error("service profile sync", e instanceof Error ? e.message : e));
 
@@ -286,7 +286,7 @@ export async function manualSubmitServiceIntake(env: AppEnv, a: Actor, id: strin
 
   const owners = Array.isArray(answers.owners) ? answers.owners : answers.contactName ? [{ name: answers.contactName as string, title: (answers.contactTitle as string) ?? "" }] : [];
   const forProfile: Record<string, unknown> = r.kind === "relief"
-    ? { street: answers.street, city: answers.city, state: answers.state, zip: answers.zip, phone: answers.phone, email: answers.email, dob: answers.dob }
+    ? { street: answers.street, city: answers.city, state: answers.state, zip: answers.zip, phone: answers.phone, email: answers.email, dob: answers.dob, fullName: answers.fullName }
     : { legalName: answers.legalName, entity: answers.entity, formState: answers.formState, street: answers.street, city: answers.city, state: answers.state, zip: answers.zip, phone: answers.phone, email: answers.email, owners };
   await applyBooksIntakeToProfile(env, c.id, forProfile, { actor: a, memberId: a.member.id, byClient: false, source: `${meta.label} intake`, module: meta.module }).catch((e) => console.error("service profile sync", e instanceof Error ? e.message : e));
 
@@ -340,7 +340,7 @@ export async function applyIntakeToProfile(env: AppEnv, a: Actor, id: string) {
   if (r.kind !== "relief") throw badRequest("This intake updates the profile when it's submitted.");
   const answers = json<Record<string, unknown>>(r.answers, {});
   const meta = SERVICE_INTAKES[r.kind];
-  const res = await applyBooksIntakeToProfile(env, c.id, { street: answers.street, city: answers.city, state: answers.state, zip: answers.zip, phone: answers.phone, email: answers.email, dob: answers.dob }, { actor: a, memberId: a.member.id, byClient: false, source: `${meta.label} intake`, module: meta.module });
+  const res = await applyBooksIntakeToProfile(env, c.id, { street: answers.street, city: answers.city, state: answers.state, zip: answers.zip, phone: answers.phone, email: answers.email, dob: answers.dob, fullName: answers.fullName }, { actor: a, memberId: a.member.id, byClient: false, source: `${meta.label} intake`, module: meta.module });
   return { changed: res.changed.map((x) => x.label) };
 }
 

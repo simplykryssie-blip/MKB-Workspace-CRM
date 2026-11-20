@@ -210,7 +210,8 @@ export async function saveExp(env: AppEnv, a: Actor, kind: ExpKind, id: string, 
     ...(changed.includes("assignment") ? assignStmts(env, kind, next) : []),
   ]);
   if (!res[0].meta.changes) throw new HttpError(409, "Someone else updated this record. Reloading the latest version.", "conflict");
-  if (kind === "exp_matter" && changed.includes("engagement letter accepted")) await saveEngagementPdf(env, s, next as ExpMatter).catch(() => null);
+  // Signed online: the signed PDF was already saved when the client signed.
+  if (kind === "exp_matter" && changed.includes("engagement letter accepted") && (next as ExpMatter).engagement?.method !== "online") await saveEngagementPdf(env, s, next as ExpMatter).catch(() => null);
   // Field names only — never criminal-history content — go to the audit log.
   const action = changed.includes("assignment") ? "Assignment change" : changed.some((c) => /approval|Granted|Completed/.test(c)) ? "Approval" : "Record update";
   await audit(env.DB, s, { action, resource: `${LABEL[kind]} ${next.number ?? id}`, department: "exp", meta: `Changed: ${[...new Set(changed)].slice(0, 12).join(", ") || "details"}` });
