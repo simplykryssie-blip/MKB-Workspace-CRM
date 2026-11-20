@@ -11,7 +11,9 @@ const missing = (c: ExpCase, kind: ExpCase["records"][number]["kind"]) => c.reco
 /** Dashboard phase for one case. Facts only — never an eligibility call. */
 export function casePhase(c: ExpCase, m?: ExpMatter): Phase {
   if (m && (m.intake.status === "inquiry")) return "New inquiry";
-  if (c.draft || (m && (m.intake.status === "sent" || m.intake.status === "in_progress"))) return "Intake awaiting completion";
+  if (m && (m.intake.status === "sent" || m.intake.status === "in_progress")) return "Intake awaiting completion";
+  // The client submitted; MKB reviews the intake and confirms each draft case.
+  if (c.draft) return m && (m.intake.status === "submitted" || m.intake.status === "reviewed") ? "Intake submitted — MKB review" : "Intake awaiting completion";
   switch (c.status) {
     case "On Hold":
       return "On hold";
@@ -47,7 +49,7 @@ export function matterPhase(m: ExpMatter, cases: ExpCase[]): Phase {
   if (m.intake.status === "inquiry") return "New inquiry";
   if (m.intake.status === "sent" || m.intake.status === "in_progress") return "Intake awaiting completion";
   if (!cases.length) return "Awaiting criminal records";
-  const order: Phase[] = ["Flagged for legal review", "Awaiting criminal records", "Awaiting court minutes", "Awaiting eligibility review", "Documents being prepared", "Awaiting client approval", "Ready for filing", "Filed / awaiting court action", "Hearing scheduled", "Order received — finishing", "On hold", "Completed", "Closed — not granted"];
+  const order: Phase[] = ["Intake submitted — MKB review", "Flagged for legal review", "Awaiting criminal records", "Awaiting court minutes", "Awaiting eligibility review", "Documents being prepared", "Awaiting client approval", "Ready for filing", "Filed / awaiting court action", "Hearing scheduled", "Order received — finishing", "On hold", "Completed", "Closed — not granted"];
   const ps = cases.map((c) => casePhase(c, m));
   return order.find((p) => ps.includes(p)) ?? ps[0];
 }
@@ -56,7 +58,7 @@ export function matterEnrollment(m: ExpMatter, cases: ExpCase[]): { title: strin
   const p = matterPhase(m, cases);
   const n = cases.filter((c) => !c.draft).length;
   const stage =
-    p === "New inquiry" || p === "Intake awaiting completion" ? "Intake" :
+    p === "New inquiry" || p === "Intake awaiting completion" || p === "Intake submitted — MKB review" ? "Intake" :
     p === "Awaiting criminal records" || p === "Awaiting court minutes" ? "Records collection" :
     p === "Awaiting eligibility review" || p === "Flagged for legal review" ? "Screening" :
     p === "Documents being prepared" || p === "Awaiting client approval" ? "Document preparation" :
@@ -64,8 +66,10 @@ export function matterEnrollment(m: ExpMatter, cases: ExpCase[]): { title: strin
     p === "Filed / awaiting court action" || p === "Hearing scheduled" || p === "Order received — finishing" ? "Court action" :
     p === "On hold" ? "Screening" : "Completed";
   const allDone = cases.length > 0 && cases.every((c) => ["Completed", "Denied", "Withdrawn"].includes(c.status));
-  const status = allDone ? "complete" : p === "On hold" ? "on_hold" : p === "Intake awaiting completion" || p === "Awaiting client approval" ? "waiting_on_client" : p === "Awaiting eligibility review" || p === "Flagged for legal review" ? "in_review" : "active";
-  return { title: `Expungement Relief — ${n || "no"} case${n === 1 ? "" : "s"}`, stage, status, progress: Math.max(5, Math.round((EXP_STAGES.indexOf(stage as (typeof EXP_STAGES)[number]) / (EXP_STAGES.length - 1)) * 100)) };
+  const status = allDone ? "complete" : p === "On hold" ? "on_hold" : p === "Intake awaiting completion" || p === "Awaiting client approval" ? "waiting_on_client" : p === "Awaiting eligibility review" || p === "Flagged for legal review" || p === "Intake submitted — MKB review" ? "in_review" : "active";
+  const drafts = cases.length - n;
+  const title = n || !drafts ? `Expungement Relief — ${n || "no"} case${n === 1 ? "" : "s"}` : `Expungement Relief — ${drafts} case${drafts === 1 ? "" : "s"} to review`;
+  return { title, stage, status, progress: Math.max(5, Math.round((EXP_STAGES.indexOf(stage as (typeof EXP_STAGES)[number]) / (EXP_STAGES.length - 1)) * 100)) };
 }
 
 /** Why screening can't be marked "Administrative Processing Approved" yet. */
@@ -94,6 +98,7 @@ export function nextAction(c: ExpCase, m?: ExpMatter): { text: string; owner: "M
   switch (p) {
     case "New inquiry": return { text: "Contact the client and send the intake", owner: "MKB" };
     case "Intake awaiting completion": return { text: "Client to finish the intake", owner: "Client" };
+    case "Intake submitted — MKB review": return { text: "Review the intake and confirm each case", owner: "MKB" };
     case "Awaiting criminal records": {
       const notReq = c.records.filter((r) => (r.kind === "criminal_history" || r.kind === "arrest") && r.status === "not_requested").length;
       return notReq ? { text: "Request criminal history / arrest records", owner: "MKB" } : { text: "Waiting on records custodians", owner: "Court / agency" };

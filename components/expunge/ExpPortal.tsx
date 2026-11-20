@@ -28,6 +28,7 @@ const toFiles = (fs: File[]) => fs.map((f) => ({ name: f.name.replace(/\.[^.]+$/
 const CLIENT_STATUS: Record<Phase, { text: string; tone: "info" | "warning" | "success" | "neutral"; pct: number }> = {
   "New inquiry": { text: "Request received", tone: "info", pct: 5 },
   "Intake awaiting completion": { text: "Finish your intake", tone: "warning", pct: 10 },
+  "Intake submitted — MKB review": { text: "MKB is reviewing your intake", tone: "info", pct: 15 },
   "Awaiting criminal records": { text: "Gathering your records", tone: "info", pct: 25 },
   "Awaiting court minutes": { text: "Gathering your records", tone: "info", pct: 30 },
   "Awaiting eligibility review": { text: "Being reviewed by MKB", tone: "info", pct: 40 },

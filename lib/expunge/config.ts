@@ -86,6 +86,7 @@ export const OUTCOME_TONE: Record<ScreeningOutcome, "neutral" | "info" | "succes
 export const PHASES = [
   "New inquiry",
   "Intake awaiting completion",
+  "Intake submitted — MKB review",
   "Awaiting criminal records",
   "Awaiting court minutes",
   "Awaiting eligibility review",

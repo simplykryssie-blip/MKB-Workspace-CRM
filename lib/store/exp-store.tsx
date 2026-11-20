@@ -106,7 +106,10 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       const id = `EXP-${nextNo}`;
       const c = clients().clients.find((x) => x.id === clientId)!;
       const [first, ...rest] = (c.type === "individual" ? c.name : c.contactName ?? c.name).split(" ");
-      const enrollmentId = clients().enroll(clientId, { service: "expunge", title: "Expungement Relief — no cases", staffId, fee: 0 });
+      // Reuse an Expungement Relief service already added on the client's profile (one not tied to a matter yet), so there's one pipeline, not two.
+      const linked = new Set(s.matters.map((x) => x.enrollmentId).filter(Boolean));
+      const existing = c.enrollments.find((e) => e.service === "expunge" && !linked.has(e.id) && e.status !== "complete" && e.status !== "cancelled");
+      const enrollmentId = existing?.id ?? clients().enroll(clientId, { service: "expunge", title: "Expungement Relief — no cases", staffId, fee: 0 });
       const m: ExpMatter = {
         id, number: id, clientId, enrollmentId, source, createdAt: nowIso(),
         intake: { status: "inquiry", step: 0, first, middle: "", last: rest.join(" "), aliases: [], currentAddress: [c.address.line1, c.address.city, c.address.state, c.address.zip].filter(Boolean).join(", "), previousAddresses: [], preferredContact: c.preferredContact, idDoc: "not_requested", additional: { pendingCharges: "unknown", onSupervision: "unknown", priorExpungements: "unknown", previousApplications: "unknown", deniedApplications: "unknown", hasRecords: "unknown" }, acks: {} },

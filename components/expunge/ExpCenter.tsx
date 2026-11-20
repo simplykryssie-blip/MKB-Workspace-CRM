@@ -37,6 +37,7 @@ type Tab = (typeof TABS)[number]["key"];
 const CARDS: { p: Phase; label: string; icon: typeof Inbox; tone?: "accent" | "warning" | "success" | "danger" }[] = [
   { p: "New inquiry", label: "New expungement inquiries", icon: Inbox },
   { p: "Intake awaiting completion", label: "Intake forms awaiting completion", icon: PenLine, tone: "warning" },
+  { p: "Intake submitted — MKB review", label: "Intakes submitted — MKB to review", icon: BadgeCheck, tone: "accent" },
   { p: "Awaiting criminal records", label: "Awaiting criminal records", icon: FileSearch },
   { p: "Awaiting court minutes", label: "Awaiting court minutes", icon: FileText },
   { p: "Awaiting eligibility review", label: "Awaiting eligibility review", icon: Hourglass },

@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -324,6 +325,29 @@ function TaxReturnsCard({ c }: { c: Client }) {
 /* Services                                                            */
 /* ------------------------------------------------------------------ */
 
+/** Expungement Relief service with no matter yet: open one (it takes over this service's pipeline). */
+function ExpStart({ c, compact }: { c: Client; compact?: boolean }) {
+  const exp = useExp();
+  const toast = useToast();
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const start = async () => {
+    setBusy(true);
+    try {
+      const id = exp.createInquiry(c.id, "staff");
+      for (let i = 0; i < 80 && !exp.exists("matter", id); i++) await new Promise((r) => setTimeout(r, 25));
+      toast(`Matter ${id} opened — the stages now follow it`);
+      router.push(`/services/record-expungement/matters/${encodeURIComponent(id)}`);
+    } catch (e) { toast(e instanceof Error ? e.message : "Couldn't open the matter", "info"); setBusy(false); }
+  };
+  return (
+    <div className="mt-3 flex flex-wrap items-center justify-end gap-2 rounded-lg bg-warning-soft/50 px-3 py-2">
+      <span className="mr-auto text-[12.5px] text-ink-2">Not connected to an Expungement Relief matter yet, so these stages won&rsquo;t move. If the client submitted the intake, use <b>Service intakes → Open matter</b> so their charges come in.</span>
+      {exp.can.edit && <Button size="sm" variant={compact ? "ghost" : "primary"} disabled={busy} onClick={() => void start()}>Open blank matter</Button>}
+    </div>
+  );
+}
+
 function EnrollmentRow({ c, e, compact }: { c: Client; e: Enrollment; compact?: boolean }) {
   const store = useClients();
   const toast = useToast();
@@ -339,7 +363,9 @@ function EnrollmentRow({ c, e, compact }: { c: Client; e: Enrollment; compact?: 
   const booksWs = useBooks().workspaces.find((w) => w.enrollmentId === e.id);
   const bizReq = useBiz().requests.find((r) => r.enrollmentId === e.id);
   const expMatter = useExp().matters.find((x) => x.enrollmentId === e.id);
-  const isTax = e.service === "tax" || e.service === "books" || !!booksWs || !!bizReq || !!expMatter;
+  // Expungement Relief runs in its matter; a service added here without one has nothing to move it along.
+  const expUnlinked = e.service === "expunge" && !expMatter && e.status !== "complete" && e.status !== "cancelled";
+  const isTax = e.service === "tax" || e.service === "books" || !!booksWs || !!bizReq || !!expMatter || expUnlinked;
   // Bookkeeping before the workspace exists: show the intake → review → proposal step, not a monthly-close stage.
   const booksOnboarding = e.service === "books" && !booksWs && !bizReq && !expMatter;
   const setStatus = (s: Enrollment["status"]) => {
@@ -420,7 +446,8 @@ function EnrollmentRow({ c, e, compact }: { c: Client; e: Enrollment; compact?: 
       {isTax && e.service === "books" && !booksWs && !bizReq && !expMatter && (
         <div className="mt-3 flex flex-wrap items-center justify-end gap-2"><BooksEnrollmentActions c={c} /></div>
       )}
-      {isTax && !(e.service === "books" && !booksWs && !bizReq && !expMatter) && (
+      {expUnlinked && <ExpStart c={c} compact={compact} />}
+      {isTax && !expUnlinked && !(e.service === "books" && !booksWs && !bizReq && !expMatter) && (
         <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
           <span className="mr-auto text-[12px] text-muted">{expMatter ? `Managed in Expungement Relief as ${expMatter.number}.` : bizReq ? `Managed in Business Services as ${bizReq.number}.` : booksWs ? "Monthly close is managed in the Bookkeeping workspace." : "Workflow is managed in the Tax Preparation Center."}</span>
           {expMatter ? (
