@@ -193,6 +193,7 @@ const rAbout: Section = {
     { id: "fullName", label: "Full legal name", type: "text", prefill: "firstName" },
     { id: "otherNames", label: "Other names you've used (maiden name, nicknames on records)", type: "text", optional: true },
     { id: "dob", label: "Date of birth", type: "date", help: "Courts and agencies use it to find your records." },
+    { id: "ssn", label: "Social Security number", type: "ssn", help: "Courts and agencies use it to find your records. It's encrypted as soon as you save it, and only the last 4 digits are shown." },
     { id: "phone", label: "Phone", type: "phone", prefill: "phone" },
     { id: "email", label: "Email", type: "email", prefill: "email" },
     { id: "street", label: "Mailing address (street)", type: "text", prefill: "street" },

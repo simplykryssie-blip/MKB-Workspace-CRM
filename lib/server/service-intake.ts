@@ -9,12 +9,12 @@ import { SERVICE_INTAKES, isServiceIntakeKind, type ServiceIntakeKind } from "@/
 import { canDo } from "@/lib/team/policy";
 import { docsFor, type Answers } from "@/lib/tax/interview/engine";
 import { all, badRequest, HttpError, json, notFound, now, one, rateLimit, run, type AppEnv } from "./core";
-import { randomId } from "./crypto";
-import { CLIENT_SQL, canOpen, type ClientRow } from "./clients";
+import { decryptField, encryptField, randomId } from "./crypto";
+import { CLIENT_SQL, aad as vaultAad, canOpen, vaultKey, type ClientRow } from "./clients";
 import { applyBooksIntakeToProfile } from "./books-profile";
 import { linkOrigin } from "./books-intake";
 import { nextStop, sendTemplate } from "./email";
-import { audit, requirePermission, requireStaff, type Actor, type LinkActor } from "./identity";
+import { audit, hasSensitivePerm, requirePermission, requireStaff, type Actor, type LinkActor } from "./identity";
 import { buildIntakePdf } from "./intake-pdf";
 import { notify } from "./notifications";
 import { cancelLinks, createLink, latestLink, LINK_DAYS, openLink, useLink } from "./secure-links";
@@ -29,7 +29,10 @@ const hist = (h: string, by: string, text: string) => JSON.stringify([...json<{ 
 const cleanAnswers = (v: unknown): Answers => {
   if (!v || typeof v !== "object" || Array.isArray(v)) throw badRequest("Invalid answers.");
   if (JSON.stringify(v).length > MAX) throw new HttpError(413, "These answers are too large to save.");
-  return v as Answers;
+  const out = { ...(v as Answers) };
+  // The SSN is saved encrypted on its own; answers may only ever hold the masked last four.
+  if (typeof out.ssn === "string" && !/^•••-••-\d{4}$/.test(out.ssn)) delete out.ssn;
+  return out;
 };
 const firstNameOf = (c: { contact_name: string | null; name: string; type?: string }, a: Answers) =>
   ((typeof a.fullName === "string" && a.fullName) || (typeof a.contactName === "string" && a.contactName) || c.contact_name || c.name).trim().split(/\s+/)[0];
@@ -339,4 +342,49 @@ export async function applyIntakeToProfile(env: AppEnv, a: Actor, id: string) {
   const meta = SERVICE_INTAKES[r.kind];
   const res = await applyBooksIntakeToProfile(env, c.id, { street: answers.street, city: answers.city, state: answers.state, zip: answers.zip, phone: answers.phone, email: answers.email, dob: answers.dob }, { actor: a, memberId: a.member.id, byClient: false, source: `${meta.label} intake`, module: meta.module });
   return { changed: res.changed.map((x) => x.label) };
+}
+
+/* ---------------------------------------------------------------- SSN (Expungement Relief) */
+const SSN_KEY = "about.ssn";
+/** Saves the full SSN/ITIN straight to the client's profile, encrypted. Answers keep only the last four; nothing here reads it back. */
+async function saveSsn(env: AppEnv, r: Row, value: unknown, o: { by: string; actor: Actor | LinkActor; byClient: boolean }) {
+  if (r.kind !== "relief") throw badRequest("Unknown answer.");
+  const d = typeof value === "string" ? value.replace(/\D/g, "") : "";
+  if (d.length !== 9) throw badRequest("Enter all 9 digits of the Social Security number.");
+  if (/^(000|666)/.test(d) || d.slice(3, 5) === "00" || d.slice(5) === "0000") throw badRequest("That isn't a valid Social Security number — please check it.");
+  if (!env.ENCRYPTION_KEY) throw new HttpError(500, "Server encryption key is not configured.");
+  const { key, version } = vaultKey(env);
+  const formatted = `${d.slice(0, 3)}-${d.slice(3, 5)}-${d.slice(5)}`;
+  const cur = await one<{ ciphertext: string; iv: string }>(env.DB, "SELECT ciphertext, iv FROM vault WHERE owner_type = 'client' AND owner_id = ? AND field = 'tax_id'", r.client_id);
+  const old = cur ? await decryptField(key, cur, vaultAad(r.client_id, "tax_id")).catch(() => null) : null;
+  const t = now();
+  if (!old || old.replace(/\D/g, "") !== d) {
+    const e = await encryptField(key, formatted, vaultAad(r.client_id, "tax_id"));
+    await run(env.DB, "INSERT INTO vault (owner_type, owner_id, field, ciphertext, iv, key_version, last4, kind, updated_at, updated_by) VALUES ('client', ?, 'tax_id', ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(owner_type, owner_id, field) DO UPDATE SET ciphertext = excluded.ciphertext, iv = excluded.iv, key_version = excluded.key_version, last4 = excluded.last4, kind = excluded.kind, updated_at = excluded.updated_at, updated_by = excluded.updated_by", r.client_id, e.ciphertext, e.iv, version, d.slice(-4), d.startsWith("9") ? "ITIN" : "SSN", t, o.by);
+    const what = `${old ? "changed" : "added"} SSN ending ${d.slice(-4)} (stored encrypted)`;
+    await run(env.DB, "INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'status', ?, ?, ?, ?)", randomId("x"), r.client_id, `Expungement Relief intake ${what}${o.byClient ? " — entered by the client" : ""}`, o.byClient ? "client" : "staff", o.byClient ? null : o.by, t);
+    await audit(env.DB, o.actor, { action: "Permission change", resource: `Client ${r.client_id} — SSN saved from Expungement Relief intake`, department: "exp", meta: "Value not logged" });
+    if (o.byClient && old) {
+      const c = await one<{ name: string }>(env.DB, "SELECT name FROM clients WHERE id = ?", r.client_id);
+      await notify(env, { module: "exp" }, { kind: "intake", title: `${c?.name ?? "A client"} entered a different SSN`, body: `In the Expungement Relief intake (now ending ${d.slice(-4)}). Check it before using it.`, href: `/clients/${r.client_id}` });
+    }
+  }
+  return { last4: d.slice(-4) };
+}
+export async function publicSecureServiceIntake(env: AppEnv, token: string, ip: string, b: { key?: unknown; value?: unknown }) {
+  const { r, actor } = await fromLink(env, token, ip);
+  if (!(await rateLimit(env.DB, `linksecure:${actor.linkId}`, 30, 60))) throw new HttpError(429, "Too many changes in the last hour. Please try again later.", "rate_limited");
+  if (b.key !== SSN_KEY) throw badRequest("Unknown answer.");
+  return saveSsn(env, r, b.value, { by: `link:${actor.linkId}`, actor, byClient: true });
+}
+export async function manualSecureServiceIntake(env: AppEnv, a: Actor, id: string, b: { key?: unknown; value?: unknown }) {
+  const { r } = await manualRow(env, a, id);
+  if (a.kind !== "staff") throw badRequest("Staff only.");
+  if (r.status !== "in_progress") throw new HttpError(410, "This intake has already been submitted.", "used");
+  if (!hasSensitivePerm(a, "exp.editSsn") && !hasSensitivePerm(a, "tax.editSsn")) {
+    await audit(env.DB, a, { action: "Sensitive reveal", resource: `Service intake ${id} — SSN`, meta: "Denied: needs the identifiers permission", success: false });
+    throw new HttpError(403, "Entering Social Security numbers needs the edit-SSN permission.", "forbidden");
+  }
+  if (b.key !== SSN_KEY) throw badRequest("Unknown answer.");
+  return saveSsn(env, r, b.value, { by: a.member.id, actor: a, byClient: false });
 }
