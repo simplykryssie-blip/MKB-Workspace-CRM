@@ -128,7 +128,8 @@ async function makeWriter(docTitle: string, headerRight: string, brand: { name: 
     page.drawText(safe(caption), { x: M, y, size: 8.5, font: reg, color: MUTED });
     y -= 16;
   };
-  return { text, heading, row, space, finish, amountRow, signature, fonts: { reg, bold, serif } };
+  const line = (x1: number, x2: number) => { need(18); y -= 14; page.drawRectangle({ x: x1, y, width: x2 - x1, height: 0.6, color: LINE }); };
+  return { text, heading, row, space, finish, amountRow, signature, newPage, line, fonts: { reg, bold, serif } };
 }
 
 export async function buildIntakePdf(x: IntakePdfInput): Promise<Uint8Array> {
@@ -282,6 +283,62 @@ export async function buildStaffDocPdf(x: { title: string; version: number; text
   row("Connection", x.ip);
   row("Document fingerprint (SHA-256)", x.textSha256);
   return finish(x.memberName);
+}
+
+/** The Credit Comeback Vault (free BFCM packet): guide, the 10 letters with blanks, worksheet and dispute log. */
+export async function buildCreditVaultPdf(): Promise<Uint8Array> {
+  const { CREDIT_VAULT, CREDIT_DISCLAIMER, GUIDE, LETTERS, renderLetter } = await import("@/lib/funnels/credit-vault");
+  const { text, heading, space, finish, newPage, line, fonts: { serif, bold } } = await makeWriter(CREDIT_VAULT.title, "The Credit Comeback Vault");
+  const prose = (body: string) => {
+    for (const b of parseLetter(body)) {
+      if (b.kind === "h") { space(4); text(b.text, { size: 11.5, font: bold, gap: 4 }); }
+      else if (b.kind === "li") text(`•  ${b.text}`, { size: 10, x: M + 10, gap: 3 });
+      else { text(b.text, { size: 10, gap: 3 }); space(5); }
+    }
+  };
+  // Cover
+  space(70);
+  text(CREDIT_VAULT.title, { size: 30, font: serif, gap: 10 });
+  text(CREDIT_VAULT.subtitle, { size: 14, color: GOLD, font: bold, gap: 22 });
+  text("Inside:", { size: 11, font: bold, gap: 6 });
+  for (const g of GUIDE) text(`•  ${g.title}`, { size: 10.5, x: M + 10, gap: 4 });
+  text(`•  10 ready-to-send letters (pages with blanks to fill in, or use the online Letter Builder)`, { size: 10.5, x: M + 10, gap: 4 });
+  text("•  Dispute worksheet and dispute log", { size: 10.5, x: M + 10, gap: 4 });
+  space(24);
+  text("A free gift from MKB Financial Group · mkbfinancialgroup.com · 888-379-9372", { size: 9.5, color: MUTED, gap: 8 });
+  text(CREDIT_DISCLAIMER, { size: 8.5, color: MUTED, gap: 3 });
+  // Guide
+  for (const g of GUIDE) { newPage(); heading(g.title); prose(g.body); }
+  // Letters
+  for (const l of LETTERS) {
+    newPage();
+    heading(`Letter ${l.n}: ${l.title}`);
+    text(`Use when: ${l.when}`, { size: 9, color: MUTED, gap: 10 });
+    const r = renderLetter(l, null, {});
+    for (const x of r.from) text(x, { size: 10, gap: 2 });
+    for (const x of r.idLines) text(x, { size: 9, color: MUTED, gap: 2 });
+    space(8); text("Date: ____________________", { size: 10, gap: 8 });
+    for (const x of r.to) text(x, { size: 10, gap: 2 });
+    space(8); text(r.re, { size: 10, font: bold, gap: 8 });
+    text("To whom it may concern:", { size: 10, gap: 6 });
+    for (const para of r.body.split(/\n\n+/)) { for (const ln of para.split("\n")) text(ln, { size: 10, gap: 3, ...(ln.startsWith("- ") ? { x: M + 10 } : {}) }); space(5); }
+    text("Sincerely,", { size: 10, gap: 26 });
+    text("______________________________", { size: 10, gap: 2 });
+    text("Signature and printed name", { size: 8.5, color: MUTED, gap: 8 });
+    if (r.enclosures.length) { text("Enclosures:", { size: 9.5, font: bold, gap: 3 }); for (const e of r.enclosures) text(`•  ${e}`, { size: 9.5, x: M + 10, gap: 2 }); }
+  }
+  // Worksheet + log
+  newPage();
+  heading("Dispute worksheet");
+  text("One line per error: bureau · company · last 4 of account · what's wrong · what's correct · proof you have.", { size: 9.5, color: MUTED, gap: 4 });
+  for (let i = 0; i < 18; i++) line(M, W - M);
+  newPage();
+  heading("Dispute log");
+  text("Letter # · sent to · date mailed · certified mail number · date received (green card) · response date · result.", { size: 9.5, color: MUTED, gap: 4 });
+  for (let i = 0; i < 18; i++) line(M, W - M);
+  space(18);
+  text(CREDIT_DISCLAIMER, { size: 8, color: MUTED, gap: 3 });
+  return finish("Credit Comeback Vault members");
 }
 
 /** WISP Generator (Monarch funnel): a Written Information Security Plan built from the practice's answers. */

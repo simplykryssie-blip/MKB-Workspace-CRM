@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BarChart3, ExternalLink, Megaphone } from "lucide-react";
+import { BarChart3, ExternalLink, Gift, Megaphone } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -11,9 +11,10 @@ import { BACKEND, call } from "@/lib/sync/remote";
 import { publicOrigin } from "@/lib/forms/config";
 
 type Funnels = {
-  settings: { moneyVault: { on: boolean; formId?: string; turnedOnAt?: string }; tracking: { metaPixelId: string; gaId: string } };
+  settings: { moneyVault: { on: boolean; formId?: string; turnedOnAt?: string }; creditVault?: { on: boolean; formId?: string; turnedOnAt?: string }; tracking: { metaPixelId: string; gaId: string } };
   form: { id: string; slug: string; status: string } | null;
   campaignId: string; taxYear: number; path: string;
+  creditVault?: { form: { id: string; slug: string; status: string } | null; path: string; signups: number; visits: number };
 };
 type Report = {
   on: boolean; visits: number; inquiries: number; newLeads: number; qualified: number; lost: number; clients: number;
@@ -53,6 +54,9 @@ export function FunnelsCard() {
     try { const r = await call<Funnels>("PUT", "/api/settings/funnels", body); setV(r); setPixel(r.settings.tracking.metaPixelId); setGa(r.settings.tracking.gaId); toast(msg); loadReport(); } catch (e) { toast(e instanceof Error ? e.message : "Couldn't save", "info"); }
     setBusy(false);
   };
+  const cvOn = !!v.settings.creditVault?.on;
+  const cvPath = v.creditVault?.path ?? "/credit-comeback";
+  const cvUrl = o === "https://www.mkbfinancialgroup.com" ? `${o}${cvPath}` : `${o}/site${cvPath}`;
   const trackingDirty = pixel.trim() !== v.settings.tracking.metaPixelId || ga.trim().toUpperCase() !== v.settings.tracking.gaId;
 
   return (
@@ -70,7 +74,20 @@ export function FunnelsCard() {
       </Card>
 
       <Card>
-        <CardHeader icon={BarChart3} title="Ad tracking" subtitle="Used only on the Money Vault page. They receive page views and form progress (step numbers, “lead”), never names, emails, phone numbers or answers." />
+        <CardHeader icon={Gift} title="Black Friday: Credit Comeback Vault" subtitle={`Golden-ticket scratch-off at ${cvPath}. Visitors join your VIP waitlist and get the free credit packet (PDF + Letter Builder). When it's off, ${cvPath} sends visitors to your home page.`} action={<Badge tone={cvOn ? "success" : "neutral"}>{cvOn ? "On" : "Off"}</Badge>} />
+        <div className="space-y-4 px-5 pb-5 text-[13.5px] text-ink-2 sm:px-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <Button variant={cvOn ? "secondary" : "primary"} disabled={!canEdit || busy} onClick={() => { if (!cvOn || window.confirm("Turn the Credit Comeback Vault page off? Visitors will be sent to your home page. People who already joined keep their Vault link.")) void save({ creditVaultOn: !cvOn }, cvOn ? "Credit Comeback Vault page turned off" : "Credit Comeback Vault page is live"); }}>{cvOn ? "Turn page off" : "Turn page on"}</Button>
+            {cvOn && <a href={cvUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 break-all font-semibold text-accent hover:underline">{cvUrl} <ExternalLink size={14} /></a>}
+          </div>
+          {v.creditVault && (v.creditVault.visits > 0 || v.creditVault.signups > 0) && <p><b>{v.creditVault.visits}</b> visits · <b>{v.creditVault.signups}</b> VIP sign-ups{v.creditVault.visits ? ` (${pct(v.creditVault.signups, v.creditVault.visits)})` : ""}</p>}
+          <p>Sign-ups become leads (stage <b>New</b>) tagged <b>BFCM 2026</b>, <b>VIP Waitlist</b> and <b>Credit Comeback Vault</b>, with their credit goal in the lead notes. Each one gets an email with their private Vault link. The waitlist countdown ends Cyber Monday, Nov 30.</p>
+          {v.creditVault?.form && <p>The sign-up questions are the <a href="/forms" className="font-semibold text-accent hover:underline">“Credit Comeback Vault (Black Friday 2026)” form</a>.</p>}
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader icon={BarChart3} title="Ad tracking" subtitle="Used on the campaign pages (Money Vault and Credit Comeback Vault; if empty there, the website's own IDs are used). They receive page views and form progress (step numbers, “lead”), never names, emails, phone numbers or answers." />
         <div className="grid gap-3 px-5 pb-5 sm:grid-cols-2 sm:px-6">
           <label><span className="mb-1 block text-[13px] font-medium text-ink">Meta Pixel ID</span><input className={input} inputMode="numeric" value={pixel} onChange={(e) => setPixel(e.target.value)} placeholder="e.g. 123456789012345" disabled={!canEdit} /></label>
           <label><span className="mb-1 block text-[13px] font-medium text-ink">Google Analytics measurement ID</span><input className={input} value={ga} onChange={(e) => setGa(e.target.value)} placeholder="e.g. G-AB12CD34EF" disabled={!canEdit} /></label>

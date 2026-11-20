@@ -18,14 +18,16 @@ export const MONEY_VAULT = { key: "money-vault", campaignId: "mkb_2027_money_vau
 export type FunnelSettings = {
   /** turnedOnAt: when it was first turned on (the campaign's start). */
   moneyVault: { on: boolean; formId?: string; turnedOnAt?: string };
+  /** Black Friday / Cyber Monday 2026: the Credit Comeback Vault scratch-off at /credit-comeback. */
+  creditVault: { on: boolean; formId?: string; turnedOnAt?: string };
   tracking: { metaPixelId: string; gaId: string };
 };
-const DEFAULTS: FunnelSettings = { moneyVault: { on: false }, tracking: { metaPixelId: "", gaId: "" } };
+const DEFAULTS: FunnelSettings = { moneyVault: { on: false }, creditVault: { on: false }, tracking: { metaPixelId: "", gaId: "" } };
 
 export async function loadFunnels(env: AppEnv): Promise<FunnelSettings> {
   const r = await one<{ data: string }>(env.DB, "SELECT data FROM service_settings WHERE key = 'funnels'");
   const d = json<Partial<FunnelSettings>>(r?.data ?? null, {});
-  return { moneyVault: { ...DEFAULTS.moneyVault, ...d.moneyVault }, tracking: { ...DEFAULTS.tracking, ...d.tracking } };
+  return { moneyVault: { ...DEFAULTS.moneyVault, ...d.moneyVault }, creditVault: { ...DEFAULTS.creditVault, ...d.creditVault }, tracking: { ...DEFAULTS.tracking, ...d.tracking } };
 }
 
 /* ---------------------------------------------------------------- the form template */
@@ -93,16 +95,20 @@ export async function getFunnels(env: AppEnv, a: Actor) {
   requirePermission(a, "settings", "view");
   const s = await loadFunnels(env);
   const form = s.moneyVault.formId ? await one<{ id: string; slug: string; status: string }>(env.DB, "SELECT id, slug, status FROM forms WHERE id = ?", s.moneyVault.formId) : null;
-  return { settings: s, form, campaignId: MONEY_VAULT.campaignId, taxYear: MONEY_VAULT.taxYear, path: MONEY_VAULT.path };
+  const { CREDIT_VAULT } = await import("@/lib/funnels/credit-vault");
+  const cvForm = s.creditVault.formId ? await one<{ id: string; slug: string; status: string }>(env.DB, "SELECT id, slug, status FROM forms WHERE id = ?", s.creditVault.formId) : null;
+  const cvLeads = (await one<{ n: number }>(env.DB, "SELECT count(*) AS n FROM form_submissions WHERE form_id = ? AND channel != 'Staff test' AND outcome != 'spam'", CREDIT_VAULT.formId).catch(() => null))?.n ?? 0;
+  const cvVisits = (await one<{ n: number }>(env.DB, "SELECT COALESCE(SUM(visits), 0) AS n FROM funnel_visits WHERE funnel = ?", CREDIT_VAULT.key).catch(() => null))?.n ?? 0;
+  return { settings: s, form, campaignId: MONEY_VAULT.campaignId, taxYear: MONEY_VAULT.taxYear, path: MONEY_VAULT.path, creditVault: { form: cvForm, path: CREDIT_VAULT.path, signups: cvLeads, visits: cvVisits } };
 }
 
 const PIXEL = /^\d{8,20}$/;
 const GA = /^G-[A-Z0-9]{4,16}$/;
-export async function saveFunnels(env: AppEnv, a: Actor, b: { moneyVaultOn?: unknown; metaPixelId?: unknown; gaId?: unknown }) {
+export async function saveFunnels(env: AppEnv, a: Actor, b: { moneyVaultOn?: unknown; creditVaultOn?: unknown; metaPixelId?: unknown; gaId?: unknown }) {
   requirePermission(a, "settings", "settings");
   if (a.kind !== "staff") throw badRequest("Staff only.");
   const cur = await loadFunnels(env);
-  const next: FunnelSettings = { moneyVault: { ...cur.moneyVault }, tracking: { ...cur.tracking } };
+  const next: FunnelSettings = { moneyVault: { ...cur.moneyVault }, creditVault: { ...cur.creditVault }, tracking: { ...cur.tracking } };
   if (typeof b.metaPixelId === "string") {
     const v = b.metaPixelId.trim();
     if (v && !PIXEL.test(v)) throw badRequest("The Meta Pixel ID is a number (usually 15–16 digits). Find it in Meta Events Manager.");
@@ -121,6 +127,15 @@ export async function saveFunnels(env: AppEnv, a: Actor, b: { moneyVaultOn?: unk
     }
     next.moneyVault.on = b.moneyVaultOn;
     changes.push(`Money Vault page turned ${b.moneyVaultOn ? "on" : "off"}`);
+  }
+  if (typeof b.creditVaultOn === "boolean" && b.creditVaultOn !== cur.creditVault.on) {
+    if (b.creditVaultOn) {
+      const { ensureCreditVaultForm } = await import("./credit-vault");
+      next.creditVault.formId = await ensureCreditVaultForm(env, a);
+      next.creditVault.turnedOnAt = cur.creditVault.turnedOnAt ?? now();
+    }
+    next.creditVault.on = b.creditVaultOn;
+    changes.push(`Credit Comeback Vault page turned ${b.creditVaultOn ? "on" : "off"}`);
   }
   if (next.tracking.metaPixelId !== cur.tracking.metaPixelId) changes.push(next.tracking.metaPixelId ? "Meta Pixel ID set" : "Meta Pixel ID removed");
   if (next.tracking.gaId !== cur.tracking.gaId) changes.push(next.tracking.gaId ? "Google Analytics ID set" : "Google Analytics ID removed");
@@ -142,10 +157,11 @@ export async function moneyVaultPage(env: AppEnv) {
 
 /** Counts a page visit (a daily number only: no IP, cookie or visitor ID is kept). */
 export async function countVisit(env: AppEnv, funnel: unknown, ip: string) {
-  if (funnel !== MONEY_VAULT.key) return { ok: true };
-  if (!(await loadFunnels(env)).moneyVault.on) return { ok: true };
+  if (funnel !== MONEY_VAULT.key && funnel !== "credit-vault") return { ok: true };
+  const s = await loadFunnels(env);
+  if (!(funnel === MONEY_VAULT.key ? s.moneyVault.on : s.creditVault.on)) return { ok: true };
   if (!(await rateLimit(env.DB, `funnel-visit:${ip}`, 20, 60))) return { ok: true };
-  await run(env.DB, "INSERT INTO funnel_visits (funnel, day, visits) VALUES (?, ?, 1) ON CONFLICT(funnel, day) DO UPDATE SET visits = visits + 1", MONEY_VAULT.key, now().slice(0, 10));
+  await run(env.DB, "INSERT INTO funnel_visits (funnel, day, visits) VALUES (?, ?, 1) ON CONFLICT(funnel, day) DO UPDATE SET visits = visits + 1", funnel, now().slice(0, 10));
   return { ok: true };
 }
 
