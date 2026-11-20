@@ -524,13 +524,19 @@ export function InvoiceDialog({ client: c, open, onClose }: DialogProps) {
   );
 }
 
+const PAY_METHODS = ["Cash", "Zelle", "Cash App", "Check", "Card (in office)", "Bank transfer", "Refund transfer (bank product)", "Other"];
+
 export function PaymentDialog({ client: c, open, onClose, invoiceId }: DialogProps & { invoiceId?: string }) {
   const store = useClients();
   const toast = useToast();
-  const unpaid = c.invoices.filter((i) => i.status === "open" || i.status === "overdue" || i.status === "partial");
+  // Drafts count too: a client can pay in person before the invoice is ever sent.
+  const unpaid = c.invoices.filter((i) => ["open", "overdue", "partial", "draft"].includes(i.status) && i.amount - i.paid > 0);
   const [inv, setInv] = useState(invoiceId ?? unpaid[0]?.id ?? "");
   const [amount, setAmount] = useState("");
-  const [method, setMethod] = useState("Card");
+  const [method, setMethod] = useState("Cash");
+  const [reference, setReference] = useState("");
+  const [date, setDate] = useState("");
+  const [note, setNote] = useState("");
   const sel = c.invoices.find((i) => i.id === inv);
   useEffect(() => {
     if (open) {
@@ -538,18 +544,19 @@ export function PaymentDialog({ client: c, open, onClose, invoiceId }: DialogPro
       setInv(id);
       const i = c.invoices.find((x) => x.id === id);
       setAmount(i ? String(i.amount - i.paid) : "");
+      setMethod("Cash"); setReference(""); setNote(""); setDate(new Date().toISOString().slice(0, 10));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, invoiceId]);
   const max = sel ? sel.amount - sel.paid : 0;
   const valid = sel && Number(amount) > 0 && Number(amount) <= max;
   const save = () => {
-    store.recordPayment(c.id, inv, Number(amount), method.toLowerCase());
+    store.recordPayment(c.id, inv, Number(amount), method, { reference: reference.trim() || undefined, receivedAt: date || undefined, note: note.trim() || undefined });
     toast(`Recorded ${usd(Number(amount), 2)} on ${sel!.number}`);
     onClose();
   };
   return (
-    <Modal open={open} onClose={onClose} title="Record payment" description="For payments taken outside the portal (cash, check, card in person)." footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!valid} onClick={save}>Record payment</Button></>}>
+    <Modal open={open} onClose={onClose} title="Record payment" description="For payments made outside the system — cash, Zelle, Cash App, check, card in the office." footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!valid} onClick={save}>Record payment</Button></>}>
       {unpaid.length === 0 ? (
         <p className="text-[14px] text-muted">This client has no unpaid invoices.</p>
       ) : (
@@ -557,8 +564,12 @@ export function PaymentDialog({ client: c, open, onClose, invoiceId }: DialogPro
           <SelectField label="Invoice" value={inv} onChange={(e) => { setInv(e.target.value); const i = c.invoices.find((x) => x.id === e.target.value); setAmount(i ? String(i.amount - i.paid) : ""); }} options={unpaid.map((i) => [i.id, `${i.number} — ${usd(i.amount - i.paid)} due`])} />
           <div className="grid gap-4 sm:grid-cols-2">
             <TextField label="Amount ($)" type="number" min={0} max={max} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} hint={`Max ${usd(max, 2)}`} />
-            <SelectField label="Method" value={method} onChange={(e) => setMethod(e.target.value)} options={["Card", "Cash", "Check", "ACH", "Other"].map((v) => [v, v])} />
+            <SelectField label="Method" value={method} onChange={(e) => setMethod(e.target.value)} options={PAY_METHODS.map((v) => [v, v])} />
+            <TextField label="Reference (optional)" value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Zelle confirmation, check #…" />
+            <TextField label="Date received" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
+          <TextField label="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
+          {sel?.status === "draft" && <p className="text-[12.5px] text-muted">This invoice hasn&rsquo;t been sent yet. Recording the payment marks it paid (or partly paid).</p>}
         </div>
       )}
     </Modal>

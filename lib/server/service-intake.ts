@@ -6,6 +6,7 @@
  * the portal, the profile is updated and the team is notified. Server-only.
  */
 import { SERVICE_INTAKES, isServiceIntakeKind, type ServiceIntakeKind } from "@/lib/intakes/service";
+import { canDo } from "@/lib/team/policy";
 import { docsFor, type Answers } from "@/lib/tax/interview/engine";
 import { all, badRequest, HttpError, json, notFound, now, one, rateLimit, run, type AppEnv } from "./core";
 import { randomId } from "./crypto";
@@ -310,4 +311,20 @@ export async function manualSubmitServiceIntake(env: AppEnv, a: Actor, id: strin
     emailed = out.sent;
   }
   return { submitted: true, documents: docs, emailed, intakeId: r.id, clientId: c.id };
+}
+
+/** Every unfinished intake of one kind, for clients and leads (a lead's intake sits on its prospect record). Staff with view access to that service. */
+export async function openServiceIntakes(env: AppEnv, a: Actor, kind: ServiceIntakeKind) {
+  requireStaff(a);
+  requirePermission(a, SERVICE_INTAKES[kind].module, "view");
+  const rows = await all<ClientRow & { si_id: string; si_created: string; si_updated: string; si_by: string }>(env.DB,
+    `${CLIENT_SQL.replace(/^SELECT /i, "SELECT si.id si_id, si.created_at si_created, si.updated_at si_updated, si.entered_by si_by, ")} JOIN service_intakes si ON si.client_id = c.id WHERE si.kind = ? AND si.status = 'in_progress' AND c.status != 'declined' ORDER BY si.created_at DESC`, kind);
+  const seeLeads = canDo(a.policy, a.member, "leads", "view");
+  const out = [];
+  for (const r of rows) {
+    const prospect = r.status === "prospect";
+    if (prospect ? !seeLeads : !(await canOpen(env, a, r))) continue;
+    out.push({ id: r.si_id, clientId: r.id, name: r.name, leadId: prospect ? (r as { lead_id?: string | null }).lead_id ?? null : null, isLead: prospect, createdAt: r.si_created, updatedAt: r.si_updated, link: await latestLink(env, "service_intake", r.si_id) });
+  }
+  return { intakes: out };
 }

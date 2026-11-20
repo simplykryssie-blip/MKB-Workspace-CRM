@@ -487,8 +487,8 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
       if (BACKEND && remote) return remote.billing(id, "POST", `/api/billing/invoices/${invId}/send`, {}, "Invoice sent");
       up(id, (c) => log({ ...c, invoices: c.invoices.map((x) => (x.id === invId ? { ...x, status: "open" as const } : x)) }, "invoice", `Sent invoice ${c.invoices.find((x) => x.id === invId)?.number}`));
     },
-    recordPayment(id: string, invId: string, amount: number, method: string) {
-      if (BACKEND && remote) return remote.billing(id, "POST", `/api/billing/invoices/${invId}/payments`, { amount, method });
+    recordPayment(id: string, invId: string, amount: number, method: string, extra?: { reference?: string; receivedAt?: string; note?: string }) {
+      if (BACKEND && remote) return remote.billing(id, "POST", `/api/billing/invoices/${invId}/payments`, { amount, method, ...extra });
       up(id, (c) => {
         const invoices = c.invoices.map((x): Invoice => {
           if (x.id !== invId) return x;

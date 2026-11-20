@@ -915,7 +915,7 @@ export function InvoicesTab({ c, act }: { c: Client; act: Act }) {
 }
 
 function InvoiceActions({ c, i, act, store, toast }: { c: Client; i: Client["invoices"][number]; act: Act; store: ReturnType<typeof useClients>; toast: ReturnType<typeof useToast> }) {
-  const unpaid = i.status === "open" || i.status === "overdue" || i.status === "partial";
+  const unpaid = (i.status === "open" || i.status === "overdue" || i.status === "partial" || i.status === "draft") && i.amount - i.paid > 0;
   return (
     <Menu
       label={`Actions for ${i.number}`}

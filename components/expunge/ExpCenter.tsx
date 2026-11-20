@@ -1,6 +1,7 @@
 "use client";
 
-import { BACKEND } from "@/lib/sync/remote";
+import { BACKEND, call } from "@/lib/sync/remote";
+import { useLeads } from "@/lib/store/leads-store";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -126,11 +127,20 @@ function NewInquiryDialog({ open, onClose }: { open: boolean; onClose: () => voi
 
 /* ================================================================== */
 
+type OpenIntake = { id: string; clientId: string; name: string; leadId: string | null; isLead: boolean; createdAt: string; updatedAt: string; link?: { usedAt?: string; openedAt?: string } | null };
+
 function Overview({ byId }: { byId: Map<string, Client> }) {
   const exp = useExp();
   const router = useRouter();
   const [phase, setPhase] = useState<Phase | "all">("all");
   const [staff, setStaff] = useState("all");
+  const { leads } = useLeads();
+  // Unfinished Expungement Relief intakes (clients and leads) — they live outside matters until staff open one.
+  const [open, setOpen] = useState<OpenIntake[]>([]);
+  useEffect(() => { if (BACKEND) call<{ intakes: OpenIntake[] }>("GET", "/api/service-intakes/open?kind=relief").then((r) => setOpen(r.intakes)).catch(() => setOpen([])); }, []);
+  const matterClients = new Set(exp.matters.filter((m) => m.intake.status === "sent" || m.intake.status === "in_progress").map((m) => m.clientId));
+  const extraIntakes = open.filter((x) => !matterClients.has(x.clientId));
+  const leadInquiries = leads.filter((l) => l.status === "open" && l.interests?.includes("expunge") && !open.some((x) => x.leadId === l.id));
   // Phase counts: cases, plus matters with no working cases (inquiries / intake).
   const counts = new Map<Phase, number>();
   exp.matters.forEach((m) => {
@@ -140,6 +150,8 @@ function Overview({ byId }: { byId: Map<string, Client> }) {
       counts.set(p, (counts.get(p) ?? 0) + 1);
     } else cs.forEach((c) => counts.set(casePhase(c, m), (counts.get(casePhase(c, m)) ?? 0) + 1));
   });
+  counts.set("Intake awaiting completion", (counts.get("Intake awaiting completion") ?? 0) + extraIntakes.length);
+  counts.set("New inquiry", (counts.get("New inquiry") ?? 0) + leadInquiries.length);
   const rows = exp.matters
     .map((m) => {
       const cs = matterCases(exp, m.id);
@@ -156,6 +168,40 @@ function Overview({ byId }: { byId: Map<string, Client> }) {
       <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
         {CARDS.map((k) => <Kpi key={k.p} label={k.label} value={counts.get(k.p) ?? 0} icon={k.icon} tone={k.tone} onClick={() => setPhase(k.p)} />)}
       </div>
+      {(phase === "Intake awaiting completion" || phase === "all") && extraIntakes.length > 0 && (
+        <Card>
+          <CardHeader icon={PenLine} title="Intake forms not finished yet" subtitle={`${extraIntakes.length} · started or sent, not submitted — no matter opened yet`} />
+          <ul className="divide-y divide-line border-t border-line">
+            {extraIntakes.map((x) => (
+              <li key={x.id}>
+                <Link href={x.isLead && x.leadId ? `/leads/${x.leadId}` : `/clients/${x.clientId}`} className="flex flex-wrap items-center gap-3 px-5 py-3 hover:bg-surface-hover sm:px-6">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[14px] font-medium text-ink">{x.name}</span>
+                    <span className="block text-[12px] text-muted">Started {fmtDate(x.createdAt)} · last saved {relTime(x.updatedAt)}{x.link ? (x.link.usedAt || x.link.openedAt ? " · client opened the link" : " · link sent") : ""}</span>
+                  </span>
+                  <Badge tone={x.isLead ? "info" : "neutral"}>{x.isLead ? "Lead" : "Client"}</Badge>
+                  <Badge tone="warning">Not submitted</Badge>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+      {(phase === "New inquiry" || phase === "all") && leadInquiries.length > 0 && (
+        <Card>
+          <CardHeader icon={Inbox} title="Leads interested in Expungement Relief" subtitle={`${leadInquiries.length} open lead${leadInquiries.length === 1 ? "" : "s"} · send them the intake from their lead page`} />
+          <ul className="divide-y divide-line border-t border-line">
+            {leadInquiries.map((l) => (
+              <li key={l.id}>
+                <Link href={`/leads/${l.id}`} className="flex flex-wrap items-center gap-3 px-5 py-3 hover:bg-surface-hover sm:px-6">
+                  <span className="min-w-0 flex-1"><span className="block truncate text-[14px] font-medium text-ink">{l.name}</span><span className="block text-[12px] text-muted">{l.source} · added {fmtDate(l.createdAt)}</span></span>
+                  <Badge tone="info">Lead</Badge>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
       <Card>
         <CardHeader icon={ClipboardList} title="Work queue" subtitle={`${phase === "all" ? "All matters" : phase} · ${rows.length} · soonest deadline first`} action={
           <div className="flex flex-wrap items-center gap-2">
