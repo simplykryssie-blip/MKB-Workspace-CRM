@@ -92,7 +92,30 @@ export async function runBackup(env: AppEnv) {
       cursor = l.cursor;
     }
 
-    // 2. Files: copy new or changed objects.
+    // 2. Files: copy new or changed objects (what doesn't fit is finished by the 15-minute catch-up).
+    await copyFiles(env, bucket, started, day, result.files);
+  } catch (e) {
+    result.ok = false;
+    result.error = String(e).slice(0, 300);
+  }
+  const summary = { ...result, finishedAt: now(), seconds: Math.round((Date.now() - started) / 100) / 10 };
+  try { await bucket.put("meta/last-run.json", JSON.stringify(summary, null, 2), { httpMetadata: { contentType: "application/json" } }); } catch { /* the audit entry below still records it */ }
+  await audit(env.DB, { kind: "anonymous", ip: "scheduled job" }, {
+    action: "Backup",
+    resource: "Daily backup",
+    meta: result.ok
+      ? `Database: ${result.db.tables} tables, ${result.db.rows} rows. Files: ${result.files.copied} copied, ${result.files.unchanged} unchanged${result.files.unfinished ? " (more tomorrow)" : ""}${result.files.tooLarge.length ? `, ${result.files.tooLarge.length} too large` : ""}.`
+      : `Failed: ${result.error}`,
+    success: result.ok,
+  });
+  return summary;
+}
+
+/* ------------------------------------------------------------ Owner: status and "Back up now" */
+type FileStats = { total: number; copied: number; unchanged: number; tooLarge: string[]; unfinished: boolean; removedOld: number };
+/** Copies new or changed files into the backup bucket until the time budget runs out (safe to run again any time). */
+async function copyFiles(env: AppEnv, bucket: R2Bucket, started: number, day: string, files: FileStats) {
+  const result = { files };
     const copies = new Map<string, string>();
     for (let cursor: string | undefined; ; ) {
       const l = await bucket.list({ prefix: "files/", cursor, include: ["customMetadata"] });
@@ -131,24 +154,28 @@ export async function runBackup(env: AppEnv) {
       }
       await bucket.put("meta/gone.json", JSON.stringify(next), { httpMetadata: { contentType: "application/json" } });
     }
-  } catch (e) {
-    result.ok = false;
-    result.error = String(e).slice(0, 300);
-  }
-  const summary = { ...result, finishedAt: now(), seconds: Math.round((Date.now() - started) / 100) / 10 };
-  try { await bucket.put("meta/last-run.json", JSON.stringify(summary, null, 2), { httpMetadata: { contentType: "application/json" } }); } catch { /* the audit entry below still records it */ }
-  await audit(env.DB, { kind: "anonymous", ip: "scheduled job" }, {
-    action: "Backup",
-    resource: "Daily backup",
-    meta: result.ok
-      ? `Database: ${result.db.tables} tables, ${result.db.rows} rows. Files: ${result.files.copied} copied, ${result.files.unchanged} unchanged${result.files.unfinished ? " (more tomorrow)" : ""}${result.files.tooLarge.length ? `, ${result.files.tooLarge.length} too large` : ""}.`
-      : `Failed: ${result.error}`,
-    success: result.ok,
-  });
-  return summary;
 }
 
-/* ------------------------------------------------------------ Owner: status and "Back up now" */
+/**
+ * Every 15 minutes: if the last daily backup ran out of time before every file was copied,
+ * keep copying (within the same time budget) until the backup is complete.
+ */
+export async function continueFileBackup(env: AppEnv) {
+  const bucket = env.BACKUP;
+  if (!bucket) return { skipped: true };
+  const obj = await bucket.get("meta/last-run.json");
+  if (!obj) return { skipped: true };
+  const last = (await obj.json()) as { ok?: boolean; day?: string; files?: FileStats; catchUps?: number };
+  if (!last.ok || !last.files?.unfinished) return { skipped: true };
+  const started = Date.now();
+  const files: FileStats = { total: 0, copied: 0, unchanged: 0, tooLarge: [], unfinished: false, removedOld: 0 };
+  await copyFiles(env, bucket, started, last.day ?? now().slice(0, 10), files);
+  const merged = { ...last, files: { ...files, copied: (last.files.copied ?? 0) + files.copied }, catchUps: (last.catchUps ?? 0) + 1, caughtUpAt: now() };
+  await bucket.put("meta/last-run.json", JSON.stringify(merged, null, 2), { httpMetadata: { contentType: "application/json" } });
+  if (!files.unfinished) await audit(env.DB, { kind: "anonymous", ip: "scheduled job" }, { action: "Backup", resource: "Daily backup (file copy finished)", meta: `All ${files.total} files backed up after ${merged.catchUps} catch-up run${merged.catchUps === 1 ? "" : "s"}.` });
+  return { copied: files.copied, unfinished: files.unfinished };
+}
+
 function ownerOnly(a: Actor) {
   if (a.kind !== "staff" || !roleOf(a.policy.roles, a.member)?.isOwner) throw forbidden("Only the owner can manage backups.");
   return a;

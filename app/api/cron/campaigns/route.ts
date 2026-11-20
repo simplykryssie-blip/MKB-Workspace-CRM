@@ -2,6 +2,7 @@ import { handle, HttpError, jsonResponse } from "@/lib/server/core";
 import { sha256 } from "@/lib/server/crypto";
 import { processCampaigns } from "@/lib/server/campaigns";
 import { processBookings } from "@/lib/server/booking";
+import { continueFileBackup } from "@/lib/server/backup";
 
 /**
  * Every 15 minutes (the worker's cron trigger, never a browser): starts
@@ -16,5 +17,7 @@ export const POST = handle(async (req, env) => {
   await processCampaigns(env).catch((e) => console.error("campaigns cron", e));
   // Appointments: free unpaid holds and send reminders.
   await processBookings(env).catch((e) => console.error("bookings cron", e));
+  // Backups: finish copying files the daily run didn't have time for.
+  await continueFileBackup(env).catch((e) => console.error("backup catch-up", e));
   return jsonResponse({ ok: true });
 }, { signedExternal: true });
