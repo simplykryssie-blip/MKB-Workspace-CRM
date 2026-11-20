@@ -14,6 +14,7 @@
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { BACKEND, RemoteError, call, debouncer, notify, pendingClientCreates } from "@/lib/sync/remote";
+import { markDeadline, putDeadline } from "@/lib/calendar/deadlines";
 import { BIZ_ENTITIES, BIZ_REQUESTS, COMPLIANCE_ITEMS, COMPLIANCE_RULES, STATE_CHECKLISTS, bizEnrollmentState } from "@/lib/sample/biz-seed";
 import { SAMPLE_NOW, staffById, staffList, meId } from "@/lib/sample/clients";
 import { nowIso, useClients } from "@/lib/store/clients-store";
@@ -79,8 +80,10 @@ const reducer = (s: State, a: Action): State => (a.type === "reset" ? init() : a
 /* ------------------------------------------------------------------ */
 
 export const requestInvoices = (r: ServiceRequest, c?: Client): Invoice[] => (c?.invoices ?? []).filter((i) => i.bizRequestId === r.id);
-export const requestDocs = (r: ServiceRequest, c?: Client) => (c?.documents ?? []).filter((d) => d.bizRequestId === r.id);
-export const requestMessages = (r: ServiceRequest, c?: Client) => (c?.messages ?? []).filter((m) => m.bizRequestId === r.id);
+/** The request's documents, plus Business Services documents added from the client profile (not tied to a request or entity). */
+export const requestDocs = (r: ServiceRequest, c?: Client) => (c?.documents ?? []).filter((d) => d.bizRequestId === r.id || (!d.bizRequestId && !d.entityId && d.service === "biz"));
+/** The request's messages, plus Business Services messages sent from the client profile (not tied to a request). */
+export const requestMessages = (r: ServiceRequest, c?: Client) => (c?.messages ?? []).filter((m) => m.bizRequestId === r.id || (!m.bizRequestId && m.service === "biz"));
 export const openInfo = (r: ServiceRequest) => r.info.filter((i) => i.status === "open");
 export const isClosed = (r: ServiceRequest) => r.status === "Completed" || r.status === "Cancelled";
 
@@ -227,6 +230,15 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
   const upReq = (id: string, fn: (r: ServiceRequest) => ServiceRequest) => set((s) => ({ ...s, requests: s.requests.map((r) => (r.id === id ? fn(r) : r)) }));
   const upEntity = (id: string, fn: (e: BizEntity) => BizEntity) => set((s) => ({ ...s, entities: s.entities.map((e) => (e.id === id ? fn(e) : e)) }));
   const upItem = (id: string, fn: (i: ComplianceItem) => ComplianceItem) => set((s) => ({ ...s, compliance: s.compliance.map((i) => (i.id === id ? fn(i) : i)) }));
+  /** Use a Business Services service already added on the client's profile (one not tied to a request yet), so there's one pipeline, not two. */
+  const reuseOrEnroll = (clientId: string, e: { service: "biz"; title: string; staffId: string; fee: number; dueAt?: string }) => {
+    const c = clients().clients.find((x) => x.id === clientId);
+    const linked = new Set(get().requests.map((r) => r.enrollmentId).filter(Boolean));
+    const free = c?.enrollments.find((x) => x.service === "biz" && !linked.has(x.id) && x.status !== "complete" && x.status !== "cancelled");
+    if (!free || !c) return clients().enroll(clientId, e);
+    clients().updateClient(clientId, { enrollments: c.enrollments.map((x) => (x.id === free.id ? { ...x, title: e.title, fee: e.fee || x.fee, dueAt: e.dueAt ?? x.dueAt } : x)) }, "Business service linked to its request");
+    return free.id;
+  };
   const logClient = (r: ServiceRequest, text: string, actor: "staff" | "client" | "system" = "staff") => r.clientId && clients().logActivity(r.clientId, "status", `${r.number} ${r.serviceName}: ${text}`, actor);
   const msg = (r: ServiceRequest, body: string, from: "staff" | "client" = "staff") => r.clientId && clients().sendMessage(r.clientId, body, "biz", { bizRequestId: r.id, from, author: from === "staff" ? staffById(r.assignedTo).name : undefined });
 
@@ -300,10 +312,12 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
         history: [{ status: "Intake", at, byId: input.source === "portal" ? "client" : input.assignedTo, note: input.source === "portal" ? "submitted from the client portal" : `created from ${input.source}` }],
       };
       if (input.clientId) {
-        r.enrollmentId = clients().enroll(input.clientId, { service: "biz", title: `${svc.name} — ${r.businessName}`, staffId: input.assignedTo, fee: quoteTotal(r.quote), dueAt: r.dueAt });
+        r.enrollmentId = reuseOrEnroll(input.clientId, { service: "biz", title: `${svc.name} — ${r.businessName}`, staffId: input.assignedTo, fee: quoteTotal(r.quote), dueAt: r.dueAt });
         (input.files ?? []).forEach((f) => clients().uploadDocument(input.clientId!, { name: f.name, service: "biz", category: "Client-provided document", sensitive: false, sizeKb: f.sizeKb, file: (f as { file?: File }).file, entityId, bizRequestId: id, by: input.source === "portal" ? "client" : "staff" }));
       }
       set((s) => ({ ...s, requests: [r, ...s.requests], nextNumber: next + 1 }));
+      if (r.dueAt && r.clientId) void putDeadline({ title: `Due: ${r.serviceName} — ${r.businessName} (${r.number})`, dueAt: r.dueAt, service: "biz", clientId: r.clientId, assigneeId: r.assignedTo, notes: "Business Services request due date." })
+        .then((cal) => cal && upReq(id, (x) => ({ ...x, dueTaskId: cal })));
       return id;
     },
     /** Prospect → existing client (or a new client record). Never creates a duplicate. */
@@ -311,7 +325,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       const r = R(id);
       const svc = svcOf(r);
       const entityId = r.entityId ?? createEntity({ clientId, legalName: r.businessName, entityType: r.structure, state: r.state, status: svc?.formation ? "forming" : "active", principalAddress: "", ownerId: r.assignedTo });
-      const enrollmentId = clients().enroll(clientId, { service: "biz", title: `${r.serviceName} — ${r.businessName}`, staffId: r.assignedTo, fee: quoteTotal(r.quote), dueAt: r.dueAt });
+      const enrollmentId = reuseOrEnroll(clientId, { service: "biz", title: `${r.serviceName} — ${r.businessName}`, staffId: r.assignedTo, fee: quoteTotal(r.quote), dueAt: r.dueAt });
       upReq(id, (x) => ({ ...x, clientId, entityId, enrollmentId, history: [...x.history, { status: x.status, at: nowIso(), byId: meId(), note: x.prospect ? `prospect ${x.prospect.name} linked to the client record` : "linked to the client record" }] }));
       clients().logActivity(clientId, "intake", `Business service request ${r.number} linked (${r.serviceName})`);
     },
@@ -537,16 +551,24 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
         followUpAt: followUpDays > 0 ? new Date(SAMPLE_NOW.getTime() + followUpDays * 86400000).toISOString() : undefined,
         formation: r.formation ? { ...r.formation, completedAt: at } : undefined,
       });
+      markDeadline(R(id).dueTaskId, true);
       // Compliance items this request was handling are marked filed.
       get().compliance.filter((i) => i.requestId === id && i.status !== "filed").forEach((i) => a.markFiled(i.id));
     },
 
     /* ---------------- Tasks + notes ---------------- */
     addTask(id: string, t: { title: string; dueAt?: string; assigneeId: string }) {
-      upReq(id, (x) => ({ ...x, tasks: [...x.tasks, { id: uid("t"), ...t, done: false, createdAt: nowIso() }] }));
+      const tid = uid("t");
+      upReq(id, (x) => ({ ...x, tasks: [...x.tasks, { id: tid, ...t, done: false, createdAt: nowIso() }] }));
+      // A dated task also goes on the assignee's calendar.
+      const r = R(id);
+      if (t.dueAt) void putDeadline({ title: `${t.title} — ${r.businessName} (${r.number})`, dueAt: t.dueAt, service: "biz", clientId: r.clientId, assigneeId: t.assigneeId, notes: `Business Services request ${r.number}: ${r.serviceName}` })
+        .then((cal) => cal && upReq(id, (x) => ({ ...x, tasks: x.tasks.map((y) => (y.id === tid ? { ...y, calTaskId: cal } : y)) })));
     },
     toggleTask(id: string, taskId: string) {
+      const cur = R(id).tasks.find((t) => t.id === taskId);
       upReq(id, (x) => ({ ...x, tasks: x.tasks.map((t) => (t.id === taskId ? { ...t, done: !t.done, doneAt: t.done ? undefined : nowIso() } : t)) }));
+      if (cur) markDeadline(cur.calTaskId, !cur.done);
     },
     addNote(id: string, body: string, authorId = meId()) {
       upReq(id, (x) => ({ ...x, notes: [{ id: uid("n"), authorId, body, at: nowIso() }, ...x.notes] }));

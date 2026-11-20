@@ -302,6 +302,8 @@ export type ExtensionFiling = { jurisdiction: string; submissionId?: string; res
 export type Extension = {
   filedAt: string;
   dueAt: string;
+  /** The extended due date's task on the preparer's calendar (live CRM). */
+  calTaskId?: string;
   /** Federal and state filings (Form 4868 / 7004 and state forms). */
   filings?: ExtensionFiling[];
   estimatedTax?: number;

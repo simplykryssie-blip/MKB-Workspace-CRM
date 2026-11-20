@@ -10,6 +10,7 @@
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { BACKEND, RemoteError, call, debouncer, notify, pendingClientCreates } from "@/lib/sync/remote";
+import { putDeadline } from "@/lib/calendar/deadlines";
 import { DEFAULT_FEE_SCHEDULE, ORGANIZERS, RETURN_STATUSES, STATUS_PATH, baseChecklist, defaultPricing, dueDates, priceTotal, type ChecklistItem, type FeeItem, type EngagementAcceptance, type FilingStatus, type PriceLine, type ReturnStatus, type TaxForm, type TaxReturn, type Extension, type DueDiligence } from "@/lib/tax/config";
 import { TAX_RETURNS } from "@/lib/sample/tax";
 import { docsFor, type Answers } from "@/lib/tax/interview/engine";
@@ -156,7 +157,9 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       const { due, extended } = dueDates(input.form, input.taxYear);
       // Link to an existing engagement for this year, or create one on the client profile.
       const title = `${input.taxYear} ${c.type === "business" ? "Business" : input.form === "1040-X" ? "Amended" : "Individual"} return (${input.form})`;
-      const existing = c.enrollments.find((e) => e.service === "tax" && e.title.startsWith(String(input.taxYear)) && !get().returns.some((r) => r.enrollmentId === e.id));
+      // Reuse the Tax service already on the profile: same tax year first, else one with no year in its title.
+      const free = c.enrollments.filter((e) => e.service === "tax" && e.status !== "complete" && e.status !== "cancelled" && !get().returns.some((r) => r.enrollmentId === e.id));
+      const existing = free.find((e) => e.title.startsWith(String(input.taxYear))) ?? free.find((e) => !/\b(19|20)\d{2}\b/.test(e.title));
       const enrollmentId = existing?.id ?? clients().enroll(c.id, { service: "tax", title, staffId: input.preparerId, fee: 0 });
       const fees = get().fees;
       const priced = (code: string, qty = 1, fallback?: { label: string; price: number }): PriceLine[] => { const f = fees.find((x) => x.code === code) ?? (fallback ? { code, ...fallback } : undefined); return f ? [{ id: uid("p"), code, description: f.label, qty, unit: f.price }] : []; };
@@ -219,6 +222,10 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
         pricing: fee && !x.pricing.lines.some((l) => l.code === code) ? { ...x.pricing, lines: [...x.pricing.lines, { id: uid("p"), code, description: fee.label, qty: 1, unit: fee.price }] } : x.pricing,
       }, "status", `Extension filed (${filings.map((f) => f.jurisdiction).join(" + ")}) — new due date ${due}${d.payWithExtension ? ` · $${d.payWithExtension.toLocaleString()} paid with the extension` : ""}`));
       clients().logActivity(r.clientId, "status", `${label(r)}: extension filed — due ${due}`);
+      // The extended due date goes on the preparer's calendar.
+      const name = clients().clients.find((c) => c.id === r.clientId)?.name ?? "client";
+      void putDeadline({ title: `Extended due date: ${name} — ${label(r)}`, dueAt: extended, service: "tax", clientId: r.clientId, assigneeId: r.preparerId, priority: "high", notes: `Extension filed ${new Date().toLocaleDateString("en-US")}. File the return by ${due}.` }, r.extension?.calTaskId)
+        .then((cal) => cal && up(id, (x) => (x.extension ? { ...x, extension: { ...x.extension, calTaskId: cal } } : x)));
     },
     recordExtensionResult(id: string, jurisdiction: string, result: "accepted" | "rejected", reason?: string, submissionId?: string) {
       up(id, (x) => (x.extension ? log({ ...x, extension: { ...x.extension, filings: (x.extension.filings ?? []).map((f) => (f.jurisdiction === jurisdiction ? { ...f, result, reason, submissionId: submissionId || f.submissionId, resultAt: nowIso() } : f)) } }, "status", `Extension ${result} — ${jurisdiction}${reason ? `: ${reason}` : ""}`) : x));

@@ -365,6 +365,8 @@ function EnrollmentRow({ c, e, compact }: { c: Client; e: Enrollment; compact?: 
   const expMatter = useExp().matters.find((x) => x.enrollmentId === e.id);
   // Expungement Relief runs in its matter; a service added here without one has nothing to move it along.
   const expUnlinked = e.service === "expunge" && !expMatter && e.status !== "complete" && e.status !== "cancelled";
+  // Same for Business Services: the request moves the stages.
+  const bizUnlinked = e.service === "biz" && !bizReq && e.status !== "complete" && e.status !== "cancelled";
   const isTax = e.service === "tax" || e.service === "books" || !!booksWs || !!bizReq || !!expMatter || expUnlinked;
   // Bookkeeping before the workspace exists: show the intake → review → proposal step, not a monthly-close stage.
   const booksOnboarding = e.service === "books" && !booksWs && !bizReq && !expMatter;
@@ -447,6 +449,12 @@ function EnrollmentRow({ c, e, compact }: { c: Client; e: Enrollment; compact?: 
         <div className="mt-3 flex flex-wrap items-center justify-end gap-2"><BooksEnrollmentActions c={c} /></div>
       )}
       {expUnlinked && <ExpStart c={c} compact={compact} />}
+      {bizUnlinked && !compact && (
+        <div className="mt-3 flex flex-wrap items-center justify-end gap-2 rounded-lg bg-warning-soft/50 px-3 py-2">
+          <span className="mr-auto text-[12.5px] text-ink-2">Not connected to a Business Services request yet. Start the request (Service intakes → Start request, or Business Services → New request for this client) and it takes over this service&rsquo;s stages.</span>
+          <Button size="sm" variant="ghost" href="/services/business-services">Open Business Services</Button>
+        </div>
+      )}
       {isTax && !expUnlinked && !(e.service === "books" && !booksWs && !bizReq && !expMatter) && (
         <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
           <span className="mr-auto text-[12px] text-muted">{expMatter ? `Managed in Expungement Relief as ${expMatter.number}.` : bizReq ? `Managed in Business Services as ${bizReq.number}.` : booksWs ? "Monthly close is managed in the Bookkeeping workspace." : "Workflow is managed in the Tax Preparation Center."}</span>

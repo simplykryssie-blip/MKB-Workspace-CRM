@@ -231,7 +231,8 @@ export async function saveBiz(env: AppEnv, a: Actor, kind: BizKind, id: string, 
     ...(changed.includes("assignment") || changed.includes("linked to client") ? assignStmts(env, kind, next, clientId) : []),
   ]);
   if (!res[0].meta.changes) throw new HttpError(409, "Someone else updated this record. Reloading the latest version.", "conflict");
-  if (kind === "biz_request" && changed.includes("engagement letter accepted")) await saveEngagementPdf(env, s, next as ServiceRequest).catch(() => null);
+  // Signed online: the signed PDF was already saved when the client signed.
+  if (kind === "biz_request" && changed.includes("engagement letter accepted") && (next as ServiceRequest).engagement?.method !== "online") await saveEngagementPdf(env, s, next as ServiceRequest).catch(() => null);
   const label = "number" in next ? (next as ServiceRequest).number : "legalName" in next ? (next as BizEntity).legalName : (next as ComplianceItem).title;
   const action = changed.includes("assignment") ? "Assignment change" : changed.some((c) => /Approved|Completed|completion|approval|deliverable review|payment override/.test(c)) ? "Approval" : "Record update";
   await audit(env.DB, s, { action, resource: `${LABEL[kind]} ${label}`, department: "biz", meta: `Changed: ${[...new Set(changed)].slice(0, 12).join(", ") || "details"}` });

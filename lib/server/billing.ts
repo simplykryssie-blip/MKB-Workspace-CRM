@@ -160,14 +160,22 @@ export async function createInvoice(env: AppEnv, a: Actor, b: Draft) {
   if (amount <= 0) throw badRequest("The invoice total must be more than $0.");
   const due = str(b.dueAt, 40);
   if (!/^\d{4}-\d{2}-\d{2}/.test(due)) throw badRequest("Choose a due date.");
-  const taxReturnId = b.taxReturnId ? str(b.taxReturnId, 120) : null;
+  let taxReturnId = b.taxReturnId ? str(b.taxReturnId, 120) : null;
   if (taxReturnId && !(await one(env.DB, "SELECT 1 FROM tax_returns WHERE id = ? AND client_id = ?", taxReturnId, clientId))) throw badRequest("That return belongs to another client.");
+  // A bill made from the client profile or Billing is linked to the service's return / workspace /
+  // request / matter when the client has exactly one, so it shows there too.
+  let workspaceId = b.workspaceId ? str(b.workspaceId, 120) : null, bizRequestId = b.bizRequestId ? str(b.bizRequestId, 120) : null, expMatterId = b.expMatterId ? str(b.expMatterId, 120) : null;
+  const only = async (sql: string) => { const rows = await all<{ id: string }>(env.DB, sql, clientId); return rows.length === 1 ? rows[0].id : null; };
+  if (service === "tax" && !taxReturnId) taxReturnId = (await only("SELECT id FROM tax_returns WHERE client_id = ? AND status NOT IN ('Completed', 'Accepted')")) ?? (await only("SELECT id FROM tax_returns WHERE client_id = ?"));
+  if (service === "books" && !workspaceId) workspaceId = await only("SELECT id FROM books_workspaces WHERE client_id = ?");
+  if (service === "biz" && !bizRequestId) bizRequestId = await only("SELECT id FROM service_records WHERE client_id = ? AND kind = 'biz_request'");
+  if (service === "expunge" && !expMatterId) expMatterId = await only("SELECT id FROM service_records WHERE client_id = ? AND kind = 'exp_matter'");
   const id = randomId("inv");
   const number = await nextNumber(env);
   const t = now();
   const status = b.draft === true ? "draft" : "open";
   await run(env.DB, "INSERT INTO invoices (id, number, client_id, service, tax_return_id, workspace_id, biz_request_id, exp_matter_id, description, payment_mode, status, lines, amount_cents, paid_cents, issued_at, due_at, sent_at, history, bureau, created_at, created_by, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, NULL, ?, ?, ?, ?, ?)",
-    id, number, clientId, service, taxReturnId, b.workspaceId ? str(b.workspaceId, 120) : null, b.bizRequestId ? str(b.bizRequestId, 120) : null, b.expMatterId ? str(b.expMatterId, 120) : null,
+    id, number, clientId, service, taxReturnId, workspaceId, bizRequestId, expMatterId,
     str(b.description, 300) || lines[0].label, mode, status, JSON.stringify(lines), amount, t, due, hist("[]", a.member.id, `Created${status === "draft" ? " as a draft" : ""}${mode === "bank_product" ? " — paid from refund (bank product)" : ""}`), bureau, t, a.member.id, t);
   await run(env.DB, "INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'invoice', ?, 'staff', ?, ?)", randomId("x"), clientId, `${status === "draft" ? "Drafted" : "Created"} invoice ${number} — $${dollars(amount).toFixed(2)}`, a.member.id, t);
   await audit(env.DB, a, { action: "Record update", resource: `Invoice ${number}`, meta: `Created ($${dollars(amount).toFixed(2)})` });

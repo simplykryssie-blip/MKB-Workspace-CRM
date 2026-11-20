@@ -67,8 +67,10 @@ export const currentMonth = (w: BooksWorkspace) => [...w.months].sort((a, b) => 
 export const openTasks = (w: BooksWorkspace, period?: string) => w.tasks.filter((t) => t.status === "open" && (!period || t.period === period));
 export const unresolved = (m: BooksMonth) => m.reviewItems.filter((i) => i.status !== "resolved");
 export const workspaceInvoices = (w: BooksWorkspace, c?: Client): Invoice[] => (c?.invoices ?? []).filter((i) => i.workspaceId === w.id);
-export const workspaceDocs = (w: BooksWorkspace, c?: Client) => (c?.documents ?? []).filter((d) => d.workspaceId === w.id);
-export const workspaceMessages = (w: BooksWorkspace, c?: Client) => (c?.messages ?? []).filter((m) => m.workspaceId === w.id);
+/** The workspace's documents, plus bookkeeping documents added from the client profile (not tied to a workspace). */
+export const workspaceDocs = (w: BooksWorkspace, c?: Client) => (c?.documents ?? []).filter((d) => d.workspaceId === w.id || (!d.workspaceId && d.service === "books"));
+/** The workspace's messages, plus bookkeeping messages sent from the client profile (not tied to a workspace). */
+export const workspaceMessages = (w: BooksWorkspace, c?: Client) => (c?.messages ?? []).filter((m) => m.workspaceId === w.id || (!m.workspaceId && m.service === "books"));
 export const balanceDue = (w: BooksWorkspace, c?: Client) => workspaceInvoices(w, c).filter((i) => i.status !== "draft").reduce((s, i) => s + i.amount - i.paid, 0);
 
 /** Next action + who owns it, for the work queue. */

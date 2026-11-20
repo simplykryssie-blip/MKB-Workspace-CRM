@@ -180,7 +180,7 @@ export type InfoRequest = {
   respondedAt?: string;
 };
 
-export type BizTask = { id: string; title: string; dueAt?: string; assigneeId: string; done: boolean; doneAt?: string; createdAt: string };
+export type BizTask = { id: string; title: string; dueAt?: string; assigneeId: string; done: boolean; doneAt?: string; createdAt: string; /** Its task on the calendar (live CRM). */ calTaskId?: string };
 export type InternalNote = { id: string; authorId: string; body: string; at: string };
 
 export type AgencyEvent = {
@@ -282,6 +282,8 @@ export type ServiceRequest = {
   /** Proceed before payment (owner override), with reason. */
   paymentWaived?: string;
   info: InfoRequest[];
+  /** The due date's task on the calendar (live CRM). */
+  dueTaskId?: string;
   tasks: BizTask[];
   notes: InternalNote[];
   agency: AgencyEvent[];

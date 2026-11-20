@@ -103,7 +103,7 @@ export function MatterPage({ id }: { id: string }) {
       <div className="mt-5">
         {tab === "cases" && (
           <div className="space-y-5">
-            <ServiceEngagementCard e={m.engagement} letterName="Expungement Relief letter" letterUrl={`/api/exp/matters/${encodeURIComponent(m.id)}/letter`} when="The client accepts the letter before MKB prepares any documents" canRecord={exp.can.edit} onAccept={(a) => exp.acceptEngagement(m.id, a)} />
+            <ServiceEngagementCard e={m.engagement} letterName="Expungement Relief letter" letterUrl={`/api/exp/matters/${encodeURIComponent(m.id)}/letter`} when="The client accepts the letter before MKB prepares any documents — or send it from the client's Signatures tab to sign online" canRecord={exp.can.edit} onAccept={(a) => exp.acceptEngagement(m.id, a)} />
             <CasesTab m={m} />
           </div>
         )}
