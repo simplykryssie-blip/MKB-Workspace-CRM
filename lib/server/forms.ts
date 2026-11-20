@@ -208,17 +208,31 @@ async function process(env: AppEnv, f: LeadForm, raw: Record<string, unknown>, c
     const toBiz = lead.type === "individual" && !lead.business && !!L.bizName;
     if (toBiz) filled.push("business name");
     const address = !lead.address && L.state ? (filled.push("state"), JSON.stringify({ line1: "", city: L.city, state: L.state, zip: L.zip })) : lead.address;
+    // Names: a made-up name ("Text from (555)…", "Website visitor") is replaced by the real one;
+    // a different real name is never overwritten (it could be a spouse), only flagged for staff.
+    const same = (a?: string | null, b?: string | null) => (a ?? "").toLowerCase().replace(/[^a-z]/g, "") === (b ?? "").toLowerCase().replace(/[^a-z]/g, "");
+    const madeUp = (n?: string | null) => !n || /^(text from |website visitor$)/i.test(n.trim());
+    let name = toBiz ? L.bizName! : lead.name;
+    let contactName = toBiz ? lead.contact_name || lead.name : lead.contact_name;
+    let otherName = "";
+    if (L.name) {
+      if (lead.type === "individual" && !toBiz) {
+        if (madeUp(lead.name)) { name = L.name; filled.push("name"); } else if (!same(lead.name, L.name)) otherName = L.name;
+      } else if (madeUp(contactName)) { contactName = L.name; filled.push("contact name"); } else if (!same(contactName, L.name)) otherName = L.name;
+    }
     await db.batch([
       save("existing_lead", lead.id),
       db.prepare("INSERT INTO lead_notes (id, lead_id, author_id, body, at) VALUES (?, ?, ?, ?, ?)").bind(randomId("n"), lead.id, lead.owner_id, `New “${f.name}” submission:\n${L.summary}${came}`, t),
       db.prepare("INSERT INTO lead_activity (id, lead_id, kind, text, actor, at) VALUES (?, ?, 'lead', ?, 'client', ?)").bind(randomId("x"), lead.id, `Submitted the “${f.name}” form again`, t),
       db.prepare("UPDATE leads SET interests = ?, tags = ?, phone = ?, email = ?, address = ?, type = ?, name = ?, contact_name = ?, business = ?, rev = rev + 1, last_activity_at = ? WHERE id = ?").bind(
         JSON.stringify(interests), JSON.stringify(tags), phone, email, address,
-        toBiz ? "business" : lead.type, toBiz ? L.bizName! : lead.name, toBiz ? lead.contact_name || lead.name : lead.contact_name,
+        toBiz ? "business" : lead.type, name, contactName,
         toBiz ? JSON.stringify({ entityType: L.entityType || "LLC", industry: "" }) : lead.business, t, lead.id),
       ...(filled.length ? [db.prepare("INSERT INTO lead_activity (id, lead_id, kind, text, actor, at) VALUES (?, ?, 'lead', ?, 'system', ?)").bind(randomId("x"), lead.id, `Added from the “${f.name}” form: ${filled.join(", ")}`, t)] : []),
+      ...(otherName ? [db.prepare("INSERT INTO lead_activity (id, lead_id, kind, text, actor, at) VALUES (?, ?, 'lead', ?, 'system', ?)").bind(randomId("x"), lead.id, `The “${f.name}” form was submitted with a different name: “${otherName}” (the lead's name was kept). Update the lead if that's the right person.`, t)] : []),
     ]);
-    if (channel !== "Staff test") await notify(env, { module: "leads" }, { kind: "form", title: `An open lead submitted the “${f.name}” form again`, href: `/leads/${lead.id}` });
+    const changes = [filled.length ? `Added: ${filled.join(", ")}${filled.includes("name") ? ` (now “${name}”)` : ""}.` : "", otherName ? `Different name given: “${otherName}”.` : ""].filter(Boolean).join(" ");
+    if (channel !== "Staff test") await notify(env, { module: "leads" }, { kind: "form", title: `${(name || "An open lead").slice(0, 60)} submitted the “${f.name}” form again`, body: changes || "Same details as before.", href: `/leads/${lead.id}` });
     if (channel !== "Staff test") await sendAutoIntake(env, f, lead.id, data, ip);
     return { id: subId, outcome: "existing_lead" as const, leadId: lead.id };
   }
