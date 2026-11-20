@@ -35,7 +35,7 @@ function wrap(text: string, font: PDFFont, size: number, width: number) {
 
 export type IntakePdfInput = {
   clientName: string; taxYear: number; form: TaxForm; returnId: string; answers: Answers;
-  submittedAt: string; enteredBy: "client" | "staff"; consentName?: string; documents: string[]; engagement?: { title: string; version: number; acceptedName: string; acceptedAt: string };
+  submittedAt: string; enteredBy: "client" | "staff" | "manual"; consentName?: string; documents: string[]; engagement?: { title: string; version: number; acceptedName: string; acceptedAt: string };
   /** The client's drawn signature (PNG). */
   signaturePng?: Uint8Array;
   /** Other interviews (e.g. bookkeeping intake): their own sections and title instead of the tax return's. */
@@ -141,7 +141,7 @@ export async function buildIntakePdf(x: IntakePdfInput): Promise<Uint8Array> {
   if (!x.sections) row("Return", `${x.returnId} · Form ${x.form}`);
   row(x.draft ? "Answers saved" : "Submitted", `${when} (Central)`);
   if (x.draft) row("Status", "Not submitted or signed yet — answers so far");
-  else row("Completed by", x.enteredBy === "staff" ? "MKB staff with the client" : "The client, online");
+  else row("Completed by", x.enteredBy === "manual" ? "Manually entered" : x.enteredBy === "staff" ? "MKB staff with the client" : "The client, online");
   if (x.consentName) row(x.signaturePng ? "Confirmed accurate and signed by (printed name)" : "Confirmed accurate by (typed name)", x.consentName);
   if (x.signaturePng) { space(4); await signature(x.signaturePng, `Signature of ${x.consentName ?? "the client"}`); }
   if (x.engagement) row("Engagement letter accepted", `${x.engagement.title} (version ${x.engagement.version}) — ${x.engagement.acceptedName}, ${new Date(x.engagement.acceptedAt).toLocaleDateString("en-US", { dateStyle: "long" })}`);

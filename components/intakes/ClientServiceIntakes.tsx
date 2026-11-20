@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { copyText } from "@/lib/clipboard";
 import { useRouter } from "next/navigation";
-import { ArrowRight, ClipboardList, Copy, Mail, Play, ShieldCheck } from "lucide-react";
+import { ArrowRight, ClipboardList, Copy, Mail, PenLine, Play, ShieldCheck } from "lucide-react";
 import { NewRequestDialog } from "@/components/biz/BizDialogs";
 import { bizPresetFrom, reliefFrom, type BizPreset } from "@/lib/intakes/from-intake";
 import { useBiz } from "@/lib/store/biz-store";
@@ -61,7 +61,14 @@ export function ClientServiceIntakesCard({ c }: { c: Client }) {
     } catch (e) { toast(e instanceof Error ? e.message : "Couldn't open the intake", "info"); }
     setStarting(null);
   };
+  /** Open the intake for staff to fill in (the client already completed it another way). Nothing is sent. */
+  const enterManually = async (kind: ServiceIntakeKind) => {
+    setBusy(true);
+    try { const r = await call<{ intakeId: string }>("POST", `/api/clients/${c.id}/service-intakes/manual`, { kind }); router.push(`/clients/${c.id}/intakes/${r.intakeId}`); }
+    catch (e) { toast(e instanceof Error ? e.message : "Couldn't open the intake", "info"); setBusy(false); }
+  };
   const rowAction = (x: SvcItem) => {
+    if (x.status === "in_progress" && can(x.kind)) return <Button size="sm" icon={PenLine} onClick={() => router.push(`/clients/${c.id}/intakes/${x.id}`)}>Enter manually</Button>;
     if (x.kind === "biz" && team.can("biz", "create")) {
       const r = biz.requests.find((q) => q.intakeId === x.id);
       return r ? <Button size="sm" icon={ArrowRight} href={`/services/business-services/requests/${encodeURIComponent(r.id)}`}>Open {r.number}</Button>
@@ -112,6 +119,12 @@ export function ClientServiceIntakesCard({ c }: { c: Client }) {
           </div>
         ) : (
           <div className="space-y-3">
+            <div className="rounded-xl border border-line bg-surface-2 p-3">
+              <p className="text-[13.5px] font-semibold text-ink">Already completed it another way?</p>
+              <p className="mt-0.5 text-[12.5px] text-muted">Fill it in yourself instead of emailing it. Nothing is sent to the client, and it&rsquo;s saved as <b>Manually entered</b>.</p>
+              <Button size="sm" className="mt-2" icon={PenLine} disabled={busy} onClick={() => sending && void enterManually(sending)}>Enter it manually</Button>
+            </div>
+            <p className="text-[13px] font-semibold text-ink">Or email the client their private link</p>
             <label className="block text-[13px] font-medium text-ink-2">Client&rsquo;s email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="mt-1 h-10 w-full rounded-xl border border-line bg-surface px-3 text-[14px] text-ink" /></label>
             <p className="flex gap-2 text-[12.5px] text-muted"><ShieldCheck size={14} className="mt-0.5 shrink-0 text-success" />Private link: opens only this intake, expires in 14 days, closes once submitted. It asks no Social Security or account numbers — documents with those are requested as secure portal uploads.</p>
           </div>

@@ -19,7 +19,7 @@ import { SignaturePad } from "@/components/ui/SignaturePad";
  */
 type Loaded = {
   intake: { kind: ServiceIntakeKind; status: string; answers: Answers; step: number; rev: number; name: string; firstName: string };
-  expiresAt: string;
+  expiresAt: string | null;
 };
 type Done = { documents: string[]; emailed: boolean; next?: NextStop };
 class LinkError extends Error {
@@ -94,7 +94,7 @@ function Thanks({ done, name, kind }: { done: Done; name: string; kind: ServiceI
 
 type Api = <T>(method: "GET" | "PUT" | "POST", path?: string, body?: unknown) => Promise<T>;
 
-function Runner({ data, api, reload, onDone, onGone }: { data: Loaded; api: Api; reload: () => void; onDone: (d: Done) => void; onGone: (e: LinkError) => void }) {
+function Runner({ data, api, reload, onDone, onGone, manual }: { data: Loaded; api: Api; reload: () => void; onDone: (d: Done) => void; onGone: (e: LinkError) => void; manual?: boolean }) {
   const meta = SERVICE_INTAKES[data.intake.kind];
   const sections = useMemo(() => SERVICE_INTAKES[data.intake.kind].sections, [data.intake.kind]);
   const [answers, setAnswers] = useState<Answers>(data.intake.answers);
@@ -169,15 +169,16 @@ function Runner({ data, api, reload, onDone, onGone }: { data: Loaded; api: Api;
     <div ref={top} className="space-y-4">
       <div>
         <h1 className="text-[22px] font-bold tracking-tight text-ink sm:text-[26px]">{meta.label} intake — {data.intake.name}</h1>
-        <p className="mt-0.5 text-[13px] text-muted">{doneCount} of {visible.length} sections complete{saved ? ` · saved ${saved}` : ""} · link expires {new Date(data.expiresAt).toLocaleDateString("en-US", { dateStyle: "long" })}</p>
-        {step === 0 && <p className="mt-2 rounded-xl border border-line bg-surface px-3 py-2.5 text-[13.5px] text-ink-2">Hi {data.intake.firstName} — your answers save as you go, so you can stop and come back to this link anytime before it expires. Please don&rsquo;t type Social Security or account numbers here — we&rsquo;ll ask for documents that contain them as secure uploads in your client portal.</p>}
+        <p className="mt-0.5 text-[13px] text-muted">{doneCount} of {visible.length} sections complete{saved ? ` · saved ${saved}` : ""}{data.expiresAt ? ` · link expires ${new Date(data.expiresAt).toLocaleDateString("en-US", { dateStyle: "long" })}` : " · manual entry: nothing is sent to the client"}</p>
+        {step === 0 && !manual && <p className="mt-2 rounded-xl border border-line bg-surface px-3 py-2.5 text-[13.5px] text-ink-2">Hi {data.intake.firstName} — your answers save as you go, so you can stop and come back to this link anytime before it expires. Please don&rsquo;t type Social Security or account numbers here — we&rsquo;ll ask for documents that contain them as secure uploads in your client portal.</p>}
         {notice && <p role="alert" className="mt-2 rounded-xl bg-warning-soft/60 px-3 py-2 text-[13px] text-warning-ink">{notice}</p>}
       </div>
       <select aria-label="Intake step" value={step} onChange={(e) => go(Number(e.target.value))} className="h-11 w-full rounded-xl border border-line bg-surface px-3 text-[14px] text-ink">
         {steps.map((s, i) => <option key={s.key} value={i}>{i + 1}. {s.title}</option>)}
       </select>
       {sec && <SectionView s={sec} a={answers} prefilled={new Set()} showErrors={!!tried[sec.id]} setVal={setVal} setRows={setRows} secure={secure} />}
-      {cur.key === "review" && <Review data={data} sections={sections} answers={answers} rev={rev} api={api} flush={persist} goTo={(sid) => go(steps.findIndex((x) => x.key === sid))} onDone={onDone} onErr={handleErr} />}
+      {cur.key === "review" && manual && <ManualReview data={data} sections={sections} answers={answers} rev={rev} api={api} flush={persist} goTo={(sid) => go(steps.findIndex((x) => x.key === sid))} onDone={onDone} onErr={handleErr} />}
+      {cur.key === "review" && !manual && <Review data={data} sections={sections} answers={answers} rev={rev} api={api} flush={persist} goTo={(sid) => go(steps.findIndex((x) => x.key === sid))} onDone={onDone} onErr={handleErr} />}
       {cur.key !== "review" && (
         <div className="flex items-center gap-2">
           <Button icon={ArrowLeft} disabled={step === 0} onClick={() => go(step - 1)}>Back</Button>
@@ -235,4 +236,66 @@ function Review({ data, sections, answers, rev, api, flush, goTo, onDone, onErr 
       </Card>
     </div>
   );
+}
+
+/** Manual entry's last step: no signature — saved as "Manually entered". */
+function ManualReview({ data, sections, answers, rev, api, flush, goTo, onDone, onErr }: { data: Loaded; sections: Section[]; answers: Answers; rev: React.MutableRefObject<number>; api: Api; flush: () => Promise<void>; goTo: (sid: string) => void; onDone: (d: Done) => void; onErr: (e: unknown) => void }) {
+  const [requestDocs, setRequestDocs] = useState(false);
+  const [emailCopy, setEmailCopy] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const missing = sections.flatMap((s) => (sectionVisible(s, answers) ? missingIn(s, answers).map((m) => ({ ...m, s })) : []));
+  const docs = docsFor(sections, answers);
+  const submit = async () => {
+    setBusy(true);
+    try { await flush(); onDone(await api<Done>("POST", "/submit", { answers, rev: rev.current, requestDocs, emailCopy })); }
+    catch (e) { onErr(e); setBusy(false); }
+  };
+  return (
+    <Card className="space-y-4 p-5 sm:p-6">
+      <h2 className="text-[19px] font-bold text-ink">Review and save</h2>
+      {missing.length > 0 ? (
+        <div className="rounded-xl border border-warning/40 bg-warning-soft/50 p-3">
+          <p className="text-[13.5px] font-semibold text-ink">{missing.length} answer{missing.length > 1 ? "s" : ""} still needed</p>
+          <ul className="mt-1.5 space-y-1">{missing.slice(0, 12).map((m, i) => <li key={i}><button onClick={() => goTo(m.s.id)} className="text-left text-[13px] text-accent hover:underline">{m.s.title}: {m.label}</button></li>)}</ul>
+        </div>
+      ) : <p className="text-[13.5px] text-success-ink">Every question is answered.</p>}
+      <p className="text-[13.5px] text-ink-2">Saving marks this {SERVICE_INTAKES[data.intake.kind].label} intake <b>Manually entered</b>, saves a PDF copy to {data.intake.name}&rsquo;s Documents and updates their profile. Nothing is sent to the client unless you choose below.</p>
+      {docs.length > 0 && (
+        <label className="flex items-start gap-2 text-[14px] text-ink"><input type="checkbox" checked={requestDocs} onChange={() => setRequestDocs(!requestDocs)} className="mt-0.5 h-5 w-5 accent-[var(--accent)]" /><span>Add the {docs.length} document{docs.length === 1 ? "" : "s"} this intake lists to their document checklist <span className="block text-[12.5px] text-muted">{docs.slice(0, 6).map((d) => d.name).join(", ")}{docs.length > 6 ? "…" : ""}</span></span></label>
+      )}
+      <label className="flex items-start gap-2 text-[14px] text-ink"><input type="checkbox" checked={emailCopy} onChange={() => setEmailCopy(!emailCopy)} className="mt-0.5 h-5 w-5 accent-[var(--accent)]" />Email the client a copy (PDF attached)</label>
+      <Button variant="primary" icon={Send} disabled={busy || missing.length > 0} onClick={submit}>{busy ? "Saving…" : "Save as manually entered"}</Button>
+      {missing.length > 0 && <p className="text-[12px] text-muted">Answer the remaining questions to save.</p>}
+    </Card>
+  );
+}
+
+/** Staff page: fill in a client's service intake manually (they completed it another way). */
+export function ManualServiceIntake({ id }: { id: string }) {
+  const base = `/api/service-intakes/${encodeURIComponent(id)}/manual`;
+  const api = useCallback(async <T,>(method: "GET" | "PUT" | "POST", path = "", body?: unknown): Promise<T> => {
+    let r: Response;
+    try { r = await fetch(base + path, { method, credentials: "same-origin", headers: { "content-type": "application/json" }, body: method === "GET" ? undefined : JSON.stringify(body ?? {}), cache: "no-store" }); }
+    catch { throw new LinkError(0, "Couldn't reach the server — check your connection."); }
+    const data = (await r.json().catch(() => ({}))) as T & { error?: string };
+    if (r.status === 401) { window.location.assign("/login"); throw new LinkError(401, "Please sign in."); }
+    if (!r.ok) throw new LinkError(r.status, data.error ?? "Something went wrong.");
+    return data;
+  }, [base]);
+  const [data, setData] = useState<(Loaded & { clientId: string }) | null>(null);
+  const [err, setErr] = useState<LinkError | null>(null);
+  const [done, setDone] = useState<(Done & { clientId?: string }) | null>(null);
+  const [gen, setGen] = useState(0);
+  const load = useCallback(() => api<Loaded & { clientId: string }>("GET").then((d) => { setData(d); setGen((g) => g + 1); }).catch((e) => setErr(e instanceof LinkError ? e : new LinkError(0, "Something went wrong."))), [api]);
+  useEffect(() => { void load(); }, [load]);
+  if (done) return (
+    <Card className="mx-auto max-w-3xl p-6 sm:p-8">
+      <h1 className="flex items-center gap-2 text-[22px] font-bold text-ink"><CheckCircle2 size={24} className="text-success" /> Saved as manually entered</h1>
+      <p className="mt-2 text-[14.5px] text-ink-2">The PDF copy is in the client&rsquo;s Documents and their profile is updated.{done.emailed ? " A copy was emailed to the client." : ""}{done.documents.length ? ` ${done.documents.length} document${done.documents.length === 1 ? " was" : "s were"} added to their checklist.` : ""}</p>
+      {data && <Button className="mt-4" variant="primary" href={`/clients/${data.clientId}`}>Back to {data.intake.name}</Button>}
+    </Card>
+  );
+  if (err) return <Card className="mx-auto max-w-3xl p-8 text-center"><h1 className="text-[20px] font-bold text-ink">Can&rsquo;t open this intake</h1><p className="mt-2 text-[14px] text-muted">{err.message}</p></Card>;
+  if (!data) return <Card className="mx-auto max-w-3xl p-10 text-center text-[14px] text-muted">Loading…</Card>;
+  return <div className="mx-auto max-w-3xl"><Runner key={gen} data={data} api={api} reload={load} onDone={setDone} onGone={setErr} manual /></div>;
 }

@@ -214,3 +214,100 @@ export async function publicSubmitServiceIntake(env: AppEnv, token: string, ip: 
   }
   return { submitted: true, documents: docs, emailed, next: await nextStop(env, c.id) };
 }
+
+/* ---------------------------------------------------------------- manual entry (staff) */
+/**
+ * The client already completed this intake another way (e.g. on paper): staff fill it in
+ * themselves. Nothing is emailed to the client; on submit it's marked "Manually entered".
+ */
+async function manualRow(env: AppEnv, a: Actor, id: string) {
+  const { r, c } = await staffRow(env, a, id);
+  requirePermission(a, SERVICE_INTAKES[r.kind].module, "edit");
+  requireStaff(a);
+  return { r, c };
+}
+/** { kind } — opens (or reopens) the intake for staff to fill in. No email is sent. */
+export async function startManualServiceIntake(env: AppEnv, a: Actor, clientId: string, b: { kind?: unknown }) {
+  requireStaff(a);
+  if (!isServiceIntakeKind(b.kind)) throw badRequest("Choose which intake to enter.");
+  const kind = b.kind;
+  const meta = SERVICE_INTAKES[kind];
+  requirePermission(a, meta.module, "edit");
+  const c = await clientRow(env, clientId);
+  if (!(await canOpen(env, a, c))) throw notFound("Client not found.");
+  let r = await one<Row>(env.DB, "SELECT * FROM service_intakes WHERE client_id = ? AND kind = ? AND status = 'in_progress' ORDER BY created_at DESC LIMIT 1", clientId, kind);
+  if (!r) {
+    const id = `SI-${randomId("s").slice(2)}`;
+    const t = now();
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO service_intakes (id, client_id, kind, status, answers, step, history, created_at, created_by, updated_at) VALUES (?, ?, ?, 'in_progress', ?, 0, ?, ?, ?, ?)").bind(id, clientId, kind, JSON.stringify(prefillFrom(c)), hist("[]", a.member.id, `${meta.label} intake opened for manual entry`), t, a.member.id, t),
+      env.DB.prepare("INSERT OR IGNORE INTO client_services (client_id, service) VALUES (?, ?)").bind(clientId, meta.service),
+    ]);
+    r = (await one<Row>(env.DB, "SELECT * FROM service_intakes WHERE id = ?", id))!;
+    await audit(env.DB, a, { action: "Record update", resource: `${meta.label} intake ${id}`, meta: "Opened for manual entry (nothing sent to the client)" });
+  }
+  return { intakeId: r.id };
+}
+export async function manualServiceIntake(env: AppEnv, a: Actor, id: string) {
+  const { r, c } = await manualRow(env, a, id);
+  if (r.status !== "in_progress") throw new HttpError(410, "This intake has already been submitted.", "used");
+  const answers = json<Answers>(r.answers, {});
+  return { intake: { kind: r.kind, status: r.status, answers: Object.keys(answers).length ? answers : prefillFrom(c), step: r.step, rev: r.rev, name: c.name, firstName: firstNameOf(c, answers) }, expiresAt: null, clientId: c.id };
+}
+export async function manualSaveServiceIntake(env: AppEnv, a: Actor, id: string, b: { answers?: unknown; step?: unknown; rev?: unknown }) {
+  const { r } = await manualRow(env, a, id);
+  if (r.status !== "in_progress") throw new HttpError(410, "This intake has already been submitted.", "used");
+  if (Number(b.rev) !== r.rev) throw new HttpError(409, "This intake was updated somewhere else. We loaded the latest version.", "conflict");
+  const answers = b.answers !== undefined ? cleanAnswers(b.answers) : json<Answers>(r.answers, {});
+  const step = Number.isInteger(b.step) ? Math.max(0, Math.min(40, Number(b.step))) : r.step;
+  const res = await run(env.DB, "UPDATE service_intakes SET answers = ?, step = ?, updated_at = ?, rev = rev + 1 WHERE id = ? AND rev = ? AND status = 'in_progress'", JSON.stringify(answers), step, now(), r.id, r.rev);
+  if (!res.meta.changes) throw new HttpError(409, "This intake was updated somewhere else. We loaded the latest version.", "conflict");
+  return { rev: r.rev + 1 };
+}
+/** { answers, rev, requestDocs, emailCopy } — saves it as manually entered: PDF to Documents, profile updated. */
+export async function manualSubmitServiceIntake(env: AppEnv, a: Actor, id: string, b: { answers?: unknown; rev?: unknown; requestDocs?: unknown; emailCopy?: unknown }) {
+  const { r, c } = await manualRow(env, a, id);
+  if (r.status !== "in_progress") throw new HttpError(410, "This intake has already been submitted.", "used");
+  if (Number(b.rev) !== r.rev) throw new HttpError(409, "This intake was updated somewhere else. We loaded the latest version.", "conflict");
+  if (a.kind !== "staff") throw badRequest("Staff only.");
+  const meta = SERVICE_INTAKES[r.kind];
+  const answers = cleanAnswers(b.answers);
+  const t = now();
+  const by = `Manually entered by ${a.member.name}`;
+  const docSpecs = b.requestDocs === true ? docsFor(meta.sections, answers).slice(0, 60) : [];
+  const docs = docSpecs.map((d) => d.name);
+  const res = await run(env.DB, "UPDATE service_intakes SET status = 'submitted', answers = ?, consent_name = ?, entered_by = 'staff', submitted_at = ?, history = ?, updated_at = ?, rev = rev + 1 WHERE id = ? AND rev = ? AND status = 'in_progress'", JSON.stringify(answers), by, t, hist(r.history, a.member.id, "Manually entered"), t, r.id, r.rev);
+  if (!res.meta.changes) throw new HttpError(409, "This intake was updated somewhere else. We loaded the latest version.", "conflict");
+  await cancelLinks(env, "service_intake", r.id, a.member.id).catch(() => 0);
+
+  const owners = Array.isArray(answers.owners) ? answers.owners : answers.contactName ? [{ name: answers.contactName as string, title: (answers.contactTitle as string) ?? "" }] : [];
+  const forProfile: Record<string, unknown> = r.kind === "relief"
+    ? { street: answers.street, city: answers.city, state: answers.state, zip: answers.zip, phone: answers.phone, email: answers.email }
+    : { legalName: answers.legalName, entity: answers.entity, formState: answers.formState, street: answers.street, city: answers.city, state: answers.state, zip: answers.zip, phone: answers.phone, email: answers.email, owners };
+  await applyBooksIntakeToProfile(env, c.id, forProfile, { actor: a, memberId: a.member.id, byClient: false, source: `${meta.label} intake`, module: meta.module }).catch((e) => console.error("service profile sync", e instanceof Error ? e.message : e));
+
+  const name = (typeof answers.legalName === "string" && answers.legalName.trim()) || (typeof answers.fullName === "string" && answers.fullName.trim()) || c.name;
+  const pdf = await buildIntakePdf({ clientName: name, taxYear: new Date().getFullYear(), form: "1040", returnId: r.id, answers, submittedAt: t, enteredBy: "manual", documents: docs, sections: meta.sections, title: meta.title });
+  const safe = name.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const fileName = `MKB-${meta.title.replace(/\s+/g, "-")}-${safe}.pdf`;
+  const fileId = await storeClientPdfAs(env, a.member.id, c.id, pdf, { name: `${meta.title} (manually entered ${longDate(t)})`, fileName, category: "Intake", service: meta.service, activity: `Saved a PDF copy of the manually entered ${meta.label} intake to Documents` });
+  await run(env.DB, "UPDATE service_intakes SET pdf_file_id = ? WHERE id = ?", fileId, r.id);
+  if (docSpecs.length) {
+    const cur = await one<{ module_data: string | null }>(env.DB, "SELECT module_data FROM clients WHERE id = ?", c.id);
+    const md = json<Record<string, { name?: string; service?: string }[]>>(cur?.module_data, {});
+    const have = new Set((md.documents ?? []).filter((d) => d.service === meta.service).map((d) => d.name));
+    const add = docSpecs.filter((d) => !have.has(d.name)).map((d) => ({ id: randomId("d"), name: d.name, service: meta.service, category: `${meta.label} intake`, status: "requested", sensitive: !!d.sensitive, requestedAt: t, dueAt: new Date(Date.parse(t) + 7 * 86400000).toISOString() }));
+    md.documents = [...add, ...(md.documents ?? [])];
+    await run(env.DB, "UPDATE clients SET module_data = ?, rev = rev + 1, updated_at = ? WHERE id = ?", JSON.stringify(md), t, c.id);
+  }
+  await run(env.DB, "INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'intake', ?, 'staff', ?, ?)", randomId("x"), c.id, `${meta.label} intake manually entered by ${a.member.name}${docs.length ? ` — ${docs.length} document${docs.length === 1 ? "" : "s"} requested` : ""}`, a.member.id, t);
+  await audit(env.DB, a, { action: "Record update", resource: `${meta.label} intake ${r.id}`, meta: `Manually entered${docs.length ? `; ${docs.length} documents requested` : ""}` });
+
+  let emailed = false;
+  const to = (typeof answers.email === "string" && EMAIL_RE.test(answers.email) && answers.email) || c.email;
+  if (b.emailCopy === true && to) {
+    const out = await sendTemplate(env, "service_intake_received", { to, vars: { firstName: firstNameOf(c, answers), service: meta.label, date: longDate(t), next: meta.next }, documents: docs, attachments: [{ filename: fileName, content: pdf }] });
+    emailed = out.sent;
+  }
+  return { submitted: true, documents: docs, emailed, intakeId: r.id, clientId: c.id };
+}
