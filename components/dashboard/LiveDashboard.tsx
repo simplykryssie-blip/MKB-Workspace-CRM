@@ -39,7 +39,11 @@ export function LiveDashboard() {
     const open = leads.filter((l) => l.status === "open");
     const due = open.filter((l) => ["overdue", "today"].includes(followUpBucket(l, t))).length;
     const active = clients.filter((c) => c.status !== "inactive").length;
-    const returns = tax.returns.filter((r) => !["Completed", "Accepted"].includes(r.status)).length;
+    // A return only counts as in progress once the client has submitted the interview (or it moved past Intake).
+    const openReturns = tax.returns.filter((r) => !["Completed", "Accepted"].includes(r.status));
+    const notStarted = (r: (typeof openReturns)[number]) => r.status === "Intake" && !["submitted", "reviewed"].includes(r.organizer?.status ?? "not_sent");
+    const returns = openReturns.filter((r) => !notStarted(r)).length;
+    const interviewsOut = openReturns.filter((r) => notStarted(r) && r.organizer?.status !== "not_sent").length;
     const recent = [...open].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5);
     const live = (invoices ?? []).filter((i) => i.status !== "void" && i.status !== "draft" && i.paymentMode !== "bank_product");
     const owedOf = (i: Invoice) => Math.max(0, i.amount - i.paid);
@@ -57,7 +61,7 @@ export function LiveDashboard() {
         collected: inv.filter((i) => i.paidAt?.startsWith(month)).reduce((s, i) => s + i.paid, 0),
       };
     });
-    return { open: open.length, due, active, returns, recent, services, owed: live.reduce((s, i) => s + owedOf(i), 0), overdue: live.filter((i) => i.status === "overdue").length, drafts: (invoices ?? []).filter((i) => i.status === "draft").length };
+    return { open: open.length, due, active, returns, interviewsOut, recent, services, owed: live.reduce((s, i) => s + owedOf(i), 0), overdue: live.filter((i) => i.status === "overdue").length, drafts: (invoices ?? []).filter((i) => i.status === "draft").length };
   }, [leads, clients, tax.returns, now, invoices]);
 
   const cards = [
@@ -103,7 +107,7 @@ export function LiveDashboard() {
               <span className="flex items-center gap-2 text-[14px] font-semibold text-ink"><span className="h-2.5 w-2.5 rounded-full" style={{ background: `var(--svc-${x.k})` }} />{SVC_NAME[x.k]}</span>
               <span className="mt-2 block text-[24px] font-bold leading-none tracking-tight text-ink">{x.active}</span>
               <span className="block text-[12.5px] text-muted">{x.k === "tax" ? "returns in progress" : `in progress · ${x.clients} client${x.clients === 1 ? "" : "s"}`}</span>
-              <span className="mt-2 block text-[12px] text-muted">{x.waiting} waiting on client · {x.review} in review</span>
+              <span className="mt-2 block text-[12px] text-muted">{x.k === "tax" ? `${stats.interviewsOut} interview${stats.interviewsOut === 1 ? "" : "s"} sent, not completed yet` : `${x.waiting} waiting on client · ${x.review} in review`}</span>
               {sigs.some((g) => g.service === x.k) && <span className="block text-[12px] font-medium text-warning-ink">{sigs.filter((g) => g.service === x.k).length} waiting for signature</span>}
               {canBilling && invoices && <span className="block text-[12px] text-muted">{usd(x.owed)} owed · {usd(x.collected)} collected this month</span>}
             </Link>
