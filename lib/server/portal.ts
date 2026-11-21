@@ -8,7 +8,8 @@ import { MONTH_STAGES, periodLabel, type BooksWorkspace, type ClientTask } from 
 import type { TaxReturn } from "@/lib/tax/config";
 import type { ClientDocument, Message, ServiceKey } from "@/lib/types";
 import { badRequest, forbidden, HttpError, json, notFound, now, one, all, rateLimit, run, type AppEnv } from "./core";
-import { randomId } from "./crypto";
+import { encryptField, randomId } from "./crypto";
+import { aad as vaultAad, vaultKey } from "./clients";
 import { audit, type Actor } from "./identity";
 import { createLink } from "./secure-links";
 import { notify } from "./notifications";
@@ -93,6 +94,7 @@ export async function portalHome(env: AppEnv, a: Actor) {
     services.push({ service: e.service, name: SERVICE_NAME[e.service] ?? e.service, title: e.title, status: e.status === "complete" ? "Complete" : e.stage });
   // Documents MKB asked for
   for (const d of (md.documents ?? []).filter((x) => x.status === "requested" && !secureForm(x))) todos.push({ id: `doc-${d.id}`, kind: "upload", title: `Upload: ${d.name}`, detail: d.taxYear ? `For your ${d.taxYear} tax return` : SERVICE_NAME[d.service], service: d.service, ref: d.id });
+  for (const d of (md.documents ?? []).filter((x) => x.status === "requested" && ssnRequest(x))) todos.push({ id: `doc-${d.id}`, kind: "upload", title: `Enter securely: ${d.name.replace(/\s*\(secure form\)/i, "")}`, detail: `${SERVICE_NAME[d.service] ?? ""} · on the Documents tab`, service: d.service, ref: d.id });
   // Invoices to pay
   for (const r of await all<InvoiceRow>(env.DB, "SELECT * FROM invoices WHERE client_id = ? AND status IN ('open', 'partial') AND payment_mode = 'upfront'", c.id)) {
     const owed = r.amount_cents - r.paid_cents;
@@ -162,7 +164,7 @@ export async function portalDocuments(env: AppEnv, a: Actor) {
   const c = await me(env, a);
   const stored = new Set((await all<{ id: string }>(env.DB, "SELECT id FROM client_files WHERE client_id = ?", c.id)).map((f) => f.id));
   const docs = (json<MD>(c.module_data, {}).documents ?? []).filter((d) => !d.internal).map((d) => (stored.has(d.id) ? { ...d, hasFile: true } : d));
-  const shape = (d: ClientDocument & { hasFile?: boolean; fileName?: string }) => ({ id: d.id, name: d.name, fileName: d.fileName, secureForm: secureForm(d), service: d.service, serviceName: SERVICE_NAME[d.service] ?? "", category: d.category, taxYear: d.taxYear, requestedAt: d.requestedAt, uploadedAt: d.uploadedAt, uploadedBy: d.uploadedBy, status: d.status, hasFile: !!d.hasFile });
+  const shape = (d: ClientDocument & { hasFile?: boolean; fileName?: string }) => ({ id: d.id, name: d.name, fileName: d.fileName, secureForm: secureForm(d), ssnForm: ssnRequest(d), service: d.service, serviceName: SERVICE_NAME[d.service] ?? "", category: d.category, taxYear: d.taxYear, requestedAt: d.requestedAt, uploadedAt: d.uploadedAt, uploadedBy: d.uploadedBy, status: d.status, hasFile: !!d.hasFile });
   return {
     requested: docs.filter((d) => d.status === "requested").map(shape),
     files: (docs as (ClientDocument & { hasFile?: boolean })[]).filter((d) => d.hasFile && d.status !== "requested" && d.status !== "rejected").map(shape),
@@ -293,4 +295,41 @@ export async function portalSend(env: AppEnv, a: Actor, b: { body?: unknown; ser
   await run(env.DB, "INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'message', 'Client sent a message in the portal', 'client', NULL, ?)", randomId("x"), c.id, now());
   await notify(env, { module: service ? MODULE[service] : "crm" }, { kind: "documents", title: `New message from ${c.name}`, body: body.slice(0, 140), href: `/clients/${c.id}#messages` });
   return portalMessages(env, a);
+}
+
+/* ---------------------------------------------------------------- secure answers */
+/** A requested "(secure form)" item that asks for a Social Security number. */
+export const ssnRequest = (d: Pick<ClientDocument, "name">) => secureForm(d) && /social security/i.test(d.name);
+
+/**
+ * The client answers a "Social Security number (secure form)" request in the portal
+ * (for example the EIN responsible party). The number is encrypted into the client's
+ * vault on arrival — never stored in the request, a message or a log — and the
+ * request is marked received.
+ */
+export async function portalSecureSsn(env: AppEnv, a: Actor, b: { doc?: unknown; value?: unknown }) {
+  requireClient(a);
+  if (!(await rateLimit(env.DB, `portalssn:${a.clientId}`, 10, 60))) throw new HttpError(429, "Too many tries in the last hour. Please try again later or call MKB.", "rate_limited");
+  const c = await me(env, a);
+  const md = json<MD>(c.module_data, {});
+  const doc = (md.documents ?? []).find((d) => d.id === b.doc);
+  if (!doc || doc.status !== "requested" || !ssnRequest(doc)) throw badRequest("That request was already completed or isn't available.");
+  const d = typeof b.value === "string" ? b.value.replace(/\D/g, "") : "";
+  if (d.length !== 9) throw badRequest("Enter all 9 digits of the Social Security number.");
+  if (/^(000|666)/.test(d) || d.slice(3, 5) === "00" || d.slice(5) === "0000") throw badRequest("That isn't a valid Social Security number — please check it.");
+  if (!env.ENCRYPTION_KEY) throw new HttpError(500, "Server encryption key is not configured.");
+  const { key, version } = vaultKey(env);
+  const e = await encryptField(key, `${d.slice(0, 3)}-${d.slice(3, 5)}-${d.slice(5)}`, vaultAad(c.id, "tax_id"));
+  const t = now();
+  const entry: ClientDocument = { ...doc, status: "received", uploadedAt: t, uploadedBy: "client" };
+  md.documents = (md.documents ?? []).map((x) => (x.id === doc.id ? entry : x));
+  const res = await run(env.DB, "UPDATE clients SET module_data = ?, rev = rev + 1, updated_at = ?, last_activity_at = ? WHERE id = ? AND rev = ?", JSON.stringify(md), t, t, c.id, c.rev);
+  if (!res.meta.changes) throw new HttpError(409, "Your information changed while saving — please try again.", "conflict");
+  await env.DB.batch([
+    env.DB.prepare("INSERT INTO vault (owner_type, owner_id, field, ciphertext, iv, key_version, last4, kind, updated_at, updated_by) VALUES ('client', ?, 'tax_id', ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(owner_type, owner_id, field) DO UPDATE SET ciphertext = excluded.ciphertext, iv = excluded.iv, key_version = excluded.key_version, last4 = excluded.last4, kind = excluded.kind, updated_at = excluded.updated_at, updated_by = excluded.updated_by").bind(c.id, e.ciphertext, e.iv, version, d.slice(-4), d.startsWith("9") ? "ITIN" : "SSN", t, "client (portal)"),
+    env.DB.prepare("INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'status', ?, 'client', NULL, ?)").bind(randomId("x"), c.id, `Entered SSN ending ${d.slice(-4)} in the client portal for “${doc.name}” (stored encrypted)`, t),
+  ]);
+  await notify(env, { module: MODULE[doc.service] ?? "crm" }, { kind: "documents", title: `${c.name} entered their SSN securely`, body: `${doc.name} — ending ${d.slice(-4)}`, href: `/clients/${c.id}` });
+  await audit(env.DB, { kind: "client", userId: a.userId, clientId: c.id, ip: a.ip }, { action: "Record update", resource: `Client ${c.id} — SSN saved from the client portal`, meta: "Value not logged" });
+  return { ok: true, last4: d.slice(-4) };
 }

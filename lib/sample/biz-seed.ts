@@ -17,7 +17,7 @@ const d = (days: number, h = 10, m = 0) => {
   return t.toISOString();
 };
 
-const AGENT = { type: "mkb_coordinated" as const, name: "Sample Registered Agents Co. (fictional)", address: "100 Example Way, Suite 1, Lakeside, GA 30002" };
+const AGENT = { type: "third_party" as const, name: "Sample Registered Agents Co. (fictional)", address: "100 Example Way, Suite 1, Lakeside, GA 30002" };
 
 /* ------------------------------------------------------------------ */
 /* Businesses                                                          */
@@ -273,14 +273,14 @@ const REQ_SEEDS: ReqSeed[] = [
   },
   {
     id: "BSR-1039", number: "BSR-1039", clientId: "c-1011", entityId: "E-1011", businessName: "Pine & Oak Demo Studio LLC", structure: "LLC", state: "GA",
-    serviceId: "agent", serviceName: "Registered agent coordination", description: "Move registered agent service in Georgia to the MKB-coordinated provider.",
+    serviceId: "annual", serviceName: "Annual report", description: "File the Georgia annual registration.",
     dueAt: d(-40), assignedTo: "s-jp", reviewerId: "s-mk", status: "Completed", source: "staff", createdAt: d(-60),
-    quote: { status: "accepted", sentAt: d(-60), acceptedAt: d(-60), lines: [L("q1", "service", "Registered agent coordination", 125), L("q2", "third_party", "Registered agent provider — first year (sample amount)", 99), L("q3", "filing", "State change-of-agent filing fee (sample amount)", 5)] },
+    quote: { status: "accepted", sentAt: d(-60), acceptedAt: d(-60), lines: [L("q1", "service", "Annual report", 175), L("q2", "third_party", "Expedited processing (fictional sample amount)", 99), L("q3", "filing", "State annual registration fee (sample amount)", 5)] },
     path: [["Intake", d(-60)], ["Ready for Processing", d(-58)], ["In Progress", d(-57)], ["Submitted to Agency", d(-55)], ["Awaiting Agency Response", d(-55)], ["Approved", d(-45), "confirmation verified"], ["Documents Delivered", d(-44)], ["Completed", d(-43)]],
     agency: [{ id: "a1", agency: "GA business filing agency (sample)", kind: "submitted", at: d(-55), byId: "s-jp", reference: "SAMPLE-RA-3381" }, { id: "a2", agency: "GA business filing agency (sample)", kind: "approved", at: d(-45), byId: "s-jp", reference: "SAMPLE-RA-3381", verified: true, confirmationDocId: "bsr1039-d1" }],
-    deliverables: [deliv("v1", "Change of registered agent — confirmation", "State filing confirmation", "delivered", { docId: "bsr1039-d1", reviewedBy: "s-mk", deliveredAt: d(-44) })],
-    docs: [{ id: "bsr1039-d1", name: "Change of registered agent — confirmation", category: "State filing confirmation", status: "reviewed", uploadedAt: d(-45, 14), uploadedBy: "staff", sizeKb: 98, deliveredAt: d(-44) }],
-    invoices: [{ id: "bsr1039-i1", number: "INV-S108", lines: [L("q1", "service", "Registered agent coordination", 125), L("q2", "third_party", "Registered agent provider — first year (sample amount)", 99), L("q3", "filing", "State change-of-agent filing fee (sample amount)", 5)], issuedAt: d(-60), dueAt: d(-46), paid: "all", paidAt: d(-59) }],
+    deliverables: [deliv("v1", "Annual registration — confirmation", "State filing confirmation", "delivered", { docId: "bsr1039-d1", reviewedBy: "s-mk", deliveredAt: d(-44) })],
+    docs: [{ id: "bsr1039-d1", name: "Annual registration — confirmation", category: "State filing confirmation", status: "reviewed", uploadedAt: d(-45, 14), uploadedBy: "staff", sizeKb: 98, deliveredAt: d(-44) }],
+    invoices: [{ id: "bsr1039-i1", number: "INV-S108", lines: [L("q1", "service", "Annual report", 175), L("q2", "third_party", "Expedited processing (fictional sample amount)", 99), L("q3", "filing", "State annual registration fee (sample amount)", 5)], issuedAt: d(-60), dueAt: d(-46), paid: "all", paidAt: d(-59) }],
     approvedBy: "s-mk", completedAt: d(-43), followUpAt: d(-13),
   },
   {

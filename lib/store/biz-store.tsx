@@ -20,10 +20,12 @@ import { SAMPLE_NOW, staffById, staffList, meId } from "@/lib/sample/clients";
 import { nowIso, useClients } from "@/lib/store/clients-store";
 import {
   DEFAULT_CATALOG,
+  upgradeCatalog,
   DEFAULT_REMINDERS,
   STATUS_META,
   FREQ_MONTHS,
   daysBetween,
+  MULTI_ENTITY_DISCOUNT_PCT,
   nextAnnual,
   quoteTotal,
   type AgencyEvent,
@@ -198,7 +200,10 @@ export const checklistFor = (r: ServiceRequest, catalog: CatalogService[], lists
   return { service: svc?.needs ?? [], state: st.flatMap((l) => l.items.map((item) => ({ item, verified: !!l.lastVerifiedAt }))) };
 };
 
-const SERVICE_FOR_KIND: Record<ComplianceKind, string> = { annual_report: "annual", franchise_tax: "state-compliance", periodic_report: "annual", business_license: "license", registered_agent: "agent", foreign_qualification: "foreign", other: "state-compliance" };
+const SERVICE_FOR_KIND: Record<ComplianceKind, string> = { annual_report: "annual", franchise_tax: "tx-pir", periodic_report: "annual", business_license: "license", registered_agent: "license", foreign_qualification: "foreign", other: "license" };
+/** The compliance kind a recurring service renews as. */
+const KIND_FOR_SERVICE: Record<string, ComplianceKind> = { annual: "annual_report", "tx-pir": "franchise_tax", license: "business_license" };
+const addMonths = (iso: string, m: number) => { const d = new Date(iso); d.setMonth(d.getMonth() + m); return d.toISOString(); };
 
 /* ------------------------------------------------------------------ */
 /* Actions                                                             */
@@ -221,6 +226,8 @@ export type NewRequestInput = {
   note?: string;
   quotedPrice?: number;
   source: ServiceRequest["source"];
+  /** Formation details the client gave on their intake (names, owners, their own registered agent). */
+  formation?: Partial<FormationDetails>;
 };
 
 function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients: () => ClientsApi) {
@@ -276,10 +283,13 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       if (!entityId && input.clientId && input.businessName.trim())
         entityId = createEntity({ clientId: input.clientId, legalName: input.businessName.trim(), entityType: input.structure, state: input.state, status: svc.formation ? "forming" : "active", principalAddress: "", ownerId: input.assignedTo });
       const lines: QuoteLine[] = [{ id: uid("q"), kind: "service", label: svc.name, amount: input.quotedPrice ?? svc.price }];
+      // Second entity and beyond: the MKB fee is discounted (never state fees). Staff can remove the line before sending the quote.
+      const otherEntities = input.clientId ? st.entities.filter((e) => e.clientId === input.clientId && e.id !== entityId && e.status !== "dissolved") : [];
+      if (otherEntities.length && lines[0].amount > 0) lines.push({ id: uid("q"), kind: "discount", label: `Additional entity discount (${MULTI_ENTITY_DISCOUNT_PCT}% of MKB fee)`, amount: Math.round(lines[0].amount * MULTI_ENTITY_DISCOUNT_PCT) / 100 });
       // State fees are never pre-filled from code; only an administrator-entered estimate is used, clearly labeled.
       if (svc.filingFeeEstimate) lines.push({ id: uid("q"), kind: "filing", label: `${input.state} filing fee (admin estimate — confirm with the ${input.state} agency)`, amount: svc.filingFeeEstimate });
       const formation: FormationDetails | undefined = svc.formation
-        ? { proposedName: input.businessName.trim(), alternates: [], state: input.state, structure: input.structure, purpose: "", businessAddress: "", principalLocation: "", organizer: { name: "" }, owners: [], einStatus: "not_started", stateFiling: "not_submitted", docsDelivered: false }
+        ? { proposedName: input.businessName.trim(), alternates: [], state: input.state, structure: input.structure, purpose: "", businessAddress: "", principalLocation: "", organizer: { name: "" }, owners: [], einStatus: "not_started", stateFiling: "not_submitted", docsDelivered: false, ...input.formation }
         : undefined;
       const r: ServiceRequest = {
         id,
@@ -304,7 +314,8 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
         createdAt: at,
         quote: { status: "draft", lines },
         info: [],
-        tasks: [],
+        // The service's working steps become the request's task list; "Intake received" is already done.
+        tasks: (svc.steps ?? []).map((title) => ({ id: uid("t"), title, assigneeId: input.assignedTo, done: /^Intake received/.test(title), doneAt: /^Intake received/.test(title) ? at : undefined, createdAt: at })),
         notes: input.note?.trim() ? [{ id: uid("n"), authorId: input.assignedTo, body: input.note.trim(), at }] : [],
         agency: [],
         deliverables: svc.deliverables.map((name) => ({ id: uid("v"), name, category: guessCategory(name), status: "pending" as const })),
@@ -552,8 +563,34 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
         formation: r.formation ? { ...r.formation, completedAt: at } : undefined,
       });
       markDeadline(R(id).dueTaskId, true);
+      a.scheduleFollowOns(id);
       // Compliance items this request was handling are marked filed.
       get().compliance.filter((i) => i.requestId === id && i.status !== "filed").forEach((i) => a.markFiled(i.id));
+    },
+
+    /**
+     * After a request is complete: a formation puts the first annual report (or Texas
+     * report) on the compliance calendar; a yearly service puts next year's renewal there.
+     * Nothing is added twice, and every date is marked "confirm with the agency".
+     */
+    scheduleFollowOns(id: string) {
+      const r = R(id);
+      const svc = svcOf(r);
+      const e = r.entityId ? get().entities.find((x) => x.id === r.entityId) : undefined;
+      if (!svc || !e) return;
+      const items = get().compliance.filter((i) => i.entityId === e.id && i.status !== "filed" && i.status !== "not_applicable");
+      const base = r.completedAt ?? nowIso();
+      if (svc.formation && !items.some((i) => i.kind === "annual_report" || i.kind === "franchise_tax")) {
+        const tx = e.state === "TX";
+        const due = tx ? nextAnnual(5, 15, new Date(addMonths(base, 3))) : addMonths(base, 12);
+        a.addItem({ entityId: e.id, state: e.state, kind: tx ? "franchise_tax" : "annual_report", title: tx ? "TX franchise tax report / PIR" : `${e.state} annual report`, dueAt: due, source: `Set when ${r.number} (formation) was completed`, frequency: "annual", reminderDays: [...get().reminderDefaults], status: "upcoming", ownerId: r.assignedTo, serviceId: tx ? "tx-pir" : "annual",
+          notes: tx ? "Texas reports are generally due May 15 — confirm the date with the Comptroller." : e.state === "LA" ? "Louisiana annual reports are due on the anniversary of formation — confirm the date with the Secretary of State." : "Confirm the due date with the state agency." });
+      }
+      // Formation Complete includes year 1 of the Good Standing Plan: its renewal starts year 2.
+      const renew = svc.id === "pkg-complete" ? get().catalog.find((x) => x.id === "good-standing") : svc.recurring ? svc : undefined;
+      if (renew && !get().compliance.some((i) => i.requestId === id) && !items.some((i) => i.serviceId === renew.id)) {
+        a.addItem({ entityId: e.id, state: e.state, kind: KIND_FOR_SERVICE[renew.id] ?? "other", title: `${renew.name} — renewal`, dueAt: addMonths(r.dueAt && r.dueAt > base ? r.dueAt : base, 12), source: `Yearly service — renews from ${r.number}`, frequency: "one_time", reminderDays: [...get().reminderDefaults], status: "upcoming", ownerId: r.assignedTo, serviceId: renew.id, notes: "Start the renewal request from here when it's time." });
+      }
     },
 
     /* ---------------- Tasks + notes ---------------- */
@@ -605,7 +642,17 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     addItem(i: Omit<ComplianceItem, "id" | "remindersSent">): string {
       const id = uid("ci");
       set((s) => ({ ...s, compliance: [...s.compliance, { ...i, id, remindersSent: [] }] }));
+      a.calendarItem({ ...i, id, remindersSent: [] });
       return id;
+    },
+    /** Puts a compliance deadline on its owner's calendar (live CRM). */
+    calendarItem(i: ComplianceItem) {
+      // The item is passed in: the store may not have applied it yet.
+      const id = i.id;
+      const e = get().entities.find((x) => x.id === i.entityId);
+      if (!e || !i.dueAt || i.calTaskId) return;
+      void putDeadline({ title: `Due: ${i.title} — ${e.legalName}`, dueAt: i.dueAt, service: "biz", clientId: e.clientId, assigneeId: i.ownerId, notes: `Business compliance deadline. ${i.notes ?? ""}`.trim() })
+        .then((cal) => cal && upItem(id, (x) => ({ ...x, calTaskId: cal })));
     },
     updateItem(id: string, patch: Partial<ComplianceItem>) {
       upItem(id, (i) => ({ ...i, ...patch }));
@@ -633,17 +680,17 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     markFiled(id: string) {
       const i = get().compliance.find((x) => x.id === id)!;
       const at = nowIso();
-      set((s) => {
-        const list = s.compliance.map((x) => (x.id === id ? { ...x, status: "filed" as const, filedAt: at } : x));
-        const months = FREQ_MONTHS[i.frequency];
-        if (months) {
-          const d = new Date(i.dueAt);
-          d.setMonth(d.getMonth() + months);
-          // The next period still needs its own verification.
-          list.push({ ...i, id: uid("ci"), dueAt: d.toISOString(), status: "upcoming", remindersSent: [], requestId: undefined, filedAt: undefined, lastVerifiedAt: undefined, verifiedBy: undefined, notes: "Rolled forward — confirm the next due date with the agency." });
-        }
-        return { ...s, compliance: list };
-      });
+      markDeadline(i.calTaskId, true);
+      const months = FREQ_MONTHS[i.frequency];
+      let rolled: ComplianceItem | undefined;
+      if (months) {
+        const d = new Date(i.dueAt);
+        d.setMonth(d.getMonth() + months);
+        // The next period still needs its own verification.
+        rolled = { ...i, id: uid("ci"), calTaskId: undefined, dueAt: d.toISOString(), status: "upcoming", remindersSent: [], requestId: undefined, filedAt: undefined, lastVerifiedAt: undefined, verifiedBy: undefined, notes: "Rolled forward — confirm the next due date with the agency." };
+      }
+      set((s) => ({ ...s, compliance: [...s.compliance.map((x) => (x.id === id ? { ...x, status: "filed" as const, filedAt: at } : x)), ...(rolled ? [rolled] : [])] }));
+      if (rolled) a.calendarItem(rolled);
     },
     sendReminder(id: string, days?: number[]) {
       const i = get().compliance.find((x) => x.id === id)!;
@@ -657,7 +704,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     startRequestFor(itemId: string): string {
       const i = get().compliance.find((x) => x.id === itemId)!;
       const e = get().entities.find((x) => x.id === i.entityId)!;
-      const id = a.createRequest({ clientId: e.clientId, entityId: e.id, businessName: e.legalName, structure: e.entityType, state: i.state === "LOCAL" ? e.state : i.state, serviceId: SERVICE_FOR_KIND[i.kind], description: `${i.title} — due ${new Date(i.dueAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}.`, dueAt: i.dueAt, assignedTo: i.ownerId, source: "staff" });
+      const id = a.createRequest({ clientId: e.clientId, entityId: e.id, businessName: e.legalName, structure: e.entityType, state: i.state === "LOCAL" ? e.state : i.state, serviceId: i.serviceId ?? SERVICE_FOR_KIND[i.kind], description: `${i.title} — due ${new Date(i.dueAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}.`, dueAt: i.dueAt, assignedTo: i.ownerId, source: "staff" });
       upItem(itemId, (x) => ({ ...x, status: "in_progress", requestId: id }));
       return id;
     },
@@ -768,7 +815,7 @@ function useBizSync(state: State, dispatch: React.Dispatch<Action>) {
       const strip = <T extends R>(list: T[], c: Coll) => list.map((x) => { const { rev, ...rest } = x; revs.current.set(`${c}:${x.id}`, rev ?? 1); return rest as unknown as T; });
       const requests = strip(r.requests, "requests"), entities = strip(r.entities, "entities"), compliance = strip(r.items, "compliance");
       dispatch({ type: "fn", fn: (s) => {
-        const next: State = { ...s, requests, entities, compliance, ...(r.config ? { catalog: r.config.catalog as CatalogService[], rules: r.config.rules as ComplianceRule[], checklists: r.config.checklists as StateChecklist[], reminderDefaults: r.config.reminderDefaults } : {}) };
+        const next: State = { ...s, requests, entities, compliance, ...(r.config ? { catalog: upgradeCatalog(r.config.catalog as CatalogService[]), rules: r.config.rules as ComplianceRule[], checklists: r.config.checklists as StateChecklist[], reminderDefaults: r.config.reminderDefaults } : {}) };
         requests.forEach((x) => synced.current.set(`requests:${x.id}`, x));
         entities.forEach((x) => synced.current.set(`entities:${x.id}`, x));
         compliance.forEach((x) => synced.current.set(`compliance:${x.id}`, x));

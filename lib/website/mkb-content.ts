@@ -100,7 +100,7 @@ const ALL_PAGES: SitePage[] = [
     cards("warm", "Stay in good standing", [
       { label: "Compliance", title: "Annual Reports", body: "Preparation and submission of your state annual report or registration." },
       { label: "Compliance", title: "Licenses & Deadlines", body: "Tracking of business licenses, permits and state deadlines, with reminders before they are due." },
-      { label: "Compliance", title: "Registered Agent Coordination", body: "Coordinating a registered agent appointment or change with the provider and the state." },
+      { label: "Plans", title: "Annual Good Standing Plan", body: "Your annual filing, deadline and license tracking, and one amendment a year." },
     ]),
     cards("light", "Business documentation", [
       { label: "Documents", title: "Operating Agreements", body: "Administrative preparation from a standard template and your instructions." },

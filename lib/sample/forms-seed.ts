@@ -96,7 +96,7 @@ export const SAMPLE_FORMS: LeadForm[] = [
       F("b-phone", "phone", "Phone", "phone"),
       F("b-biz", "text", "Business name (or ideas)", "businessName", { required: false }),
       F("b-state", "state", "State where the business will operate", "state"),
-      F("b-need", "checkboxes", "What do you need help with?", "notes", { options: ["Form an LLC or corporation", "Get an EIN", "Business license or permit", "Registered agent", "Annual report", "Bookkeeping setup"] }),
+      F("b-need", "checkboxes", "What do you need help with?", "notes", { options: ["Form an LLC or corporation", "Get an EIN", "Business license or permit", "Trade name (DBA)", "Annual report", "Bookkeeping setup"] }),
       F("b-when", "select", "When do you want to launch?", "notes", { options: ["Within 30 days", "1–3 months", "3+ months", "Already operating"] }),
       F("b-consent", "consent", CONSENT),
     ],

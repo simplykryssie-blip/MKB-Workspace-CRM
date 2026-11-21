@@ -12,6 +12,8 @@ import { useClients } from "@/lib/store/clients-store";
 import { checklistFor, entityStates, requestDocs, requestInvoices, useBiz, type NewRequestInput } from "@/lib/store/biz-store";
 import {
   AGENCY_KIND,
+  AGENT_CHOICES,
+  type FormationDetails,
   AGENT_TYPE,
   CATEGORIES,
   COMPLIANCE_KIND,
@@ -87,7 +89,7 @@ const Err = ({ show, msg }: { show: boolean; msg?: string | null }) => <p classN
 /* Service request intake                                              */
 /* ================================================================== */
 
-export function NewRequestDialog({ open, onClose, onCreated, preset }: { open: boolean; onClose: () => void; onCreated?: (id: string) => void; preset?: { clientId?: string; entityId?: string; serviceId?: string; businessName?: string; structure?: EntityType; state?: string; description?: string; intakeId?: string } }) {
+export function NewRequestDialog({ open, onClose, onCreated, preset }: { open: boolean; onClose: () => void; onCreated?: (id: string) => void; preset?: { clientId?: string; entityId?: string; serviceId?: string; businessName?: string; structure?: EntityType; state?: string; description?: string; intakeId?: string; formation?: Partial<FormationDetails> } }) {
   const biz = useBiz();
   const { clients } = useClients();
   const toast = useToast();
@@ -160,6 +162,7 @@ export function NewRequestDialog({ open, onClose, onCreated, preset }: { open: b
     if (!valid) return;
     const input: NewRequestInput = {
       intakeId: preset?.intakeId,
+      formation: preset?.formation,
       clientId: who === "client" ? clientId : undefined,
       prospect: who === "prospect" ? { name: prospect.name.trim(), email: prospect.email.trim().toLowerCase(), phone: prospect.phone } : undefined,
       entityId: who === "client" && entityId !== "new" ? entityId : undefined,
@@ -936,11 +939,12 @@ export function ServiceDialog({ svc, open, onClose }: { svc?: CatalogService; op
   const biz = useBiz();
   const toast = useToast();
   const cats = useMemo(() => [...new Set([...CATEGORIES, ...biz.catalog.map((s) => s.category)])], [biz.catalog]);
-  const blank = (): CatalogService => ({ id: uid("svc"), category: "Business Consulting", name: "", description: "", nature: "administrative", price: 0, agency: false, formation: false, turnaroundDays: 14, needs: [], deliverables: [], active: true, custom: true });
+  const blank = (): CatalogService => ({ id: uid("svc"), category: "Business Consulting", name: "", description: "", nature: "administrative", price: 0, agency: false, formation: false, turnaroundDays: 14, needs: [], deliverables: [], steps: [], web: true, active: true, custom: true });
   const [v, setV] = useState<CatalogService>(blank());
   const [newCat, setNewCat] = useState("");
   const [needs, setNeeds] = useState("");
   const [dels, setDels] = useState("");
+  const [steps, setSteps] = useState("");
   useEffect(() => {
     if (!open) return;
     const s = svc ? structuredClone(svc) : blank();
@@ -948,13 +952,14 @@ export function ServiceDialog({ svc, open, onClose }: { svc?: CatalogService; op
     setNewCat("");
     setNeeds(s.needs.join("\n"));
     setDels(s.deliverables.join("\n"));
+    setSteps((s.steps ?? []).join("\n"));
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
   const dupe = biz.catalog.some((s) => s.id !== v.id && s.name.trim().toLowerCase() === v.name.trim().toLowerCase());
   const category = v.category === "__new" ? newCat.trim() : v.category;
   const legalWord = /\blegal\b|attorney|lawyer/i.test(`${v.name} ${v.description}`);
   const valid = v.name.trim() && !dupe && category && v.price >= 0 && !isNaN(v.price) && v.turnaroundDays > 0;
   const save = () => {
-    biz.saveService({ ...v, category, name: v.name.trim(), description: v.description.trim(), needs: needs.split("\n").map((x) => x.trim()).filter(Boolean), deliverables: dels.split("\n").map((x) => x.trim()).filter(Boolean), filingFeeEstimate: v.filingFeeEstimate || undefined });
+    biz.saveService({ ...v, category, name: v.name.trim(), description: v.description.trim(), needs: needs.split("\n").map((x) => x.trim()).filter(Boolean), deliverables: dels.split("\n").map((x) => x.trim()).filter(Boolean), steps: steps.split("\n").map((x) => x.trim()).filter(Boolean).slice(0, 60), unit: v.unit?.trim() || undefined, filingFeeEstimate: v.filingFeeEstimate || undefined });
     toast(svc ? "Service updated" : "Service added to the catalog");
     onClose();
   };
@@ -973,20 +978,26 @@ export function ServiceDialog({ svc, open, onClose }: { svc?: CatalogService; op
         <p className="rounded-xl bg-surface-2 px-3 py-2 text-[12.5px] text-ink-2 ring-1 ring-line">{NATURE[v.nature].note}</p>
         <TextArea id="sv-desc" label="Description (shown to clients)" value={v.description} onChange={(e) => setV({ ...v, description: e.target.value })} />
         {legalWord && <p className="flex items-start gap-2 rounded-xl bg-warning-soft px-3 py-2 text-[12.5px] text-warning-ink"><AlertTriangle size={14} className="mt-0.5 shrink-0" /> Avoid describing a service as legal work or legal advice — MKB is not a law firm.</p>}
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-4">
           <TextField id="sv-price" label="MKB fee ($)" type="number" min={0} step="0.01" required value={Number.isNaN(v.price) ? "" : v.price} onChange={(e) => setV({ ...v, price: e.target.value === "" ? NaN : Number(e.target.value) })} />
+          <SelectField id="sv-unit" label="Charged" value={v.unit ?? ""} onChange={(e) => setV({ ...v, unit: e.target.value || undefined, recurring: e.target.value === "per year" ? true : v.recurring })} options={[["", "One time"], ["per year", "Per year"], ["each", "Each"], ["per filing", "Per filing"]]} />
           <TextField id="sv-fee" label="Filing fee estimate ($)" hint="optional · varies by state" type="number" min={0} step="0.01" value={v.filingFeeEstimate ?? ""} onChange={(e) => setV({ ...v, filingFeeEstimate: e.target.value === "" ? undefined : Number(e.target.value) })} />
           <TextField id="sv-days" label="Turnaround (days)" type="number" min={1} required value={v.turnaroundDays} onChange={(e) => setV({ ...v, turnaroundDays: Number(e.target.value) })} />
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <Checkbox label="Goes to a government agency" hint="Enables the agency log and agency statuses" checked={v.agency} onChange={() => setV({ ...v, agency: !v.agency })} />
-          <Checkbox label="Uses the formation workspace" hint="Names, organizer, owners, registered agent, EIN" checked={v.formation} onChange={() => setV({ ...v, formation: !v.formation })} />
+          <Checkbox label="Uses the formation workspace" hint="Names, organizer, owners, the client's own registered agent, EIN" checked={v.formation} onChange={() => setV({ ...v, formation: !v.formation })} />
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <TextArea id="sv-needs" label="Information needed from the client (one per line)" rows={4} value={needs} onChange={(e) => setNeeds(e.target.value)} />
           <TextArea id="sv-dels" label="Deliverables (one per line)" rows={4} value={dels} onChange={(e) => setDels(e.target.value)} />
         </div>
-        <Checkbox label="Available for new requests" checked={v.active} onChange={() => setV({ ...v, active: !v.active })} />
+        <TextArea id="sv-steps" label="Working steps — each new request starts with these as its tasks (one per line)" rows={6} value={steps} onChange={(e) => setSteps(e.target.value)} />
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Checkbox label="Available for new requests" checked={v.active} onChange={() => setV({ ...v, active: !v.active })} />
+          <Checkbox label="Renews every year" hint="Next year's renewal goes on the compliance calendar when the year's work is done" checked={!!v.recurring} onChange={() => setV({ ...v, recurring: !v.recurring })} />
+          <Checkbox label="Show on the website price list" checked={v.web !== false} onChange={() => setV({ ...v, web: v.web === false })} />
+        </div>
       </div>
     </Modal>
   );
@@ -1026,7 +1037,7 @@ export function EntityDialog({ entity, clientId, open, onClose, onSaved }: { ent
     }
     onClose();
   };
-  const agent = v.agent ?? { type: "mkb_coordinated" as const, name: "", address: "" };
+  const agent = v.agent ?? { type: "self" as const, name: "", address: "" };
   return (
     <Modal open={open} onClose={onClose} size="lg" title={entity ? "Edit business" : "Add a business"} description="Businesses are linked to an existing client record — one client can own or manage several." footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" onClick={save}>{entity ? "Save" : "Add business"}</Button></>}>
       <div className="space-y-3">
@@ -1058,7 +1069,7 @@ export function EntityDialog({ entity, clientId, open, onClose, onSaved }: { ent
         </div>
         <TextField id="en-addr" label="Principal business address" value={v.principalAddress} onChange={(e) => setV({ ...v, principalAddress: e.target.value })} />
         <div className="grid gap-4 rounded-xl border border-line p-3 sm:grid-cols-3">
-          <SelectField id="en-ra" label="Registered agent" value={v.agent ? agent.type : "none"} onChange={(e) => setV({ ...v, agent: e.target.value === "none" ? undefined : { ...agent, type: e.target.value as typeof agent.type } })} options={[["none", "Not recorded"], ...Object.entries(AGENT_TYPE).map(([k, x]) => [k, x] as [string, string])]} />
+          <SelectField id="en-ra" label="Client’s own registered agent (MKB is not an agent)" value={v.agent ? agent.type : "none"} onChange={(e) => setV({ ...v, agent: e.target.value === "none" ? undefined : { ...agent, type: e.target.value as typeof agent.type } })} options={[["none", "Not recorded"], ...AGENT_CHOICES, ...(agent.type === "mkb_coordinated" && v.agent ? [["mkb_coordinated", AGENT_TYPE.mkb_coordinated] as [string, string]] : [])]} />
           {v.agent && <TextField id="en-ra-name" label="Agent name" value={agent.name} onChange={(e) => setV({ ...v, agent: { ...agent, name: e.target.value } })} />}
           {v.agent && <TextField id="en-ra-addr" label="Agent address" value={agent.address} onChange={(e) => setV({ ...v, agent: { ...agent, address: e.target.value } })} />}
         </div>

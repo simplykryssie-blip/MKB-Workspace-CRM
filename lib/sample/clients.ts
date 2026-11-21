@@ -405,7 +405,7 @@ export const yearFromTitle = (title: string) => Number(/^(20\d\d)/.exec(title)?.
 const SIGN_TEMPLATES: Record<ServiceKey, string[]> = {
   tax: ["Engagement letter — tax preparation", "Form 8879 (e-file authorization)"],
   books: ["Bookkeeping services agreement"],
-  biz: ["Engagement letter — business services", "Registered agent consent"],
+  biz: ["Engagement letter — business services", "Operating agreement"],
   expunge: ["Engagement letter — Expungement Relief", "Records release authorization"],
 };
 

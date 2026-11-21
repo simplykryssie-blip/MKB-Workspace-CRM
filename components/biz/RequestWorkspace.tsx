@@ -47,7 +47,7 @@ import { PaymentDialog, downloadPlaceholder } from "@/components/crm/dialogs";
 import { STAFF, SAMPLE_NOW, staffById, staffList } from "@/lib/sample/clients";
 import { useClients } from "@/lib/store/clients-store";
 import { isClosed, nextStep, openInfo, payState, paymentCleared, requestDocs, requestInvoices, requestMessages, useBiz } from "@/lib/store/biz-store";
-import { AGENCY_KIND, AGENT_TYPE, DELIVERABLE_META, DOC_CATEGORIES, EIN_STATUS, ENTITY_TYPES, NATURE, STATE_FILING, stateName, stateOptions, type DocCategory, type EinStatus, type EntityType, type FormationDetails, type InfoRequest, type ServiceRequest } from "@/lib/biz/config";
+import { AGENCY_KIND, AGENT_CHOICES, AGENT_TYPE, DELIVERABLE_META, DOC_CATEGORIES, EIN_STATUS, ENTITY_TYPES, NATURE, STATE_FILING, stateName, stateOptions, type DocCategory, type EinStatus, type EntityType, type FormationDetails, type InfoRequest, type ServiceRequest } from "@/lib/biz/config";
 import { fileSize, fmtDate, fmtDateTime, relTime, usd } from "@/lib/format";
 import type { Client } from "@/lib/types";
 import { EngagementCard } from "./BizEngagement";
@@ -363,7 +363,7 @@ function FormationTab({ r, f, go }: { r: ServiceRequest; f: FormationDetails; go
     biz.updateFormation(r.id, { ...editable, proposedName: v.proposedName.trim() });
     toast("Formation details saved");
   };
-  const agent = v.agent ?? { type: "mkb_coordinated" as const, name: "", address: "" };
+  const agent = v.agent ?? { type: "self" as const, name: "", address: "" };
   return (
     <div className="space-y-5">
       <Card>
@@ -422,7 +422,7 @@ function FormationTab({ r, f, go }: { r: ServiceRequest; f: FormationDetails; go
             <Button size="sm" variant="ghost" icon={Plus} className="mt-2" onClick={() => setV({ ...v, owners: [...v.owners, { id: `o-${Date.now()}`, name: "", role: "Member", pct: Math.max(0, 100 - pct) }] })}>Add owner</Button>
           </div>
           <div className="grid gap-4 md:grid-cols-3">
-            <SelectField id="fm-ra" label="Registered agent" value={v.agent ? agent.type : "none"} onChange={(e) => setV({ ...v, agent: e.target.value === "none" ? undefined : { ...agent, type: e.target.value as typeof agent.type } })} options={[["none", "Not chosen yet"], ...Object.entries(AGENT_TYPE).map(([k, x]) => [k, x] as [string, string])]} />
+            <SelectField id="fm-ra" label="Client’s own registered agent (MKB is not an agent)" value={v.agent ? agent.type : "none"} onChange={(e) => setV({ ...v, agent: e.target.value === "none" ? undefined : { ...agent, type: e.target.value as typeof agent.type } })} options={[["none", "Not chosen yet"], ...AGENT_CHOICES, ...(agent.type === "mkb_coordinated" && v.agent ? [["mkb_coordinated", AGENT_TYPE.mkb_coordinated] as [string, string]] : [])]} />
             {v.agent && <TextField id="fm-ra-name" label="Agent name" value={agent.name} onChange={(e) => setV({ ...v, agent: { ...agent, name: e.target.value } })} />}
             {v.agent && <TextField id="fm-ra-addr" label="Agent address" value={agent.address} onChange={(e) => setV({ ...v, agent: { ...agent, address: e.target.value } })} />}
           </div>
@@ -436,6 +436,20 @@ function FormationTab({ r, f, go }: { r: ServiceRequest; f: FormationDetails; go
 
 /* ================================================================== */
 
+/**
+ * EIN responsible party's SSN: asked for as a "(secure form)" request in the client
+ * portal, where the client types it and it's encrypted into their record. Never use an
+ * information request for it — those answers are stored as plain text.
+ */
+function SsnRequestButton({ r, c }: { r: ServiceRequest; c: Client }) {
+  const clientStore = useClients();
+  const toast = useToast();
+  const name = "Social Security number — EIN responsible party (secure form)";
+  const open = c.documents.some((d) => d.name === name && d.bizRequestId === r.id);
+  if (open) return <Badge tone="info">SSN asked for in the portal</Badge>;
+  return <Button size="sm" icon={Lock} onClick={() => { clientStore.requestDocument(c.id, { name, service: "biz", category: "Identity", sensitive: true, entityId: r.entityId, bizRequestId: r.id }); toast("Asked in the client portal — they enter it securely and it's saved encrypted to their record"); }}>Ask for SSN securely (portal)</Button>;
+}
+
 function ClientTab({ r, c, open }: { r: ServiceRequest; c?: Client; open: (d: Dlg) => void }) {
   const biz = useBiz();
   const clientStore = useClients();
@@ -448,7 +462,7 @@ function ClientTab({ r, c, open }: { r: ServiceRequest; c?: Client; open: (d: Dl
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
       <Card>
-        <CardHeader icon={UserRound} title="Information requested from the client" subtitle="Shown in the client portal under “What we need from you”" action={<Button size="sm" variant="primary" icon={FilePlus2} disabled={!c || isClosed(r)} onClick={() => open("info")}>Request information</Button>} />
+        <CardHeader icon={UserRound} title="Information requested from the client" subtitle="Shown in the client portal under “What we need from you”" action={<span className="flex flex-wrap justify-end gap-2">{c && !isClosed(r) && (r.serviceId === "ein" || !!r.formation) && <SsnRequestButton r={r} c={c} />}<Button size="sm" variant="primary" icon={FilePlus2} disabled={!c || isClosed(r)} onClick={() => open("info")}>Request information</Button></span>} />
         <ul className="divide-y divide-line border-t border-line">
           {r.info.length === 0 && <li className="px-6 py-8 text-center text-[13.5px] text-muted">{c ? "Nothing requested yet." : "Link the prospect to a client record first."}</li>}
           {r.info.map((i) => (

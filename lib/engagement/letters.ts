@@ -220,10 +220,10 @@ Dear {{clientName}},
 Thank you for choosing MKB Financial Group LLC. This letter covers the business service you requested: {{service}}.
 
 ## What we will do
-We will prepare and submit the filings, applications or documents described in your service request (for example, business formation, EIN application, registered agent, annual reports, licenses or other compliance filings), using the information you provide.
+We will prepare and submit the filings, applications or documents described in your service request (for example, business formation, EIN application, trade names, annual reports, licenses or other compliance filings), using the information you provide.
 
 ## What we do not do
-We are not a law firm and do not give legal advice. We do not choose your business structure for you or advise on legal rights and obligations. If your situation needs legal advice, please consult an attorney. We are happy to refer you.
+We are not a law firm and do not give legal advice. We are not a registered agent and do not provide or arrange registered agent service: you designate and maintain your own registered agent, and we list the agent you name on your filings. We do not choose your business structure for you or advise on legal rights and obligations. If your situation needs legal advice, please consult an attorney. We are happy to refer you.
 
 ## Your responsibilities
 You are responsible for the accuracy of the ownership, address and other information in your filings, and for keeping your business in good standing after we complete the service (unless an ongoing compliance plan is part of your service).

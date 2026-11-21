@@ -105,29 +105,55 @@ const pFinish: Section = {
 };
 
 /* ================================================================ Business Solutions */
-const FORMING = ["Form a new LLC", "Form a corporation", "Form a nonprofit"];
-const forming = (a: Answers) => FORMING.some((x) => has("need", x)(a));
-const existing = (a: Answers) => ["Annual report", "Amendment or name change", "Dissolution", "Register in another state"].some((x) => has("need", x)(a));
+/** The services a client can ask for (one section of questions each). Names match the Business Services catalog. */
+export const BIZ_NEED = {
+  llc: "Form an LLC",
+  corp: "Form a corporation",
+  pkgFormation: "Formation Package (formation, operating agreement, resolutions, digital record book)",
+  pkgComplete: "Formation Complete (Formation Package plus physical record book, one DBA, license report and year 1 of the Good Standing Plan)",
+  ein: "EIN application",
+  dba: "Trade name (DBA)",
+  foreign: "Register in another state (foreign registration)",
+  amend: "Amendment or name change",
+  dissolve: "Dissolution (closing the business)",
+  annual: "Louisiana annual report",
+  txPir: "Texas franchise tax / Public Information Report",
+  license: "Licenses & deadlines tracking (yearly)",
+  licenseReport: "One-time license report",
+  goodStanding: "Annual Good Standing Plan",
+  goodStandingPremium: "Annual Good Standing Plan — Premium (adds the resolutions package)",
+  oa: "Operating agreement",
+  resolutions: "Resolutions",
+  records: "Business record book",
+} as const;
+const N = BIZ_NEED;
+const any = (...xs: string[]) => (a: Answers) => xs.some((x) => has("need", x)(a));
+const forming = any(N.llc, N.corp, N.pkgFormation, N.pkgComplete);
+const goodStanding = any(N.goodStanding, N.goodStandingPremium, N.pkgComplete);
+const existing = any(N.ein, N.dba, N.foreign, N.amend, N.dissolve, N.annual, N.txPir, N.license, N.licenseReport, N.goodStanding, N.goodStandingPremium, N.oa, N.resolutions, N.records);
 const bNeed: Section = {
   id: "need", title: "What you need", group: "About you", covers: ["Services"],
+  intro: "Choose everything you'd like MKB to handle. You'll only see the questions for what you choose.",
   questions: [
-    { id: "need", label: "What can we help you file? (choose all that apply)", type: "multi", options: [...FORMING, "IRS EIN application", "Trade name (DBA)", "Register in another state", "Annual report", "Amendment or name change", "Dissolution", "Operating agreement", "Resolutions or minutes"] },
+    { id: "need", label: "What can we help you with? (choose all that apply)", type: "multi", options: Object.values(N) },
     { id: "timing", label: "When do you need it done?", type: "choice", options: ["As soon as possible", "Within a month", "No rush"] },
   ],
 };
 const bBusiness: Section = {
-  id: "business", title: "Your business", group: "Business", covers: ["Name", "Type", "Address"],
+  id: "business", title: "Your business", group: "Business", covers: ["Name", "Type", "Addresses"],
   questions: [
     { id: "legalName", label: "Business name", type: "text", prefill: "bizName", help: "For a new business, the name you want first." },
-    { id: "name2", label: "Second-choice name", type: "text", optional: true, show: forming },
-    { id: "name3", label: "Third-choice name", type: "text", optional: true, show: forming },
+    { id: "name2", label: "Second-choice name", type: "text", show: forming },
+    { id: "name3", label: "Third-choice name", type: "text", show: forming },
     { id: "entity", label: "Type of business", type: "choice", options: ENTITIES },
     { id: "formState", label: "State of formation", type: "state", prefill: "bizState" },
-    { id: "purpose", label: "In a sentence or two, what does (or will) the business do?", type: "textarea" },
+    { id: "purpose", label: "Business activity — in a sentence or two, what does (or will) the business do?", type: "textarea" },
     { id: "street", label: "Principal business address (street)", type: "text", prefill: "street", help: "Most states require a physical street address — not a P.O. box." },
     { id: "city", label: "City", type: "text", prefill: "city" },
     { id: "state", label: "State", type: "state", prefill: "state" },
     { id: "zip", label: "ZIP", type: "zip", prefill: "zip" },
+    { id: "mailSame", label: "Is the mailing address the same?", type: YN },
+    { id: "mailing", label: "Mailing address (street, city, state, ZIP)", type: "text", show: is("mailSame", "No") },
     { id: "phone", label: "Phone", type: "phone", prefill: "phone" },
     { id: "email", label: "Email for state notices", type: "email", prefill: "email" },
   ],
@@ -149,28 +175,24 @@ const bOwners: Section = {
     { id: "phone", label: "Phone", type: "phone", optional: true },
   ],
 };
-const bAgent: Section = {
-  id: "agent", title: "Registered agent", group: "Business", covers: ["Registered agent"], show: (a) => forming(a) || has("need", "Register in another state")(a),
-  intro: "Every business needs a registered agent in its state — a person or company that accepts legal mail during business hours.",
+const bStructure: Section = {
+  id: "structure", title: "How the business is run", group: "Business", covers: ["Management"], show: (a) => forming(a) || has("need", N.oa)(a),
   questions: [
-    { id: "agent", label: "Who will be your registered agent?", type: "choice", options: ["Me (an owner)", "Someone I'll name", "I'd like MKB to help me choose a registered agent service"] },
-    { id: "agentName", label: "Registered agent's name", type: "text", show: is("agent", "Someone I'll name") },
-    { id: "agentAddress", label: "Registered agent's street address in the state", type: "text", show: is("agent", "Someone I'll name", "Me (an owner)") },
+    { id: "management", label: "Management structure", type: "choice", options: ["Member-managed (the owners run it)", "Manager-managed (named managers run it)", "Board of directors and officers (corporation)", "Not sure yet — let's discuss"] },
   ],
 };
-const bExisting: Section = {
-  id: "existing", title: "Your existing business", group: "Business", covers: ["State records"], show: existing,
+const bAgent: Section = {
+  id: "agent", title: "Your registered agent", group: "Business", covers: ["Registered agent"], show: (a) => forming(a) || has("need", N.foreign)(a),
+  intro: "Every business needs a registered agent in its state — a person or company with a street address in that state who accepts legal mail during business hours. You choose and handle your own registered agent: MKB is not a registered agent and doesn't provide or arrange one. We'll list the agent you name on your filings.",
   questions: [
-    { id: "charter", label: "State business ID or charter number (if you know it)", type: "text", optional: true },
-    { id: "change", label: "What needs to change?", type: "textarea", show: has("need", "Amendment or name change") },
-    { id: "dissolveDate", label: "Date you want the business closed", type: "date", show: has("need", "Dissolution") },
-    { id: "foreignState", label: "Which state do you want to register in?", type: "state", show: has("need", "Register in another state"), docs: [doc("Certificate of good standing from your home state", "Formation")] },
-    { id: "haveArticles", label: "Do you have a copy of your articles of organization or incorporation?", type: YN, docs: [doc("Articles of organization / incorporation", "Formation")] },
+    { id: "agent", label: "Who is your registered agent?", type: "choice", options: ["Me (an owner)", "Another person I've chosen", "A registered agent company I've chosen"] },
+    { id: "agentName", label: "Registered agent's full name (or company name)", type: "text" },
+    { id: "agentAddress", label: "Registered agent's street address in the state (no P.O. boxes)", type: "text" },
   ],
 };
 const bEin: Section = {
-  id: "ein", title: "EIN application", group: "Business", covers: ["IRS EIN"], show: has("need", "IRS EIN application"),
-  intro: "The IRS needs a \"responsible party\" — an owner or officer. We'll collect their Social Security number by phone or secure upload, never here.",
+  id: "ein", title: "EIN (IRS tax ID)", group: "Business", covers: ["IRS EIN"], show: (a) => forming(a) || has("need", N.ein)(a),
+  intro: "The IRS needs a \"responsible party\" — an owner or officer. Never enter a Social Security number here: after you submit, we'll ask for it through your secure client portal.",
   questions: [
     { id: "rpName", label: "Responsible party's full name", type: "text" },
     { id: "rpTitle", label: "Their title", type: "text" },
@@ -179,9 +201,101 @@ const bEin: Section = {
     { id: "firstWages", label: "When will you first pay wages?", type: "date", optional: true, show: (a) => Number(a.employees) > 0 },
   ],
 };
+const bExisting: Section = {
+  id: "existing", title: "Your existing business", group: "Business", covers: ["State records"], show: (a) => existing(a) && !forming(a),
+  questions: [
+    { id: "charter", label: "State business ID or charter number (if you know it)", type: "text", optional: true },
+    { id: "haveArticles", label: "Do you have a copy of your articles of organization or incorporation?", type: YN, docs: [doc("Articles of organization / incorporation", "Formation")] },
+  ],
+};
+const bDba: Section = {
+  id: "dba", title: "Trade name (DBA)", group: "Services", covers: ["Trade name"], show: any(N.dba, N.pkgComplete),
+  intro: "In Louisiana a trade name is registered with the Secretary of State and recorded in each parish where you do business.",
+  questions: [
+    { id: "dbaName", label: "Trade name you want to use", type: "text" },
+    { id: "dbaWhere", label: "Parish(es) or county where you'll use it", type: "text", placeholder: "e.g. Calcasieu" },
+    { id: "dbaUse", label: "What will you sell or do under this name?", type: "textarea", optional: true },
+  ],
+};
+const bForeign: Section = {
+  id: "foreign", title: "Registering in another state", group: "Services", covers: ["Foreign registration"], show: any(N.foreign),
+  intro: "We order a certificate of good standing from your home state and file your registration in the new state.",
+  questions: [
+    { id: "foreignState", label: "Which state do you want to register in?", type: "state" },
+    { id: "foreignStart", label: "When will you start doing business there?", type: "date", optional: true },
+  ],
+};
+const bAmend: Section = {
+  id: "amend", title: "Amendment or name change", group: "Services", covers: ["Changes"], show: any(N.amend),
+  questions: [
+    { id: "change", label: "What needs to change?", type: "multi", options: ["Business name", "Members or managers", "Address", "Business purpose", "Something else"] },
+    { id: "newName", label: "New business name", type: "text", show: has("change", "Business name") },
+    { id: "changeDetail", label: "Describe the change", type: "textarea" },
+    { id: "changeDate", label: "Date the change should take effect", type: "date", optional: true },
+  ],
+};
+const bDissolve: Section = {
+  id: "dissolve", title: "Closing the business", group: "Services", covers: ["Dissolution"], show: any(N.dissolve),
+  questions: [
+    { id: "dissolveDate", label: "Date you want the business closed", type: "date" },
+    { id: "ownersAgree", label: "Have all owners agreed to close the business?", type: YN },
+    { id: "debts", label: "Have all business debts been paid or arranged?", type: "choice", options: ["Yes", "No", "Not sure"], warn: "Debts usually need to be paid or arranged before a business is closed. We'll go over this with you.", warnWhen: "No" },
+    { id: "finalFilings", label: "Have the business's final tax returns been filed?", type: "choice", options: ["Yes", "No — I need them filed", "Not sure"], help: "We'll set a reminder for the final tax return either way." },
+    { id: "openAccounts", label: "Does the business still have employees, payroll or sales-tax accounts open?", type: YN },
+  ],
+};
+const bAnnual: Section = {
+  id: "annual", title: "Yearly state report", group: "Services", covers: ["Annual report"], show: (a) => any(N.annual, N.txPir)(a) || goodStanding(a),
+  questions: [
+    { id: "officersChanged", label: "Have your officers, members, managers or addresses changed since the last report?", type: YN },
+    { id: "officersDetail", label: "What changed?", type: "textarea", show: yes("officersChanged") },
+    { id: "lastReport", label: "When was the last report filed? (an estimate is fine)", type: "text", optional: true },
+    { id: "txRevenue", label: "Total revenue for the report year (Texas report)", type: "money", optional: true, show: has("need", N.txPir) },
+  ],
+};
+const bLicenses: Section = {
+  id: "licenses", title: "Licenses & permits", group: "Services", covers: ["Licenses"], show: (a) => any(N.license, N.licenseReport)(a) || goodStanding(a),
+  questions: [
+    { id: "bizType", label: "What type of business is it? (what you sell or do)", type: "textarea" },
+    { id: "locations", label: "Where do you operate? (city and parish/county for each location, or \"online only\")", type: "textarea" },
+    { id: "hasLicenses", label: "Do you have any business licenses or permits now?", type: YN, docs: [doc("Current business licenses and permits", "Compliance")] },
+    { id: "licenseList", label: "Which ones? (name and renewal date if you know it)", type: "textarea", optional: true, show: yes("hasLicenses") },
+  ],
+};
+const bOa: Section = {
+  id: "oa", title: "Operating agreement", group: "Services", covers: ["Operating agreement"], show: any(N.oa, N.pkgFormation, N.pkgComplete),
+  intro: "We prepare your operating agreement from a standard template and your answers. It's not legal advice — you can have an attorney review it before you sign.",
+  questions: [
+    { id: "contributions", label: "What is each member contributing to start? (money, property, work)", type: "textarea" },
+    { id: "distributions", label: "How will profits be shared?", type: "choice", options: ["By ownership percentage", "Another way — I'll explain"] },
+    { id: "distributionsOther", label: "Explain how profits will be shared", type: "textarea", show: is("distributions", "Another way — I'll explain") },
+    { id: "voting", label: "How will members vote?", type: "choice", options: ["By ownership percentage", "One vote per member", "Another way — I'll explain"] },
+    { id: "votingOther", label: "Explain how members will vote", type: "textarea", show: is("voting", "Another way — I'll explain") },
+    { id: "transfer", label: "Can a member sell or transfer their share?", type: "choice", options: ["Only with the other members' approval", "Other members get the first chance to buy", "Freely", "Not sure — let's discuss"] },
+    { id: "oaNotes", label: "Anything else the agreement should cover?", type: "textarea", optional: true },
+  ],
+};
+const bResolutions: Section = {
+  id: "resolutions", title: "Resolutions", group: "Services", covers: ["Resolutions"], show: any(N.resolutions, N.goodStandingPremium),
+  intro: "A resolution records a decision your members or board made.",
+  repeat: { noun: "resolution", min: 1, rowTitle: (r, i) => r.resAction ? String(r.resAction).slice(0, 40) : `Resolution ${i + 1}` },
+  questions: [
+    { id: "resAction", label: "What was approved?", type: "textarea", placeholder: "e.g. Open a business bank account at …" },
+    { id: "resDate", label: "Date it was approved", type: "date" },
+    { id: "resBy", label: "Who approved it?", type: "text", placeholder: "e.g. All members" },
+  ],
+};
+const bRecords: Section = {
+  id: "records", title: "Business record book", group: "Services", covers: ["Record book"], show: any(N.records, N.pkgFormation, N.pkgComplete),
+  questions: [
+    { id: "bookFormat", label: "Digital or physical record book?", type: "choice", options: ["Digital", "Physical binder (digital copy included)"], show: has("need", N.records) },
+    { id: "haveDocs", label: "Which documents do you already have? (choose all that apply)", type: "multi", optional: true, options: ["Articles of organization / incorporation", "Operating agreement or bylaws", "EIN letter", "Past annual reports", "Licenses and permits", "Meeting minutes or resolutions", "None yet"], show: (a) => !forming(a),
+      help: "You can upload them in your client portal after you submit." },
+  ],
+};
 const bFinish: Section = {
   id: "finish", title: "Anything else", group: "Finish", covers: ["Notes"],
-  intro: "State filing fees are separate from MKB's fee. We confirm them with you before anything is filed. MKB prepares filings from your information and standard templates and is not a law firm.",
+  intro: "MKB's fee is separate from state and government filing fees, which are passed through at cost — we confirm them with you before anything is filed. MKB prepares filings from your information and standard templates and is not a law firm or a registered agent.",
   questions: [{ id: "notes", label: "Anything else we should know?", type: "textarea", optional: true }],
 };
 
@@ -238,7 +352,7 @@ const rAck: Section = {
 
 export const SERVICE_INTAKES: Record<ServiceIntakeKind, { label: string; title: string; sections: Section[]; module: "books" | "biz" | "exp"; service: "books" | "biz" | "expunge"; next: string }> = {
   payroll: { label: "Payroll", title: "Payroll Intake", sections: [pBusiness, pSetup, pPeople, pRoster, pTaxes, pFinish], module: "books", service: "books", next: "We review your answers, confirm your payroll setup and price, and schedule your first payroll." },
-  biz: { label: "Business Solutions", title: "Business Solutions Intake", sections: [bNeed, bBusiness, bOwners, bAgent, bExisting, bEin, bFinish], module: "biz", service: "biz", next: "We review your answers, confirm the state filing fees with you, and prepare your filings for your approval." },
+  biz: { label: "Business Solutions", title: "Business Solutions Intake", sections: [bNeed, bBusiness, bOwners, bStructure, bAgent, bEin, bExisting, bDba, bForeign, bAmend, bDissolve, bAnnual, bLicenses, bOa, bResolutions, bRecords, bFinish], module: "biz", service: "biz", next: "We review your answers, confirm the state filing fees with you, and prepare your filings for your approval." },
   relief: { label: "Expungement Relief", title: "Expungement Relief Intake", sections: [rAbout, rRecords, rSituation, rAck], module: "exp", service: "expunge", next: "We review your answers, go over our fees with you, and start requesting your records." },
 };
 export const SERVICE_INTAKE_KINDS = Object.keys(SERVICE_INTAKES) as ServiceIntakeKind[];

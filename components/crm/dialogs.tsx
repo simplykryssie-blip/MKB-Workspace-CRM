@@ -581,7 +581,7 @@ export function PaymentDialog({ client: c, open, onClose, invoiceId }: DialogPro
 const SIGN_PRESETS: Record<ServiceKey, string[]> = {
   tax: ["Engagement letter — tax preparation", "Form 8879 (e-file authorization)", "Form 8821 (tax information authorization)"],
   books: ["Bookkeeping services agreement", "Bank access authorization"],
-  biz: ["Engagement letter — business services", "Registered agent consent", "Operating agreement"],
+  biz: ["Engagement letter — business services", "Operating agreement", "Articles of organization / incorporation"],
   expunge: ["Engagement letter — Expungement Relief", "Records release authorization", "Petition review sign-off"],
 };
 

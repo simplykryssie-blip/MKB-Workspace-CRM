@@ -67,6 +67,19 @@ async function fillStore(s: PublicSite) {
   return { ...s, sections: s.sections.map((x) => (x.type === "store" ? { ...x, products: cards } : x)) };
 }
 
+/** Business Solutions prices from the CRM catalog (one list for quotes and the website). */
+async function withBizPrices(raw: string) {
+  const [{ bizPriceHtml, PRICE_TAG }, { DEFAULT_CATALOG, upgradeCatalog }] = await Promise.all([import("@/lib/website/biz-prices"), import("@/lib/biz/config")]);
+  let catalog = DEFAULT_CATALOG;
+  if (BACKEND) {
+    const [{ getEnv }, { loadBizConfig }] = await Promise.all([import("./core"), import("./biz")]);
+    const cfg = await loadBizConfig(await getEnv());
+    if (cfg?.catalog?.length) catalog = upgradeCatalog(cfg.catalog as typeof DEFAULT_CATALOG);
+  }
+  const table = bizPriceHtml(catalog);
+  return raw.replace(PRICE_TAG, () => table);
+}
+
 export async function serveSite(req: Request, site: SiteKey, slugParts?: string[]) {
   const slug = (slugParts ?? []).join("/").toLowerCase();
   const parts = slug.split("/");
@@ -76,7 +89,8 @@ export async function serveSite(req: Request, site: SiteKey, slugParts?: string[
   const prefix = own ? "" : site === "monarch" ? "/msite" : "/site";
   if (!s) return html(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Page not found</title>${ICONS[site]}</head><body style="font-family:Arial,sans-serif;text-align:center;padding:80px 20px"><h1 style="font:500 34px Georgia,serif">Page not found</h1><p>This page doesn't exist.</p><p><a href="${prefix || "/"}">Go to the home page</a></p></body></html>`, 404, !own);
   // Marketing tags: only on the real website address (never the sandboxed preview) and only on pages that don't collect information.
-  const raw = isHtmlPage(s.sections) ? s.sections[0].html ?? "" : undefined;
+  let raw = isHtmlPage(s.sections) ? s.sections[0].html ?? "" : undefined;
+  if (raw && site === "mkb" && raw.includes("data-mkb-prices")) raw = await withBizPrices(raw).catch(() => raw);
   const tags = own && trackable(slug, s.sections, raw) ? trackingTags(s.settings) : "";
   if (raw !== undefined) return html(withTracking(preparePage(raw, prefix), tags), 200, !own);
   const name = s.settings.siteName;

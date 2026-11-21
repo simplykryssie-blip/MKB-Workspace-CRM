@@ -32,7 +32,7 @@ export const NOT_LEGAL_ADVICE =
 /* Catalog                                                             */
 /* ------------------------------------------------------------------ */
 
-export const CATEGORIES = ["Business Formation", "Business Compliance", "Business Documentation", "Business Consulting"] as const;
+export const CATEGORIES = ["Business Formation", "Business Compliance", "Business Documentation", "Packages & Plans", "Business Consulting"] as const;
 export type Category = (typeof CATEGORIES)[number] | string;
 
 /** What kind of work the service is — shown to clients so administrative help is never mistaken for legal services. */
@@ -49,22 +49,37 @@ export type CatalogService = {
   name: string;
   description: string;
   nature: ServiceNature;
-  /** MKB service fee (default quote line). */
+  /** MKB service fee (default quote line). State and government fees are separate and passed through at cost. */
   price: number;
+  /** How the price is charged, shown after it: "per filing", "each", "per year". Blank = one-time fee. */
+  unit?: string;
   /** Optional admin-entered estimate. Never pre-filled: state fees differ and change, so quotes use the fee confirmed for the specific state. */
   filingFeeEstimate?: number;
   /** Goes to a state or federal agency: unlocks the agency log and "Submitted to Agency" statuses. */
   agency: boolean;
-  /** Uses the formation workspace (proposed names, organizer, owners, registered agent, EIN). */
+  /** Uses the formation workspace (proposed names, organizer, owners, the client's registered agent, EIN). */
   formation: boolean;
   turnaroundDays: number;
   /** Information the client must provide — becomes the starting checklist of client requests. */
   needs: string[];
   /** Expected deliverables. */
   deliverables: string[];
+  /** The working steps — every new request for this service starts with these as its task list, in order. */
+  steps: string[];
+  /** Bundles: the services included (by id). */
+  includes?: string[];
+  /** Renews every year: when the year's work is complete, next year's renewal is put on the compliance calendar. */
+  recurring?: boolean;
+  /** Shown on the website price list (when active). */
+  web?: boolean;
   active: boolean;
   custom?: boolean;
 };
+
+/** Discount on business-services fees for a client's second entity and beyond (MKB fee only, never state fees). */
+export const MULTI_ENTITY_DISCOUNT_PCT = 20;
+/** Bumped when the built-in catalog changes; older saved catalogs are brought up to date once. */
+export const CATALOG_VERSION = 2;
 
 const svc = (id: string, category: Category, name: string, nature: ServiceNature, price: number, o: Partial<CatalogService> = {}): CatalogService => ({
   id,
@@ -78,39 +93,87 @@ const svc = (id: string, category: Category, name: string, nature: ServiceNature
   turnaroundDays: 14,
   needs: [],
   deliverables: [],
+  steps: [],
+  web: true,
   active: true,
   ...o,
 });
 
+/* Working steps for each service (Krystal's process). Bundles combine them. */
+const STEPS = {
+  formation: ["Intake received", "Name availability check", "Collect owners/members and structure", "Formation documents drafted", "Client approves the documents", "Filed with the Secretary of State", "EIN application submitted", "Filed documents and EIN delivered", "Record book set up", "Annual-report deadline put on the calendar"],
+  ein: ["Intake received", "Form SS-4 prepared", "EIN application submitted", "EIN confirmation letter delivered"],
+  dba: ["Intake received", "State trade-name filing submitted", "Parish/county filing submitted (where the state requires it — Louisiana needs both)", "Certificates delivered"],
+  foreign: ["Intake received", "Certificate of good standing ordered from the home state", "Filed in the new state", "Confirmation delivered"],
+  amend: ["Intake received (what is changing)", "Amendment drafted", "Amendment filed", "Confirmation delivered"],
+  dissolve: ["Intake received (debts and final filings confirmed)", "Dissolution filed", "Confirmation delivered", "Final tax-return reminder set"],
+  annual: ["Deadline tracked", "Client reminded", "Updated information collected", "Report filed", "Confirmation delivered"],
+  license: ["Intake received (business type, locations, current licenses)", "Required licenses researched", "Deadline calendar built", "Reminders set"],
+  licenseReport: ["Intake received (business type, locations, current licenses)", "Required licenses researched", "License report delivered"],
+  oa: ["Intake received (members, ownership %, management, contributions, distributions, voting and transfer rules)", "Prepared from the template", "Client review", "Signed", "Stored in the record book"],
+  resolutions: ["Intake received (action approved, date, who approved)", "Resolution drafted", "Signed", "Stored in the record book"],
+  records: ["Existing documents collected", "Record book organized", "Record book delivered"],
+};
+const part = (label: string, steps: string[]) => steps.filter((x) => !/^Intake received/.test(x)).map((x) => `${label}: ${x}`);
+const GOOD_STANDING_STEPS = ["Plan year started — confirm entity details", ...part("Annual filing", STEPS.annual), ...part("Deadlines", STEPS.license), "Amendment (one included per plan year): file if the client needs one"];
+
+const FORMATION_NEEDS = ["Business name and two alternates", "Business activity", "Principal and mailing addresses", "Owners/members with ownership percentages", "Management structure", "Your registered agent's name and street address (MKB is not a registered agent)"];
+
 export const DEFAULT_CATALOG: CatalogService[] = [
   // Business Formation
-  svc("llc", "Business Formation", "LLC formation assistance", "administrative", 599, { description: "Name availability check, articles of organization preparation and submission, and EIN assistance.", agency: true, formation: true, turnaroundDays: 21, needs: ["Proposed name and two alternates", "Business purpose", "Principal business address", "Organizer details", "Member/ownership information", "Registered agent choice"], deliverables: ["Filed articles of organization", "State filing confirmation", "EIN confirmation letter"] }),
-  svc("corp", "Business Formation", "Corporation formation assistance", "administrative", 749, { description: "Articles of incorporation preparation and submission, initial administrative setup, and EIN assistance.", agency: true, formation: true, turnaroundDays: 21, needs: ["Proposed name and two alternates", "Business purpose", "Principal office address", "Incorporator details", "Initial directors and shareholders", "Registered agent choice"], deliverables: ["Filed articles of incorporation", "State filing confirmation", "EIN confirmation letter"] }),
-  svc("ein", "Business Formation", "EIN application assistance", "administrative", 149, { description: "Help completing and submitting an IRS EIN application for an existing entity.", agency: true, turnaroundDays: 5, needs: ["Legal business name and entity type", "Responsible party details (collected securely)", "Business address"], deliverables: ["EIN confirmation letter"] }),
-  svc("foreign", "Business Formation", "Foreign qualification assistance", "administrative", 349, { description: "Register an existing business to operate in another state (foreign qualification / certificate of authority).", agency: true, turnaroundDays: 21, needs: ["State(s) where the business will operate", "Certificate of good standing from the formation state (if that state requires one)", "Registered agent in the new state"], deliverables: ["Foreign registration approval", "State filing confirmation"] }),
-  svc("registration", "Business Formation", "Business registration assistance", "administrative", 249, { description: "Trade name, foreign qualification or local registration paperwork.", agency: true, needs: ["Business details", "Registration type and jurisdiction"], deliverables: ["Registration confirmation"] }),
-  svc("amend", "Business Formation", "Business amendments", "administrative", 299, { description: "Prepare and submit amendments (members, address, purpose).", agency: true, needs: ["What is changing", "Current formation documents"], deliverables: ["Filed amendment", "State filing confirmation"] }),
-  svc("rename", "Business Formation", "Business name change assistance", "administrative", 299, { description: "Name availability check and name-change filing.", agency: true, needs: ["New name and alternates", "Current formation documents"], deliverables: ["Filed name amendment", "State filing confirmation"] }),
-  svc("dissolve", "Business Formation", "Business dissolution assistance", "administrative", 349, { description: "Prepare and submit dissolution paperwork and a wind-down checklist.", agency: true, needs: ["Effective date", "Owner approval of dissolution"], deliverables: ["Filed dissolution", "State filing confirmation", "Wind-down checklist"] }),
+  svc("llc", "Business Formation", "LLC formation", "administrative", 495, { description: "Name availability check, articles prepared and submitted to the state, and your EIN included.", agency: true, formation: true, turnaroundDays: 21, needs: FORMATION_NEEDS, deliverables: ["Filed articles of organization", "State filing confirmation", "EIN confirmation letter"], steps: STEPS.formation }),
+  svc("corp", "Business Formation", "Corporation formation", "administrative", 495, { description: "Name availability check, articles of incorporation prepared and submitted, and your EIN included.", agency: true, formation: true, turnaroundDays: 21, needs: FORMATION_NEEDS, deliverables: ["Filed articles of incorporation", "State filing confirmation", "EIN confirmation letter"], steps: STEPS.formation }),
+  svc("ein", "Business Formation", "EIN application (standalone)", "administrative", 125, { description: "IRS EIN application for an existing business.", agency: true, turnaroundDays: 5, needs: ["Legal business name and entity type", "Business address", "Responsible party details (Social Security number collected securely in the client portal only)"], deliverables: ["EIN confirmation letter"], steps: STEPS.ein }),
+  svc("dba", "Business Formation", "Trade name / DBA", "administrative", 175, { unit: "per filing", description: "Trade name registration with the state, plus the parish or county filing where required.", agency: true, turnaroundDays: 14, needs: ["Trade name you want", "Parish(es) or county where you do business"], deliverables: ["State trade name certificate", "Parish/county filing confirmation"], steps: STEPS.dba }),
+  svc("foreign", "Business Formation", "Foreign registration", "administrative", 395, { description: "Register your existing business to operate in another state.", agency: true, turnaroundDays: 21, needs: ["State where the business will operate", "Your registered agent in that state", "Formation documents"], deliverables: ["Certificate of good standing (home state)", "Foreign registration approval", "State filing confirmation"], steps: STEPS.foreign }),
+  svc("amend", "Business Formation", "Amendment / name change", "administrative", 225, { description: "Prepare and file an amendment: name, members, address or purpose.", agency: true, needs: ["What is changing", "Current formation documents"], deliverables: ["Filed amendment", "State filing confirmation"], steps: STEPS.amend }),
+  svc("dissolve", "Business Formation", "Dissolution", "administrative", 325, { description: "Prepare and file dissolution paperwork, with a final tax-return reminder.", agency: true, needs: ["Effective date", "Owner approval of the dissolution", "Debts and final filings confirmed"], deliverables: ["Filed dissolution", "State filing confirmation"], steps: STEPS.dissolve }),
   // Business Compliance
-  svc("annual", "Business Compliance", "Annual report assistance", "administrative", 175, { description: "Prepare and submit the state annual report or registration.", agency: true, turnaroundDays: 7, needs: ["Confirm officers/members and addresses"], deliverables: ["Filed annual report", "State filing confirmation"] }),
-  svc("license", "Business Compliance", "Business license tracking", "administrative", 175, { description: "Track and renew local business licenses and permits.", agency: true, turnaroundDays: 14, needs: ["Current license or permit", "Renewal notice"], deliverables: ["Renewed license or permit"] }),
-  svc("agent", "Business Compliance", "Registered agent coordination", "administrative", 125, { description: "Coordinate a registered agent appointment or change with the provider and state.", agency: true, turnaroundDays: 10, needs: ["Current registered agent", "Preferred provider"], deliverables: ["Registered agent confirmation"] }),
-  svc("state-compliance", "Business Compliance", "State compliance tracking", "administrative", 300, { description: "Annual tracking of state deadlines with reminders.", turnaroundDays: 365, deliverables: ["Compliance calendar"] }),
-  svc("records", "Business Compliance", "Business record maintenance", "administrative", 250, { description: "Organize and maintain the business record book.", turnaroundDays: 30, needs: ["Existing business records"], deliverables: ["Organized record book"] }),
+  svc("annual", "Business Compliance", "Annual report (Louisiana)", "administrative", 175, { unit: "per year", description: "Prepare and file the Louisiana annual report every year.", agency: true, turnaroundDays: 7, recurring: true, needs: ["Confirm officers/members and addresses"], deliverables: ["Filed annual report", "State filing confirmation"], steps: STEPS.annual }),
+  svc("tx-pir", "Business Compliance", "Texas franchise tax / PIR preparation", "administrative", 225, { unit: "per year", description: "Prepare the Texas franchise tax report and Public Information Report every year.", agency: true, turnaroundDays: 10, recurring: true, needs: ["Confirm officers/members and addresses", "Annual revenue for the report year"], deliverables: ["Filed franchise tax report / PIR", "Filing confirmation"], steps: STEPS.annual }),
+  svc("license", "Business Compliance", "Licenses & deadlines tracking", "administrative", 249, { unit: "per year", description: "We research the licenses your business needs, build your deadline calendar and remind you before each one is due.", turnaroundDays: 30, recurring: true, needs: ["Business type and activities", "Locations", "Current licenses and permits"], deliverables: ["License and deadline calendar"], steps: STEPS.license }),
+  svc("license-report", "Business Compliance", "License report (one-time)", "administrative", 175, { description: "A one-time report of the licenses and permits your business needs.", turnaroundDays: 14, needs: ["Business type and activities", "Locations", "Current licenses and permits"], deliverables: ["License report"], steps: STEPS.licenseReport }),
   // Business Documentation
-  svc("oa", "Business Documentation", "Operating agreement preparation", "document_prep", 399, { description: "Administrative preparation of an operating agreement from a standard template and your instructions.", turnaroundDays: 10, needs: ["Members and ownership percentages", "Management structure", "Key terms you want included"], deliverables: ["Operating agreement (for review and signature)"] }),
-  svc("resolutions", "Business Documentation", "Corporate resolutions", "document_prep", 149, { description: "Prepare resolutions for actions your board or members approved.", turnaroundDays: 5, needs: ["Action approved and date", "Who approved it"], deliverables: ["Resolution (for signature)"] }),
-  svc("minutes", "Business Documentation", "Meeting minutes", "document_prep", 99, { description: "Prepare minutes from your meeting notes.", turnaroundDays: 5, needs: ["Meeting date, attendees and notes"], deliverables: ["Meeting minutes"] }),
-  svc("letters", "Business Documentation", "Business letters", "document_prep", 79, { description: "Business correspondence prepared on your letterhead.", turnaroundDays: 3, needs: ["Recipient and purpose"], deliverables: ["Business letter"] }),
-  svc("docprep", "Business Documentation", "Business document preparation", "document_prep", 149, { description: "Other administrative business documents.", turnaroundDays: 7, needs: ["What you need prepared"], deliverables: ["Prepared document"] }),
-  // Business Consulting
-  svc("consult-new", "Business Consulting", "New business consultation", "consulting", 199, { description: "A working session on getting a new business started.", turnaroundDays: 7, deliverables: ["Consultation summary and next steps"] }),
-  svc("consult-structure", "Business Consulting", "Business structure consultation", "consulting", 249, { description: "Compare common business structures at a general, administrative level.", turnaroundDays: 7, deliverables: ["Consultation summary"] }),
-  svc("startup", "Business Consulting", "Startup planning", "consulting", 499, { description: "Launch checklist and administrative startup plan.", turnaroundDays: 21, deliverables: ["Startup plan"] }),
-  svc("setup", "Business Consulting", "Business setup assistance", "consulting", 349, { description: "Bank account, licensing and administrative setup checklist and help.", turnaroundDays: 14, deliverables: ["Setup checklist"] }),
-  svc("admin", "Business Consulting", "General business administrative support", "consulting", 75, { description: "Hourly administrative support.", turnaroundDays: 7, deliverables: ["Summary of work"] }),
+  svc("oa", "Business Documentation", "Operating agreement — single-member", "document_prep", 295, { description: "Operating agreement prepared from a standard template and your instructions.", turnaroundDays: 10, needs: ["Management structure", "Contributions and distributions", "Transfer rules"], deliverables: ["Operating agreement (for review and signature)"], steps: STEPS.oa }),
+  svc("oa-multi", "Business Documentation", "Operating agreement — multi-member", "document_prep", 395, { description: "Operating agreement for two or more members, prepared from a standard template and your instructions.", turnaroundDays: 14, needs: ["Members and ownership percentages", "Management structure", "Contributions and distributions", "Voting and transfer rules"], deliverables: ["Operating agreement (for review and signature)"], steps: STEPS.oa }),
+  svc("resolutions", "Business Documentation", "Resolution", "document_prep", 150, { unit: "each", description: "A written resolution for an action your members or board approved.", turnaroundDays: 5, needs: ["Action approved and date", "Who approved it"], deliverables: ["Resolution (for signature)"], steps: STEPS.resolutions }),
+  svc("resolutions-pkg", "Business Documentation", "Annual resolutions package", "document_prep", 395, { unit: "per year", description: "The year's resolutions prepared, signed and stored in your record book.", turnaroundDays: 14, recurring: true, needs: ["Actions approved this year, with dates and who approved them"], deliverables: ["Resolutions (for signature)"], steps: STEPS.resolutions }),
+  svc("records", "Business Documentation", "Business record book — digital", "administrative", 195, { description: "Your formation documents, agreements and filings organized into a digital record book.", turnaroundDays: 14, needs: ["Existing business documents"], deliverables: ["Digital record book"], steps: STEPS.records }),
+  svc("records-physical", "Business Documentation", "Business record book — physical", "administrative", 295, { description: "Your record book organized and delivered as a printed binder (digital copy included).", turnaroundDays: 21, needs: ["Existing business documents"], deliverables: ["Physical record book", "Digital record book"], steps: STEPS.records }),
+  // Packages & Plans
+  svc("pkg-formation", "Packages & Plans", "Formation Package", "administrative", 695, { description: "Formation, operating agreement, organizational resolutions and a digital record book.", agency: true, formation: true, turnaroundDays: 28, includes: ["llc", "oa", "resolutions", "records"], needs: [...FORMATION_NEEDS, "Operating agreement terms"], deliverables: ["Filed formation documents", "State filing confirmation", "EIN confirmation letter", "Operating agreement (for review and signature)", "Resolutions (for signature)", "Digital record book"],
+    steps: [...STEPS.formation.slice(0, -2), ...part("Operating agreement", STEPS.oa), ...part("Resolutions", STEPS.resolutions), ...part("Record book", STEPS.records), "Annual-report deadline put on the calendar"] }),
+  svc("pkg-complete", "Packages & Plans", "Formation Complete", "administrative", 895, { description: "The Formation Package plus a physical record book, one trade name (DBA), a license report and year 1 of the Annual Good Standing Plan.", agency: true, formation: true, turnaroundDays: 35, includes: ["llc", "oa", "resolutions", "records-physical", "dba", "license-report", "good-standing"], needs: [...FORMATION_NEEDS, "Operating agreement terms", "Trade name you want", "Current licenses and permits"], deliverables: ["Filed formation documents", "State filing confirmation", "EIN confirmation letter", "Operating agreement (for review and signature)", "Resolutions (for signature)", "Physical record book", "Trade name certificates", "License report"],
+    steps: [...STEPS.formation.slice(0, -2), ...part("Operating agreement", STEPS.oa), ...part("Resolutions", STEPS.resolutions), ...part("Trade name", STEPS.dba), ...part("License report", STEPS.licenseReport), ...part("Record book", STEPS.records), "Annual-report deadline put on the calendar", "Good Standing Plan year 1 started (annual filing, deadline tracking, one amendment)"] }),
+  svc("good-standing", "Packages & Plans", "Annual Good Standing Plan", "administrative", 349, { unit: "per year", description: "Your annual filing, deadline and license tracking, and one amendment a year.", agency: true, turnaroundDays: 365, recurring: true, includes: ["annual", "license", "amend"], needs: ["Confirm officers/members and addresses", "Current licenses and permits"], deliverables: ["Filed annual report", "State filing confirmation", "License and deadline calendar"], steps: GOOD_STANDING_STEPS }),
+  svc("good-standing-premium", "Packages & Plans", "Annual Good Standing Plan — Premium", "administrative", 449, { unit: "per year", description: "Everything in the Good Standing Plan plus the annual resolutions package.", agency: true, turnaroundDays: 365, recurring: true, includes: ["annual", "license", "amend", "resolutions-pkg"], needs: ["Confirm officers/members and addresses", "Current licenses and permits", "Actions approved this year"], deliverables: ["Filed annual report", "State filing confirmation", "License and deadline calendar", "Resolutions (for signature)"], steps: [...GOOD_STANDING_STEPS, ...part("Resolutions package", STEPS.resolutions)] }),
+  // Not on Krystal's approved price list: kept (inactive) so older requests still show their service.
+  svc("rename", "Business Formation", "Business name change", "administrative", 225, { agency: true, active: false, web: false, steps: STEPS.amend, deliverables: ["Filed name amendment", "State filing confirmation"] }),
+  svc("registration", "Business Formation", "Business registration assistance", "administrative", 249, { agency: true, active: false, web: false }),
+  svc("state-compliance", "Business Compliance", "State compliance tracking", "administrative", 300, { active: false, web: false }),
+  svc("minutes", "Business Documentation", "Meeting minutes", "document_prep", 99, { active: false, web: false }),
+  svc("letters", "Business Documentation", "Business letters", "document_prep", 79, { active: false, web: false }),
+  svc("docprep", "Business Documentation", "Business document preparation", "document_prep", 149, { active: false, web: false }),
+  svc("consult-new", "Business Consulting", "New business consultation", "consulting", 199, { active: false, web: false }),
+  svc("consult-structure", "Business Consulting", "Business structure consultation", "consulting", 249, { active: false, web: false }),
+  svc("startup", "Business Consulting", "Startup planning", "consulting", 499, { active: false, web: false }),
+  svc("setup", "Business Consulting", "Business setup assistance", "consulting", 349, { active: false, web: false }),
+  svc("admin", "Business Consulting", "General business administrative support", "consulting", 75, { active: false, web: false }),
 ];
+
+/**
+ * Brings a saved catalog up to date with the built-in one: built-in services take
+ * the new prices, steps and wording; services the owner added stay; retired
+ * built-ins (registered agent coordination) are removed.
+ */
+export function upgradeCatalog(saved: CatalogService[]): CatalogService[] {
+  if (saved.some((x) => x.id === "good-standing")) return saved.map((x) => ({ ...x, steps: x.steps ?? [] }));
+  const builtIn = new Set(DEFAULT_CATALOG.map((x) => x.id));
+  const custom = saved.filter((x) => !builtIn.has(x.id) && x.id !== "agent").map((x) => ({ ...x, steps: x.steps ?? [] }));
+  return [...structuredClone(DEFAULT_CATALOG), ...custom];
+}
+/** "$175 per filing", "$349/yr". */
+export const svcPrice = (x: Pick<CatalogService, "price" | "unit">) => `$${x.price.toLocaleString("en-US")}${x.unit === "per year" ? "/yr" : x.unit ? ` ${x.unit}` : ""}`;
 
 /* ------------------------------------------------------------------ */
 /* Request workflow                                                    */
@@ -221,8 +284,11 @@ export const DELIVERABLE_META: Record<Deliverable["status"], { label: string; to
 
 export type Person = { name: string; title?: string; email?: string; phone?: string };
 export type Owner_ = { id: string; name: string; role: string; pct: number };
+/** The client's own registered agent. MKB is not a registered agent and doesn't arrange one; "mkb_coordinated" only exists on older records. */
 export type RegisteredAgent = { type: "mkb_coordinated" | "third_party" | "self"; name: string; address: string };
-export const AGENT_TYPE: Record<RegisteredAgent["type"], string> = { mkb_coordinated: "Provider coordinated by MKB", third_party: "Third-party provider (client's choice)", self: "Owner / member acts as agent" };
+export const AGENT_TYPE: Record<RegisteredAgent["type"], string> = { mkb_coordinated: "Provider chosen by the client (older record)", third_party: "Registered agent company (client's choice)", self: "Owner / member acts as agent" };
+/** Choices staff can pick (the client designates and handles their own agent). */
+export const AGENT_CHOICES: [RegisteredAgent["type"], string][] = [["self", AGENT_TYPE.self], ["third_party", AGENT_TYPE.third_party]];
 
 export type EinStatus = "not_needed" | "not_started" | "info_collected" | "submitted" | "received";
 export const EIN_STATUS: Record<EinStatus, string> = { not_needed: "Not needed", not_started: "Not started", info_collected: "Information collected", submitted: "Application submitted", received: "EIN confirmation received" };
@@ -334,7 +400,7 @@ export const COMPLIANCE_KIND: Record<ComplianceKind, string> = {
   franchise_tax: "Franchise tax",
   periodic_report: "Periodic report",
   business_license: "Business license / permit",
-  registered_agent: "Registered agent renewal",
+  registered_agent: "Registered agent renewal (client's own agent)",
   foreign_qualification: "Foreign qualification renewal",
   other: "Other requirement",
 };
@@ -416,6 +482,10 @@ export type ComplianceItem = {
   notes?: string;
   requestId?: string;
   filedAt?: string;
+  /** The service a request for this deadline uses (recurring plans); otherwise picked from the kind. */
+  serviceId?: string;
+  /** Its task on the calendar (live CRM). */
+  calTaskId?: string;
 };
 
 /* ------------------------------------------------------------------ */

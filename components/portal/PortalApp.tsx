@@ -26,7 +26,7 @@ const money = (n: number) => n.toLocaleString("en-US", { style: "currency", curr
 type Me = { client: { name: string; firstName: string; type: string; email: string }; unread: number };
 type Todo = { id: string; kind: "tax_interview" | "books_intake" | "proposal" | "upload" | "books_task" | "pay"; title: string; detail?: string; service: string; ref: string; extra?: { taskId?: string; type?: string; period?: string } };
 type Home = Me & { services: { service: string; name: string; title: string; status: string; detail?: string }[]; todos: Todo[] };
-type Doc = { id: string; name: string; fileName?: string; secureForm?: boolean; service: string; serviceName: string; category?: string; taxYear?: number; requestedAt?: string; uploadedAt?: string; uploadedBy?: string; status: string; hasFile: boolean };
+type Doc = { id: string; name: string; fileName?: string; secureForm?: boolean; ssnForm?: boolean; service: string; serviceName: string; category?: string; taxYear?: number; requestedAt?: string; uploadedAt?: string; uploadedBy?: string; status: string; hasFile: boolean };
 type Invoice = { id: string; number: string; description: string; service: string; issuedAt: string; dueAt: string; amount: number; paid: number; owed: number; status: string; bankProduct: boolean };
 type Msg = { id: string; from: "staff" | "client"; author: string; body: string; at: string; service?: string };
 
@@ -188,7 +188,7 @@ function TodoRow({ t, onDone }: { t: Todo; onDone: () => void }) {
           {(t.kind === "tax_interview" || t.kind === "books_intake") && <Button size="sm" variant="primary" disabled={busy} onClick={start}>{busy ? "Opening…" : "Start"}</Button>}
           {t.kind === "proposal" && <Button size="sm" variant="primary" icon={PenLine} disabled={busy} onClick={start}>{busy ? "Opening…" : "Review & sign"}</Button>}
           {t.kind === "pay" && <Button size="sm" variant="primary" icon={CreditCard} disabled={busy} onClick={pay}>{busy ? "Opening…" : "Pay now"}</Button>}
-          {t.kind === "upload" && <UploadButton doc={t.ref} label="Upload" onDone={onDone} />}
+          {t.kind === "upload" && (t.title.startsWith("Enter securely") ? <SecureSsn doc={t.ref} onDone={onDone} /> : <UploadButton doc={t.ref} label="Upload" onDone={onDone} />)}
           {t.kind === "books_task" && !open && <Button size="sm" variant="primary" onClick={() => (t.extra?.type === "submit" && !confirm ? complete() : setOpen(true))} disabled={busy}>{t.extra?.type === "submit" ? "My items are in" : confirm ? "Answer" : "Mark done"}</Button>}
         </span>
       </div>
@@ -205,6 +205,32 @@ function TodoRow({ t, onDone }: { t: Todo; onDone: () => void }) {
 
 /* ---------------------------------------------------------------- uploads */
 const ACCEPT = ".pdf,.jpg,.jpeg,.png,.heic,.heif,.gif,.webp,.doc,.docx,.xls,.xlsx,.csv,.txt";
+/** Enter a Social Security number MKB asked for. It's encrypted as soon as it's saved; the field is masked and never autofilled. */
+function SecureSsn({ doc, onDone }: { doc: string; onDone: () => void }) {
+  const toast = useToast();
+  const [open, setOpen] = useState(false);
+  const [v, setV] = useState("");
+  const [busy, setBusy] = useState(false);
+  const digits = v.replace(/\D/g, "").slice(0, 9);
+  const save = async () => {
+    setBusy(true);
+    try { const r = await api<{ last4: string }>("/api/portal/secure", "POST", { doc, value: digits }); setV(""); setOpen(false); toast(`Saved securely — ending ${r.last4}`); onDone(); }
+    catch (e) { toast(e instanceof Error ? e.message : "Couldn't save", "info"); }
+    setBusy(false);
+  };
+  if (!open) return <Button size="sm" variant="primary" icon={Lock} onClick={() => setOpen(true)}>Enter securely</Button>;
+  return (
+    <span className="flex flex-wrap items-center gap-2">
+      <label htmlFor={`ssn-${doc}`} className="sr-only">Social Security number</label>
+      <input id={`ssn-${doc}`} value={digits.replace(/^(\d{3})(\d{1,2})?(\d{1,4})?$/, (_m, a: string, b?: string, c?: string) => [a, b, c].filter(Boolean).join("-"))} onChange={(e) => setV(e.target.value)} inputMode="numeric" autoComplete="off" spellCheck={false} placeholder="123-45-6789" style={{ WebkitTextSecurity: "disc" } as React.CSSProperties}
+        className="h-10 w-[150px] rounded-xl border border-line bg-surface px-3 text-[14px] text-ink focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15" />
+      <Button size="sm" variant="primary" disabled={busy || digits.length !== 9} onClick={() => void save()}>{busy ? "Saving…" : "Save"}</Button>
+      <Button size="sm" variant="ghost" onClick={() => { setV(""); setOpen(false); }}>Cancel</Button>
+      <span className="basis-full text-[11.5px] text-muted"><Lock size={10} className="mr-1 inline" />Encrypted as soon as you save. MKB sees only the last 4 digits unless an authorized team member needs the full number to file.</span>
+    </span>
+  );
+}
+
 function UploadButton({ doc, service, note, label = "Upload", onDone, variant = "primary" }: { doc?: string; service?: string; note?: string; label?: string; onDone: () => void; variant?: "primary" | "secondary" }) {
   const ref = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -257,7 +283,7 @@ function DocumentsTab() {
           <Row key={d.id}>
             <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-warning-soft text-warning-ink"><Upload size={17} /></span>
             <span className="min-w-0 flex-1"><span className="block text-[14.5px] font-semibold text-ink">{d.name}</span><span className="block text-[12.5px] text-muted">{d.taxYear ? `${d.taxYear} · ` : ""}{d.serviceName}{d.requestedAt ? ` · requested ${date(d.requestedAt)}` : ""}</span></span>
-            <span className="ml-12 sm:ml-0">{d.secureForm ? <span className="text-[12.5px] text-muted">No upload needed — collected through your secure tax interview or form</span> : <UploadButton doc={d.id} onDone={load} />}</span>
+            <span className="ml-12 sm:ml-0">{d.ssnForm ? <SecureSsn doc={d.id} onDone={load} /> : d.secureForm ? <span className="text-[12.5px] text-muted">No upload needed — collected through your secure tax interview or form</span> : <UploadButton doc={d.id} onDone={load} />}</span>
           </Row>
         )) : <Empty icon={CheckCircle2}>Nothing requested right now.</Empty>}
       </Section>
