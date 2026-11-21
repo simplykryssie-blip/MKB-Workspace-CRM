@@ -53,7 +53,7 @@ export function renderWidgets(html: string, prefix = "") {
 }
 
 /** Lets the frames grow to fit their content. Added once to every page that has one. */
-export const WIDGET_SCRIPT = `<script>(function(){window.addEventListener("message",function(e){if(e.origin!==location.origin||!e.data||typeof e.data.mkbWidgetHeight!=="number")return;var f=document.querySelectorAll("iframe[data-mkb-frame]");for(var i=0;i<f.length;i++){if(f[i].contentWindow===e.source){f[i].style.height=Math.ceil(e.data.mkbWidgetHeight)+"px";f[i].style.minHeight="0";}}});})();</script>`;
+export const WIDGET_SCRIPT = `<script>(function(){window.addEventListener("message",function(e){if(e.origin!==location.origin||!e.data||typeof e.data.mkbWidgetHeight!=="number")return;var f=document.querySelectorAll("iframe[data-mkb-frame]");for(var i=0;i<f.length;i++){if(f[i].contentWindow===e.source){var h=Math.ceil(e.data.mkbWidgetHeight);if(h<160)return;f[i].style.height=h+"px";f[i].style.minHeight="0";}}});function ping(){var f=document.querySelectorAll("iframe[data-mkb-frame]");for(var i=0;i<f.length;i++){try{f[i].contentWindow.postMessage({mkbWidgetPing:1},location.origin)}catch(x){}}}document.addEventListener("click",function(){setTimeout(ping,60);setTimeout(ping,500)});window.addEventListener("pageshow",ping);window.addEventListener("orientationchange",function(){setTimeout(ping,300)});})();</script>`;
 
 /**
  * Inside the app (where the site lives under /site or /msite) the page's own
