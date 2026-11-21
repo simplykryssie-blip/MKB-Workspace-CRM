@@ -402,12 +402,14 @@ export function TaxPrizeFunnel({ form, tracking, home, privacyHref, claimed }: P
 
       <header className="mx-auto max-w-5xl px-4 pb-10 pt-5 sm:px-6">
         <div className="flex items-center justify-between">
-          <a href={home} className="flex items-center gap-2.5">
+          <a href={home} className="flex items-center" aria-label="MKB Financial Group home">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/brand/mkb-monogram.webp" alt="" width={32} height={32} className="h-8 w-8 rounded-md" />
-            <span className="text-[12.5px] font-bold uppercase tracking-[0.16em] text-white/85">MKB Financial Group</span>
+            <img src="/site/media/mkb-logo-header.webp" alt="MKB Financial Group" width={1342} height={649} className="h-12 w-auto sm:h-14" />
           </a>
-          {d && !ended && <span className="rounded-full border border-white/15 px-3 py-1 font-mono text-[12px] text-white/80">{d.d}d {String(d.h).padStart(2, "0")}h {String(d.m).padStart(2, "0")}m {String(d.s).padStart(2, "0")}s left</span>}
+          <div className="flex items-center gap-2">
+            {d && !ended && <span className="hidden rounded-full border border-white/15 px-3 py-1 font-mono text-[12px] text-white/80 sm:inline">{d.d}d {String(d.h).padStart(2, "0")}h {String(d.m).padStart(2, "0")}m {String(d.s).padStart(2, "0")}s left</span>}
+            <SiteMenu home={home} />
+          </div>
         </div>
 
         <div className="mt-8 grid items-center gap-8 lg:grid-cols-[1fr_1.15fr]">
@@ -498,5 +500,33 @@ export function TaxPrizeFunnel({ form, tracking, home, privacyHref, claimed }: P
       {nudge && <BonusNudge onAdd={() => { setSmsOpt(true); void send(nudge, true); }} onSkip={() => void send(nudge, false)} />}
       {rules && <Rules onClose={() => setRules(false)} />}
     </div>
+  );
+}
+
+/** The website's menu, so visitors on this page can reach the rest of the site. */
+function SiteMenu({ home }: { home: string }) {
+  const L = (path: string) => (home === "/" ? path : `/site${path === "/" ? "" : path}`);
+  const groups: [string, [string, string][]][] = [
+    ["", [["Home", "/"], ["About MKB", "/about"]]],
+    ["Financial Management", [["Overview", "/financial-management"], ["Bookkeeping", "/financial-management#bookkeeping"], ["Payroll", "/financial-management#payroll"], ["Combined Services", "/financial-management#combined"], ["Pricing", "/financial-management#pricing"]]],
+    ["", [["Business Solutions", "/business-services"]]],
+    ["Tax Services", [["Tax Services", "/tax-preparation"], ["Individual Tax Preparation", "/tax-preparation#individual"], ["Business Tax Preparation", "/tax-preparation#business"], ["Free Tax Calculator", "/tax-calculator"]]],
+    ["", [["Expungement Relief", "/record-expungement"], ["Book a Consultation", "/book-consultation"], ["Contact", "/contact"]]],
+  ];
+  return (
+    <details className="relative">
+      <summary aria-label="Open menu" className="grid h-11 w-11 cursor-pointer list-none place-items-center rounded-xl border border-white/15 text-[#e0b85a] [&::-webkit-details-marker]:hidden">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+      </summary>
+      <nav aria-label="Site menu" className="absolute right-0 top-12 z-50 max-h-[75vh] w-[min(86vw,320px)] overflow-y-auto rounded-2xl border border-white/10 bg-[#0b0b0b] p-2 shadow-2xl">
+        {groups.map(([title, links], i) => (
+          <div key={i} className="border-b border-white/10 py-1 last:border-0">
+            {title && <p className="px-3 pb-1 pt-2 text-[11px] font-bold uppercase tracking-[0.2em] text-white/45">{title}</p>}
+            {links.map(([label, href]) => <a key={href} href={L(href)} className={`block rounded-lg px-3 py-2.5 text-[15px] text-white/90 hover:bg-white/5 ${title ? "pl-5" : ""}`}>{label}</a>)}
+          </div>
+        ))}
+        <a href="https://portal.mkbfinancialgroup.com" className="mt-1 block rounded-lg bg-[#e0b85a] px-3 py-2.5 text-center text-[14px] font-bold text-black">Client Portal Sign In</a>
+      </nav>
+    </details>
   );
 }
