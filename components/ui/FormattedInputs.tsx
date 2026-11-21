@@ -88,10 +88,17 @@ function MaskedInput({
       <div className="relative">
         <input
           id={id}
-          type={type}
+          // Hidden numbers are a text box shown as dots, never type="password": browsers and phones
+          // autofill saved passwords into password boxes, which broke saving SSNs.
+          type={type === "password" ? "text" : type}
+          style={type === "password" ? ({ WebkitTextSecurity: "disc" } as React.CSSProperties) : undefined}
+          name={sensitive ? `${id}-nofill` : undefined}
+          data-1p-ignore={sensitive ? "true" : undefined}
+          data-lpignore={sensitive ? "true" : undefined}
+          data-form-type={sensitive ? "other" : undefined}
           value={value}
           inputMode={inputMode}
-          autoComplete={autoComplete}
+          autoComplete={sensitive ? "off" : autoComplete}
           spellCheck={false}
           placeholder={placeholder}
           aria-invalid={!!e}
