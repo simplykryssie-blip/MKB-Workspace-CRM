@@ -52,7 +52,7 @@ export const staffById = (id: string): Staff => LIVE_STAFF.find((s) => s.id === 
 /** Workflow stages per division (also used by the service workspaces). */
 export const STAGES: Record<ServiceKey, string[]> = {
   // Tax engagements follow the return workflow ("Rejected" is a status, not a stage).
-  tax: ["Intake", "Awaiting Documents", "Ready for Review", "In Preparation", "Awaiting Client Approval", "Ready to E-file", "Submitted", "Accepted", "Completed"],
+  tax: ["Intake", "Awaiting Documents", "Ready for Review", "In Preparation", "Awaiting Client Approval", "Awaiting Final Approval", "Ready to E-file", "Submitted", "Accepted", "Completed"],
   // Bookkeeping engagements mirror the current month's close stage (see lib/books/config.ts).
   books: ["Waiting on Client Items", "Ready for MKB Review", "MKB Reviewing", "Reconciliation in Progress", "Client Follow-up Needed", "MKB Final Review", "Reports Ready", "Month Closed"],
   // Business services engagements mirror their service request status (see lib/biz/config.ts).

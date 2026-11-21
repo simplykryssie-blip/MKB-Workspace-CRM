@@ -81,10 +81,13 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
   const msg = (m: ExpMatter, body: string, from: "staff" | "client" = "staff") => clients().sendMessage(m.clientId, body, "expunge", { expMatterId: m.id, from, author: from === "staff" ? staffById(m.assignments["Client follow-up"]).name : undefined });
   const logClient = (clientId: string, text: string, actor: "staff" | "client" = "staff") => clients().logActivity(clientId, "status", text, actor);
   /** Live CRM: a records request puts a follow-up task on the calendar 21 days out; it's ticked off when the record comes in. */
-  const followUpTask = async (caseId: string, recId: string) => {
+  const followUpTask = async (caseId: string, recId: string, req: { requestedAt?: string; custodianName?: string; method?: string }) => {
     const c = C(caseId);
-    const rec = c.records.find((x) => x.id === recId);
-    if (!rec?.requestedAt) return;
+    const found = c.records.find((x) => x.id === recId);
+    if (!found) return;
+    // The request may not be in the store yet — use what was just entered.
+    const rec = { ...found, ...req };
+    if (!rec.requestedAt) return;
     const due = new Date(new Date(`${rec.requestedAt.slice(0, 10)}T12:00`).getTime() + 21 * 86400000).toISOString().slice(0, 10);
     try {
       if (rec.followUpTaskId) await call("DELETE", `/api/calendar/tasks/${encodeURIComponent(rec.followUpTaskId)}`).catch(() => {});
@@ -274,7 +277,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     },
     requestRecord(caseId: string, recId: string, r: Pick<RecordItem, "custodianId" | "custodianName" | "method" | "fee" | "requestedAt">) {
       upC(caseId, (c) => ({ ...c, records: c.records.map((x) => (x.id === recId ? { ...x, ...r, status: "requested", feePaid: r.fee ? false : undefined } : x)) }));
-      if (BACKEND) void followUpTask(caseId, recId);
+      if (BACKEND) void followUpTask(caseId, recId, { requestedAt: r.requestedAt, custodianName: r.custodianName, method: r.method });
     },
     receiveRecord(caseId: string, recId: string, f: FileIn, by: "client" | "staff" = "staff") {
       const c = C(caseId);

@@ -209,6 +209,20 @@ export async function acceptLead(env: AppEnv, a: Actor, leadId: string) {
     stmts.push(env.DB.prepare("INSERT INTO client_enrollments (id, client_id, service, title, stage, progress, status, staff_id, started_at, due_at, fee) VALUES (?, ?, 'tax', ?, ?, ?, ?, ?, ?, ?, ?)").bind(eid, p.id, `${r.taxYear} ${r.kind === "business" ? "Business" : "Individual"} return (${r.form})`, stage, Math.round((STAGES.tax.indexOf(stage) / (STAGES.tax.length - 1)) * 100), waiting ? "waiting_on_client" : "active", r.preparerId, t, r.dueAt ?? null, r.pricing.lines.reduce((x, li) => x + li.qty * li.unit, 0) - (r.pricing.discount ?? 0)));
     stmts.push(env.DB.prepare("UPDATE tax_returns SET enrollment_id = ?, rev = rev + 1 WHERE id = ?").bind(eid, r.id));
   }
+  // Payroll, Business Solutions and Expungement Relief intakes add their service too, so the work shows
+  // on the profile and dashboards right away (opening the request / matter later reuses it).
+  const SVC_OF = { payroll: "books", biz: "biz", relief: "expunge" } as const;
+  const STAGE_OF = { books: "Waiting on Client Items", biz: "Intake", expunge: "Intake" } as const;
+  const TITLE_OF = { payroll: "Payroll", biz: "Business Solutions", relief: "Expungement Relief" } as const;
+  const have = new Set((await all<{ service: string }>(env.DB, "SELECT service FROM client_enrollments WHERE client_id = ?", p.id)).map((x) => x.service));
+  if (intakes.length) have.add("books");
+  for (const si of await all<{ kind: keyof typeof SVC_OF; status: string }>(env.DB, "SELECT kind, status FROM service_intakes WHERE client_id = ? ORDER BY created_at", p.id)) {
+    const svc = SVC_OF[si.kind];
+    if (!svc || have.has(svc)) continue;
+    have.add(svc);
+    stmts.push(env.DB.prepare("INSERT INTO client_enrollments (id, client_id, service, title, stage, progress, status, staff_id, started_at, due_at, fee) VALUES (?, ?, ?, ?, ?, 5, ?, ?, ?, NULL, 0)").bind(`e-${randomToken(6).replace(/[^A-Za-z0-9]/g, "x")}`, p.id, svc, TITLE_OF[si.kind], STAGE_OF[svc], si.status === "submitted" ? "in_review" : "waiting_on_client", a.member.id, t));
+    stmts.push(env.DB.prepare("INSERT OR IGNORE INTO client_services (client_id, service) VALUES (?, ?)").bind(p.id, svc));
+  }
   // The lead's notes carry over, as with a normal conversion.
   stmts.push(env.DB.prepare("INSERT INTO client_notes (id, client_id, author_id, body, service, pinned, at) SELECT 'n_' || id, ?, author_id, body, NULL, pinned, at FROM lead_notes WHERE lead_id = ? AND deleted_at IS NULL").bind(p.id, leadId));
   stmts.push(env.DB.prepare("INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'status', 'Accepted as a client (from lead, after intake)', 'staff', ?, ?)").bind(randomId("x"), p.id, a.member.id, t));

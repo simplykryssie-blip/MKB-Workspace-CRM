@@ -46,6 +46,7 @@ import {
   type StateRegistration,
 } from "@/lib/biz/config";
 import { fileSize, fmtDate, usd } from "@/lib/format";
+import { BACKEND } from "@/lib/sync/remote";
 import { validateEmail, validatePhone } from "@/lib/validation";
 import { FeeBreakdown, NotLegalAdvice } from "./BizBits";
 
@@ -56,7 +57,7 @@ const toIso = (date: string, h = 17) => new Date(`${date}T${String(h).padStart(2
 const staffOptsNow = () => staffList().map((s) => [s.id, s.name] as [string, string]);
 const toFiles = (fs: File[]) => fs.map((f) => ({ name: f.name.replace(/\.[^.]+$/, ""), sizeKb: Math.max(1, Math.round(f.size / 1024)), file: f }));
 
-/** File picker that keeps files in the browser only. */
+/** File picker: the chosen files go to the client's record when saved (live CRM). */
 export function FilePicker({ files, setFiles, label = "Attach files", multiple = true, required = false }: { files: File[]; setFiles: (f: File[]) => void; label?: string; multiple?: boolean; required?: boolean }) {
   return (
     <div>
@@ -64,7 +65,7 @@ export function FilePicker({ files, setFiles, label = "Attach files", multiple =
         <input type="file" multiple={multiple} className="sr-only" aria-label={label} onChange={(e) => { const add = Array.from(e.target.files ?? []); setFiles(multiple ? [...files, ...add] : add.slice(0, 1)); e.target.value = ""; }} />
         <UploadCloud size={22} className="text-muted" />
         <span className="mt-1 text-[13.5px] font-medium text-ink">{label}{required && <span className="text-danger"> *</span>}</span>
-        <span className="text-[12px] text-muted">Preview mode — files stay in your browser and are not stored or sent anywhere.</span>
+        <span className="text-[12px] text-muted">{BACKEND ? "Files are stored privately on the client's record." : "Preview mode — files stay in your browser and are not stored or sent anywhere."}</span>
       </label>
       {files.length > 0 && (
         <ul className="mt-2 space-y-1">

@@ -175,10 +175,11 @@ const REVIEW_AT = STATUS_PATH.indexOf("Ready for Review");
  * staff member who recorded it. A return can't move into review without one.
  */
 async function checkEngagement(env: AppEnv, a: Actor, cur: TaxReturn, next: ReturnSnapshot): Promise<ReturnSnapshot> {
-  const e = next.organizer?.engagement;
   const was = cur.organizer?.engagement;
+  // Recorded once: the stored acceptance always wins (the browser's copy may lack the server's stamps), and it can't be removed.
+  if (was) next = { ...next, organizer: { ...next.organizer, engagement: was } };
+  const e = next.organizer?.engagement;
   if (e && JSON.stringify(e) !== JSON.stringify(was)) {
-    if (was) throw badRequest("An accepted engagement letter can't be changed. Record a new acceptance on a new return if the terms changed.");
     const name = typeof e.acceptedName === "string" ? e.acceptedName.trim() : "";
     if (e.letterKey !== taxLetterFor(cur.kind)) throw badRequest("Wrong engagement letter for this return.");
     if (!["online", "in_office", "paper"].includes(e.method)) throw badRequest("Unknown acceptance method.");
@@ -486,4 +487,11 @@ export async function applyInterviewToProfile(env: AppEnv, r: TaxReturn, o: { ac
     }
   }
   return { updated, skipped, changed: changes };
+}
+
+/** Tax interviews sent to leads (not clients yet) that the lead hasn't submitted — for the dashboard. */
+export async function leadInterviewsOut(env: AppEnv, a: Actor) {
+  requirePermission(a, "tax", "view");
+  const r = await one<{ n: number }>(env.DB, "SELECT count(*) n FROM tax_returns r JOIN clients c ON c.id = r.client_id WHERE c.status = 'prospect' AND json_extract(r.organizer, '$.status') IN ('sent', 'in_progress')");
+  return { count: r?.n ?? 0 };
 }

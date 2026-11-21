@@ -96,8 +96,8 @@ async function checkEngagement(env: AppEnv, a: Staff, cur: ServiceRequest | null
   const e = next.engagement;
   const was = cur?.engagement;
   if (was) {
-    if (JSON.stringify(e ?? null) !== JSON.stringify(was)) throw badRequest("An accepted engagement letter can't be changed or removed.");
-    return next;
+    // Recorded once: the stored acceptance always wins (the browser's copy may lack the server's stamps).
+    return { ...next, engagement: was };
   }
   if (!e) return next;
   const name = str(e.acceptedName, 120);
@@ -123,9 +123,11 @@ async function checkRequest(env: AppEnv, a: Staff, cur: ServiceRequest, next: Se
     changed.push("linked to client");
   }
   if (next.assignedTo !== cur.assignedTo || next.reviewerId !== cur.reviewerId) { need("assign", "change who is assigned"); await checkStaff(env, next.assignedTo, next.reviewerId); changed.push("assignment"); }
-  if (next.history.length < cur.history.length || cur.history.some((h, i) => JSON.stringify(h) !== JSON.stringify(next.history[i]))) throw badRequest("Request history can't be changed.");
-  if (cur.agency.some((x) => !next.agency.some((y) => y.id === x.id && JSON.stringify(x) === JSON.stringify(y)))) throw badRequest("Agency entries can't be changed or removed.");
-  if (cur.notes.some((x) => !next.notes.some((y) => y.id === x.id))) throw badRequest("Notes can't be removed.");
+  // History, agency entries and notes are append-only: the stored entries are kept exactly as saved (with the
+  // server's time and staff stamps) and only new ones are added. Nothing can be edited or removed.
+  next.history = [...cur.history, ...(next.history ?? []).slice(cur.history.length)];
+  next.agency = [...cur.agency, ...(next.agency ?? []).filter((x) => !cur.agency.some((y) => y.id === x.id))];
+  next.notes = [...(next.notes ?? []).filter((x) => !cur.notes.some((y) => y.id === x.id)), ...cur.notes];
   for (const ev of next.agency.filter((x) => !cur.agency.some((y) => y.id === x.id))) {
     if (ev.kind === "approved") {
       need("approve", "record an agency approval");

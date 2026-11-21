@@ -31,6 +31,8 @@ export function LiveDashboard() {
   const canBilling = team.can("billing", "view");
   const [invoices, setInvoices] = useState<Invoice[] | null>(null);
   const [sigs, setSigs] = useState<{ service: ServiceKey }[]>([]);
+  const [leadInterviews, setLeadInterviews] = useState(0);
+  useEffect(() => { if (team.can("tax")) call<{ count: number }>("GET", "/api/tax/lead-interviews").then((r) => setLeadInterviews(r.count)).catch(() => {}); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { call<{ requests: { service: ServiceKey }[] }>("GET", "/api/signatures/pending").then((r) => setSigs(r.requests)).catch(() => setSigs([])); }, []);
   useEffect(() => { if (canBilling) call<{ invoices: Invoice[] }>("GET", "/api/billing/invoices").then((r) => setInvoices(r.invoices)).catch(() => setInvoices(null)); }, [canBilling]);
 
@@ -107,7 +109,7 @@ export function LiveDashboard() {
               <span className="flex items-center gap-2 text-[14px] font-semibold text-ink"><span className="h-2.5 w-2.5 rounded-full" style={{ background: `var(--svc-${x.k})` }} />{SVC_NAME[x.k]}</span>
               <span className="mt-2 block text-[24px] font-bold leading-none tracking-tight text-ink">{x.active}</span>
               <span className="block text-[12.5px] text-muted">{x.k === "tax" ? "returns in progress" : `in progress · ${x.clients} client${x.clients === 1 ? "" : "s"}`}</span>
-              <span className="mt-2 block text-[12px] text-muted">{x.k === "tax" ? `${stats.interviewsOut} interview${stats.interviewsOut === 1 ? "" : "s"} sent, not completed yet` : `${x.waiting} waiting on client · ${x.review} in review`}</span>
+              <span className="mt-2 block text-[12px] text-muted">{x.k === "tax" ? `${stats.interviewsOut + leadInterviews} interview${stats.interviewsOut + leadInterviews === 1 ? "" : "s"} sent, not completed yet${leadInterviews ? ` (${leadInterviews} to lead${leadInterviews === 1 ? "" : "s"})` : ""}` : `${x.waiting} waiting on client · ${x.review} in review`}</span>
               {sigs.some((g) => g.service === x.k) && <span className="block text-[12px] font-medium text-warning-ink">{sigs.filter((g) => g.service === x.k).length} waiting for signature</span>}
               {canBilling && invoices && <span className="block text-[12px] text-muted">{usd(x.owed)} owed · {usd(x.collected)} collected this month</span>}
             </Link>

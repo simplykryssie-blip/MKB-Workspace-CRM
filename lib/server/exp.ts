@@ -93,7 +93,8 @@ function assignStmts(env: AppEnv, kind: ExpKind, r: Rec) {
 async function checkEngagement(env: AppEnv, a: Staff, cur: ExpMatter | null, next: ExpMatter): Promise<ExpMatter> {
   const e = next.engagement;
   const was = cur?.engagement;
-  if (was) { if (JSON.stringify(e ?? null) !== JSON.stringify(was)) throw badRequest("An accepted engagement letter can't be changed or removed."); return next; }
+  // Recorded once: the stored acceptance always wins (the browser's copy may lack the server's stamps).
+  if (was) return { ...next, engagement: was };
   if (!e) return next;
   const name = str(e.acceptedName, 120);
   if (name.length < 2) throw badRequest("Enter the client's full name to accept the engagement letter.");
@@ -120,10 +121,13 @@ async function checkCase(env: AppEnv, cur: ExpCase | null, next: ExpCase, need: 
   if (!(CASE_STATUSES as readonly string[]).includes(next.status)) throw badRequest("Unknown status.");
   if (cur) {
     if (next.matterId !== cur.matterId || next.clientId !== cur.clientId) throw badRequest("A case's matter and client can't change.");
-    if (next.history.length < cur.history.length || cur.history.some((h, i) => JSON.stringify(h) !== JSON.stringify(next.history[i]))) throw badRequest("Case history can't be changed.");
+    // History, screening reviews and notes are append-only: the stored entries are kept exactly as saved
+    // (with the server's time and staff stamps) and only new ones are added. Nothing can be edited or removed.
+    next.history = [...cur.history, ...(next.history ?? []).slice(cur.history.length)];
     const reviews = cur.screening?.reviews ?? [];
-    if (reviews.some((r) => !(next.screening?.reviews ?? []).some((x) => x.id === r.id && JSON.stringify(x) === JSON.stringify(r)))) throw badRequest("Screening reviews can't be changed or removed.");
-    if ((cur.internalNotes ?? []).some((x) => !(next.internalNotes ?? []).some((y) => y.id === x.id))) throw badRequest("Notes can't be removed.");
+    if (next.screening) next.screening = { ...next.screening, reviews: [...reviews, ...(next.screening.reviews ?? []).filter((x) => !reviews.some((r) => r.id === x.id))] };
+    const notes = cur.internalNotes ?? [];
+    next.internalNotes = [...(next.internalNotes ?? []).filter((x) => !notes.some((y) => y.id === x.id)), ...notes].sort((a, b) => (b.at ?? "").localeCompare(a.at ?? ""));
     if (next.assignedTo !== cur.assignedTo) { need("assign", "reassign cases"); changed.push("assignment"); }
   }
   const newReviews = (next.screening?.reviews ?? []).filter((r) => !(cur?.screening?.reviews ?? []).some((x) => x.id === r.id));
