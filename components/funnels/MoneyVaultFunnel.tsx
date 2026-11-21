@@ -5,7 +5,6 @@ import Script from "next/script";
 import { ArrowDown, BadgeCheck, Briefcase, CalendarCheck, FileSignature, Lock, Mail, MapPin, ShieldCheck, User, Users } from "lucide-react";
 import { FormRenderer, type FormEvent } from "@/components/forms/FormRenderer";
 import { TOUCH_KEYS, type LeadForm, type Touch } from "@/lib/forms/config";
-import { VaultIntro } from "./VaultIntro";
 
 /**
  * The 2027 Money Vault campaign page (/unlock). A landing page with the inquiry form
@@ -97,7 +96,6 @@ export function MoneyVaultFunnel({ form, tracking, campaignId, taxYear, home, pr
     <div style={PALETTE} className="mvf min-h-screen bg-bg text-ink">
       <style>{FOIL_CSS}</style>
       <svg width="0" height="0" className="absolute" aria-hidden><defs><linearGradient id="mvf-foil" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="24" y2="24"><stop offset="0" stopColor="#6e4105" /><stop offset=".3" stopColor="#b87912" /><stop offset=".5" stopColor="#e9b949" /><stop offset=".7" stopColor="#a96808" /><stop offset="1" stopColor="#6e4105" /></linearGradient></defs></svg>
-      <VaultIntro taxYear={taxYear} />
       {tracking.metaPixelId && (
         <Script id="meta-pixel" strategy="afterInteractive">{`!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${tracking.metaPixelId}');fbq('track','PageView');`}</Script>
       )}
@@ -179,11 +177,13 @@ export function MoneyVaultFunnel({ form, tracking, campaignId, taxYear, home, pr
         <div className="mx-auto grid max-w-6xl gap-10 px-4 py-14 sm:px-6 md:grid-cols-2">
           <div>
             <h2 className="font-serif text-[28px] font-medium tracking-tight">Who prepares your return</h2><div className="foil-rule" aria-hidden />
-            <ul className="mt-6 space-y-3.5 text-[15.5px]">
-              {["IRS-registered tax preparer (PTIN)", "IRS Annual Filing Season Program participant", "IRS Authorized e-file Provider", "Virtual service in Louisiana and Texas"].map((c) => (
+            <p className="mt-6 text-[16px] font-semibold">Krystal Esters <span className="font-normal text-ink-2">— Owner &amp; Principal Tax Professional, MKB Financial Group (Lake Charles, LA)</span></p>
+            <ul className="mt-4 space-y-3.5 text-[15.5px]">
+              {["IRS-registered tax preparer (PTIN)", "IRS Annual Filing Season Program participant", "IRS Authorized e-file Provider", "QuickBooks Certified ProAdvisor", "Based in Lake Charles, LA — virtual service in Louisiana and Texas"].map((c) => (
                 <li key={c} className="flex items-start gap-3"><BadgeCheck size={20} color={ICON} className="mt-0.5 shrink-0" />{c}</li>
               ))}
             </ul>
+            <p className="mt-6 rounded-xl border border-line bg-bg px-4 py-3 text-[15px]"><b>Pricing:</b> individual returns (Form 1040) start at $325; business returns start at $900. State returns, schedules and extra forms are priced separately, and you see your exact price before anything is filed.</p>
           </div>
           <div>
             <h2 className="font-serif text-[28px] font-medium tracking-tight">Your information stays protected</h2><div className="foil-rule" aria-hidden />
@@ -224,7 +224,7 @@ export function MoneyVaultFunnel({ form, tracking, campaignId, taxYear, home, pr
 
       <footer className="bg-[#0d0c0a] px-4 py-8 text-center text-[13px] text-white/70">
         <p><a href={home} className="foil-text font-semibold hover:underline">MKB Financial Group</a> · <a href="tel:8883799372" className="hover:underline">888-379-9372</a> · Virtual service in Louisiana and Texas</p>
-        <p className="mt-2">© {new Date().getFullYear()} MKB Financial Group{privacyHref ? <> · <a href={privacyHref} className="hover:underline">Privacy policy</a></> : null}</p>
+        <p className="mt-2">© {new Date().getFullYear()} MKB Financial Group{privacyHref ? <> · <a href={privacyHref} className="hover:underline">Privacy Policy</a></> : null}</p>
       </footer>
     </div>
   );

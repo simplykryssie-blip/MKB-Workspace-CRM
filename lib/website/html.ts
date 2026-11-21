@@ -36,6 +36,7 @@ function widgetSrc(tag: string, prefix: string): { src: string; title: string } 
     return { src: `/w/book?embed=1&brand=${brand}${type ? `&type=${encodeURIComponent(type)}` : ""}`, title: "Book an appointment" };
   }
   if (kind === "monarch-contact") return { src: "/w/monarch-contact", title: "Contact form" };
+  if (kind === "calculator") return { src: "/w/calculator", title: "Free tax calculator" };
   if (kind === "wisp") {
     const next = go(safePath(attr(tag, "data-next")) || "/wisp-next-steps");
     return { src: `/w/wisp?next=${encodeURIComponent(next)}`, title: "WISP Generator" };

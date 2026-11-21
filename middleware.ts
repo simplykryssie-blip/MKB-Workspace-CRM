@@ -13,7 +13,11 @@ import { decideEmbed, frameAncestors, hostFromHeader } from "@/lib/server/calc-e
  *    comes from.
  */
 const ON = process.env.NEXT_PUBLIC_BACKEND === "1";
-const OLD_PATHS: Record<string, string> = { "/about-mkb": "/about", "/about-us": "/about", "/mkb-financial-group": "/" };
+const OLD_PATHS: Record<string, string> = {
+  "/about-mkb": "/about", "/about-us": "/about", "/mkb-financial-group": "/",
+  // Retired pages: the old calculator page (now part of /tax-calculator), resources and the WISP builder (sold by Monarch Tax Suite).
+  "/calculator": "/tax-calculator", "/resources": "/", "/wisp-builder": "https://www.monarchtaxsuite.com/store",
+};
 const STAFF_FREE = /^\/(api|embed\/|login|portal(\/|$)|campaigns\/|f\/|i\/|u\/|w\/|site(\/|$)|msite(\/|$)|_next|brand|favicon|icon|apple-icon)/;
 
 // 3. The client portal's own address (PORTAL_HOSTS, e.g. "portal.mkbfinancialgroup.com") only serves
@@ -118,7 +122,17 @@ function route(req: NextRequest) {
       return NextResponse.redirect(`https://${host}${path.slice(5) || "/"}${search}`, 301);
     // Addresses from the old website.
     const moved = OLD_PATHS[path.replace(/\/+$/, "")];
-    if (moved !== undefined) return NextResponse.redirect(`https://${host}${moved}${search}`, 301);
+    if (moved !== undefined) return NextResponse.redirect(moved.startsWith("https://") ? moved : `https://${host}${moved}${search}`, 301);
+    // sitemap.xml and robots.txt, built from the published pages.
+    if (path === "/sitemap.xml" || path === "/robots.txt") {
+      const url = req.nextUrl.clone();
+      url.pathname = "/api/public/site-index";
+      url.search = path === "/robots.txt" ? "?f=robots" : "";
+      // The query string doesn't always survive the rewrite, so the file is also named in a header.
+      const h = new Headers(req.headers);
+      h.set("x-site-index", path === "/robots.txt" ? "robots" : "sitemap");
+      return NextResponse.rewrite(url, { request: { headers: h } });
+    }
     // The website's icon (browsers also ask for /favicon.ico directly).
     if (path === "/favicon.ico") {
       const url = req.nextUrl.clone();
