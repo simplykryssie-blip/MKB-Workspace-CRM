@@ -143,7 +143,9 @@ export function NewRequestDialog({ open, onClose, onCreated, preset }: { open: b
     if (clientId && !preset?.entityId) setEntityId(biz.entities.find((e) => e.clientId === clientId)?.id ?? "new");
   }, [clientId]); // eslint-disable-line react-hooks/exhaustive-deps
   const svc = biz.catalog.find((s) => s.id === serviceId);
-  useEffect(() => setPrice(svc && !svc.quoted ? String(svc.price) : ""), [serviceId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setPrice(svc && !svc.quoted ? String(svc.price) : ""), [serviceId]);
+  // LLC-only packages: a new business is set up as an LLC.
+  useEffect(() => { if (svc?.entityTypes?.length && entityId === "new" && !svc.entityTypes.includes(structure)) setStructure(svc.entityTypes[0]); }, [serviceId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const errors = {
     client: who === "client" && !clientId ? "Choose the client" : null,
@@ -151,7 +153,7 @@ export function NewRequestDialog({ open, onClose, onCreated, preset }: { open: b
     pemail: who === "prospect" ? validateEmail(prospect.email, true) : null,
     pphone: who === "prospect" ? validatePhone(prospect.phone, false) : null,
     business: !businessName.trim() ? (svc?.formation ? "Enter the proposed business name" : "Enter the business name") : null,
-    service: !serviceId ? "Choose a service" : null,
+    service: !serviceId ? "Choose a service" : svc?.entityTypes?.length && !svc.entityTypes.includes(structure) ? `${svc.name} is for ${svc.entityTypes.join(" / ")} only. For a ${structure}, add each service as its own request.` : null,
     description: description.trim().length < 10 ? "Describe what the client needs (at least 10 characters)" : null,
     price: price === "" || isNaN(Number(price)) || Number(price) < 0 ? "Enter a quoted price of $0 or more" : null,
     date: preferredDate && preferredDate < today() ? "Preferred date can't be in the past" : null,

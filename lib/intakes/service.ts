@@ -110,8 +110,8 @@ export const BIZ_NEED = {
   llc: "Form an LLC",
   corp: "Form a corporation",
   nonprofit: "Form a nonprofit",
-  pkgFormation: "Formation Package (formation, operating agreement, resolutions, digital record book)",
-  pkgComplete: "Formation Complete (Formation Package plus physical record book, one DBA, license report and year 1 of the Good Standing Plan)",
+  pkgFormation: "LLC Formation Package — LLCs only (formation, operating agreement, resolutions, digital record book)",
+  pkgComplete: "LLC Formation Complete — LLCs only (LLC Formation Package plus physical record book, one DBA, license report and year 1 of the Good Standing Plan)",
   ein: "EIN application",
   dba: "Trade name (DBA)",
   foreign: "Register in another state (foreign registration)",
@@ -142,6 +142,9 @@ const bNeed: Section = {
 };
 const bBusiness: Section = {
   id: "business", title: "Your business", group: "Business", covers: ["Name", "Type", "Addresses"],
+  // The formation packages are for LLCs only; corporations choose each service on its own.
+  check: (a) => any(N.pkgFormation, N.pkgComplete)(a) && typeof a.entity === "string" && a.entity && !/LLC/.test(a.entity)
+    ? "The LLC Formation Package and LLC Formation Complete are for LLCs only. For a corporation, go back and choose “Form a corporation” and any other services you need separately." : undefined,
   questions: [
     { id: "legalName", label: "Business name", type: "text", prefill: "bizName", help: "For a new business, the name you want first." },
     { id: "name2", label: "Second-choice name", type: "text", show: forming },

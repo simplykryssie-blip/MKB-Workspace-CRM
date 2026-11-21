@@ -34,6 +34,8 @@ const NEED_SERVICE: Record<string, string> = {
   [BIZ_NEED.resolutions]: "resolutions",
   [BIZ_NEED.records]: "records",
   "Form a new LLC": "llc",
+  "Formation Package (formation, operating agreement, resolutions, digital record book)": "pkg-formation",
+  "Formation Complete (Formation Package plus physical record book, one DBA, license report and year 1 of the Good Standing Plan)": "pkg-complete",
   "IRS EIN application": "ein",
   "Register in another state": "foreign",
   "Annual report": "annual",
