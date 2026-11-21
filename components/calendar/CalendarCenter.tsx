@@ -2,11 +2,12 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarClock, CalendarPlus, ChevronLeft, ChevronRight, ClipboardCheck, Globe, ListTodo, Lock, Plus, Settings2, UserRound } from "lucide-react";
+import { CalendarClock, CalendarPlus, CalendarX2, ChevronLeft, ChevronRight, ClipboardCheck, Globe, ListTodo, Lock, Plus, Settings2, UserRound } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Menu } from "@/components/ui/Menu";
+import { Modal } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useToast } from "@/components/ui/Toast";
 import { useTeam } from "@/lib/store/team-store";
@@ -16,7 +17,20 @@ import { ApptDialog, TaskDialog, TypesDialog, localDate, type ApptDraft } from "
 import { BookingSettingsDialog, HoursDialog } from "./BookingDialogs";
 
 type View = "day" | "week" | "month" | "tasks";
-type Data = { appointments: Appt[]; tasks: Task[]; followUps: FollowUp[]; types: ApptType[]; members: CalMember[]; selected: string[]; canAll: boolean; meId: string };
+type Closure = { id: string; name: string; start: string; end: string };
+type Data = { appointments: Appt[]; tasks: Task[]; followUps: FollowUp[]; types: ApptType[]; members: CalMember[]; selected: string[]; canAll: boolean; meId: string; closures?: Closure[] };
+const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+/** Time off longer than ~a day shows as an all-day bar, not in the hour grid. */
+const isAllDay = (a: Appt) => a.kind === "block" && Date.parse(a.endsAt) - Date.parse(a.startsAt) >= 20 * 3600e3;
+const coversDay = (a: Appt, day: Date) => Date.parse(a.startsAt) < addDays(day, 1).getTime() && Date.parse(a.endsAt) > day.getTime();
+/** The all-day bars for one day: office closures and multi-day time off. */
+function dayBars(d: Data, day: Date) {
+  const k = ymd(day);
+  return {
+    closed: (d.closures ?? []).filter((c) => c.start <= k && c.end >= k),
+    off: d.appointments.filter((a) => isAllDay(a) && a.status !== "cancelled" && coversDay(a, day)),
+  };
+}
 const HOUR_PX = 48, START_H = 6, END_H = 21;
 const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 const addDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
@@ -48,6 +62,7 @@ export function CalendarCenter() {
   const [settings, setSettings] = useState(false);
   const [hours, setHours] = useState(false);
   const [booking, setBooking] = useState(false);
+  const [blockDays, setBlockDays] = useState(false);
   const [from, to] = useMemo(() => range(view, cur), [view, cur]);
   const load = useCallback(() => {
     if (!BACKEND) return;
@@ -88,7 +103,7 @@ export function CalendarCenter() {
           <Menu label="Settings" trigger={({ toggle }) => <Button icon={Settings2} onClick={toggle}>Settings</Button>}
             items={[{ label: "My booking hours", icon: CalendarClock, onSelect: () => setHours(true) }, { label: "Online booking & Zoom", icon: Globe, onSelect: () => setBooking(true) }, { label: "Appointment types & colors", icon: Settings2, onSelect: () => setSettings(true) }]} />
           {canEdit && <Menu label="New" trigger={({ toggle }) => <Button variant="primary" icon={Plus} onClick={toggle}>New</Button>}
-            items={[{ label: "Appointment", icon: CalendarPlus, onSelect: () => newAppt() }, { label: "Task", icon: ListTodo, onSelect: () => setTask({ priority: "normal", repeat: "none", checklist: [], assigneeId: d?.meId }) }, { label: "Block time", icon: Lock, onSelect: () => newAppt(undefined, "block") }]} />}
+            items={[{ label: "Appointment", icon: CalendarPlus, onSelect: () => newAppt() }, { label: "Task", icon: ListTodo, onSelect: () => setTask({ priority: "normal", repeat: "none", checklist: [], assigneeId: d?.meId }) }, { label: "Block days (time off or office closed)", icon: CalendarX2, onSelect: () => setBlockDays(true) }, { label: "Block time", icon: Lock, onSelect: () => newAppt(undefined, "block") }]} />}
         </div>} />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -120,6 +135,7 @@ export function CalendarCenter() {
       {d && <TaskDialog draft={task} members={d.members} meId={d.meId} canAll={d.canAll} onClose={() => setTask(null)} onSaved={() => { setTask(null); load(); }} />}
       {d && <TypesDialog open={settings} types={d.types} members={d.members} meId={d.meId} canSettings={team.can("communication", "settings")} onClose={() => setSettings(false)} onSaved={load} />}
       <HoursDialog open={hours} onClose={() => setHours(false)} />
+      {d && <BlockDaysDialog open={blockDays} d={d} canOffice={team.can("settings", "settings")} onClose={() => setBlockDays(false)} onSaved={() => { setBlockDays(false); load(); }} />}
       <BookingSettingsDialog open={booking} canSettings={team.can("communication", "settings")} onClose={() => setBooking(false)} />
     </>
   );
@@ -128,7 +144,7 @@ export function CalendarCenter() {
 /* ---------------------------------------------------------------- day / week */
 function TimeGrid({ d, days, color, onAppt, onSlot, onTask }: { d: Data; days: Date[]; color: (a: Appt) => string; onAppt: (a: Appt) => void; onSlot: (iso: string) => void; onTask: (t: Task) => void }) {
   // 6 AM–9 PM, stretched to include anything earlier or later on these days.
-  const shown = d.appointments.filter((a) => days.some((day) => sameDay(new Date(a.startsAt), day)));
+  const shown = d.appointments.filter((a) => !isAllDay(a) && days.some((day) => sameDay(new Date(a.startsAt), day)));
   const startH = Math.min(START_H, ...shown.map((a) => new Date(a.startsAt).getHours()));
   const endH = Math.max(END_H, ...shown.map((a) => { const e = new Date(a.endsAt); return Math.min(24, e.getHours() + (e.getMinutes() ? 1 : 0) || 24); }).filter((h) => h > 0));
   const hours = Array.from({ length: endH - startH }, (_, i) => startH + i);
@@ -146,6 +162,10 @@ function TimeGrid({ d, days, color, onAppt, onSlot, onTask }: { d: Data; days: D
               return (
                 <div key={day.toISOString()} className="border-l border-line px-1.5 py-2">
                   <p className={`text-center text-[12px] font-semibold ${sameDay(day, today) ? "text-accent" : "text-muted"}`}>{day.toLocaleDateString("en-US", { weekday: "short" })} <span className={`ml-0.5 inline-grid h-6 w-6 place-items-center rounded-full ${sameDay(day, today) ? "bg-accent text-white" : "text-ink"}`}>{day.getDate()}</span></p>
+                  {(() => { const b = dayBars(d, day); return <>
+                    {b.closed.map((c) => <p key={c.id} title={`Office closed — ${c.name}`} className="mt-1 truncate rounded-md bg-danger-soft px-1.5 py-0.5 text-[11.5px] font-semibold text-danger-ink">Closed · {c.name}</p>)}
+                    {b.off.map((a) => <button key={a.id} onClick={() => onAppt(a)} className="mt-1 block w-full truncate rounded-md bg-surface-2 px-1.5 py-0.5 text-left text-[11.5px] font-semibold text-ink-2 ring-1 ring-line hover:bg-surface-hover" title={a.title}>🔒 {a.title}{many ? ` · ${name(a.memberId)}` : ""}</button>)}
+                  </>; })()}
                   {dayTasks.slice(0, 3).map((t) => <button key={t.id} onClick={() => onTask(t)} className="mt-1 block w-full truncate rounded-md bg-surface-2 px-1.5 py-0.5 text-left text-[11.5px] text-ink-2 hover:bg-surface-hover" title={t.title}>☐ {t.title}</button>)}
                   {dayTasks.length > 3 && <p className="mt-0.5 text-center text-[11px] text-muted">+{dayTasks.length - 3} tasks</p>}
                 </div>
@@ -155,7 +175,7 @@ function TimeGrid({ d, days, color, onAppt, onSlot, onTask }: { d: Data; days: D
           <div className="relative grid" style={{ gridTemplateColumns: `56px repeat(${days.length}, minmax(0,1fr))` }}>
             <div>{hours.map((h) => <div key={h} style={{ height: HOUR_PX }} className="pr-1.5 text-right text-[11px] text-faint">{new Date(2000, 0, 1, h).toLocaleTimeString("en-US", { hour: "numeric" })}</div>)}</div>
             {days.map((day) => {
-              const items = d.appointments.filter((a) => sameDay(new Date(a.startsAt), day));
+              const items = d.appointments.filter((a) => sameDay(new Date(a.startsAt), day) && !isAllDay(a));
               // Side-by-side lanes for overlapping items.
               const lanes: Appt[][] = [];
               const laneOf = new Map<string, number>();
@@ -201,11 +221,14 @@ function MonthGrid({ d, from, cur, color, onAppt, onDay }: { d: Data; from: Date
       <div className="grid grid-cols-7 border-b border-line">{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((w) => <p key={w} className="py-2 text-center text-[12px] font-semibold text-muted">{w}</p>)}</div>
       <div className="grid grid-cols-7">
         {cells.map((day) => {
-          const items = d.appointments.filter((a) => sameDay(new Date(a.startsAt), day) && a.status !== "cancelled");
+          const items = d.appointments.filter((a) => sameDay(new Date(a.startsAt), day) && a.status !== "cancelled" && !isAllDay(a));
+          const bars = dayBars(d, day);
           const tasks = d.tasks.filter((t) => t.status === "open" && t.dueAt && sameDay(dueDate(t.dueAt), day)).length;
           return (
             <div key={day.toISOString()} className={`min-h-[96px] border-b border-l border-line p-1 ${day.getMonth() !== cur.getMonth() ? "bg-surface-2/60" : ""}`}>
               <button onClick={() => onDay(day)} className={`mb-0.5 grid h-6 w-6 place-items-center rounded-full text-[12px] font-semibold ${sameDay(day, today) ? "bg-accent text-white" : "text-ink-2 hover:bg-surface-hover"}`}>{day.getDate()}</button>
+              {bars.closed.map((c) => <p key={c.id} className="mb-0.5 truncate rounded bg-danger-soft px-1 text-[11px] font-semibold text-danger-ink" title={`Office closed — ${c.name}`}>Closed · {c.name}</p>)}
+              {bars.off.map((a) => <button key={a.id} onClick={() => onAppt(a)} className="mb-0.5 block w-full truncate rounded bg-surface-2 px-1 text-left text-[11px] font-semibold text-ink-2 ring-1 ring-line" title={a.title}>🔒 {a.title}</button>)}
               {items.slice(0, 3).map((a) => <button key={a.id} onClick={() => onAppt(a)} className="mb-0.5 flex w-full items-center gap-1 truncate rounded px-1 text-left text-[11px] text-ink hover:bg-surface-hover"><span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color(a) }} /><span className="truncate">{fmtT(a.startsAt)} {a.title}</span></button>)}
               {items.length > 3 && <button onClick={() => onDay(day)} className="text-[11px] text-muted">+{items.length - 3} more</button>}
               {tasks > 0 && <p className="text-[11px] text-muted">☐ {tasks} task{tasks > 1 ? "s" : ""}</p>}
@@ -286,5 +309,53 @@ function TodayPanel({ d, color, onAppt, onTask, onDone, onFollow }: { d: Data; c
       </Card>
       <p className="px-1 text-[12px] text-muted">{localDate(new Date())} · Times show in your computer&rsquo;s time zone.</p>
     </div>
+  );
+}
+
+/* ---------------------------------------------------------------- block days */
+/** Several days off at once: the whole office (online booking closed for everyone) or one person's calendar. */
+function BlockDaysDialog({ open, d, canOffice, onClose, onSaved }: { open: boolean; d: Data; canOffice: boolean; onClose: () => void; onSaved: () => void }) {
+  const toast = useToast();
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
+  const [reason, setReason] = useState("");
+  const [scope, setScope] = useState<"office" | "person">("office");
+  const [memberId, setMemberId] = useState(d.meId);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { if (open) { setStart(""); setEnd(""); setReason(""); setScope(canOffice ? "office" : "person"); setMemberId(d.meId); } }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  const days = start && end && end >= start ? Math.round((Date.parse(`${end}T12:00`) - Date.parse(`${start}T12:00`)) / 864e5) + 1 : 0;
+  const valid = !!start && !!end && end >= start && days <= 62 && reason.trim().length > 1;
+  const save = async () => {
+    setBusy(true);
+    try {
+      if (scope === "office") await call("POST", "/api/settings/closures", { name: reason.trim(), start, end });
+      else {
+        const [y1, m1, d1] = start.split("-").map(Number), [y2, m2, d2] = end.split("-").map(Number);
+        await call("POST", "/api/calendar/appointments", { kind: "block", title: reason.trim(), memberId, startsAt: new Date(y1, m1 - 1, d1).toISOString(), endsAt: new Date(y2, m2 - 1, d2 + 1).toISOString() });
+      }
+      toast(scope === "office" ? `Office closed ${days} day${days === 1 ? "" : "s"} — online booking is off those days` : `Blocked ${days} day${days === 1 ? "" : "s"}`);
+      onSaved();
+    } catch (e) { toast(e instanceof Error ? e.message : "Couldn't save", "info"); }
+    setBusy(false);
+  };
+  const input = "h-10 w-full rounded-xl border border-line bg-surface px-3 text-[14px] text-ink";
+  return (
+    <Modal open={open} onClose={onClose} title="Block days" description="Take several days off at once. They show as all-day bars on the calendar." footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={busy || !valid} onClick={() => void save()}>{busy ? "Saving…" : days ? `Block ${days} day${days === 1 ? "" : "s"}` : "Block days"}</Button></>}>
+      <div className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div><label htmlFor="bd-start" className="mb-1 block text-[13px] font-medium text-ink-2">First day</label><input id="bd-start" type="date" value={start} onChange={(e) => { setStart(e.target.value); if (!end || end < e.target.value) setEnd(e.target.value); }} className={input} /></div>
+          <div><label htmlFor="bd-end" className="mb-1 block text-[13px] font-medium text-ink-2">Last day</label><input id="bd-end" type="date" min={start || undefined} value={end} onChange={(e) => setEnd(e.target.value)} className={input} /></div>
+        </div>
+        {days > 62 && <p className="text-[12.5px] font-semibold text-danger-ink">Block up to two months at a time.</p>}
+        <div><label htmlFor="bd-reason" className="mb-1 block text-[13px] font-medium text-ink-2">Reason</label><input id="bd-reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Thanksgiving break" className={input} /></div>
+        <fieldset className="space-y-2">
+          <legend className="mb-1 text-[13px] font-medium text-ink-2">Who&rsquo;s off</legend>
+          <label className={`flex items-start gap-2 rounded-xl border p-3 text-[13.5px] ${scope === "office" ? "border-accent bg-accent-soft/40" : "border-line"} ${canOffice ? "cursor-pointer" : "opacity-50"}`}><input type="radio" name="bd-scope" disabled={!canOffice} checked={scope === "office"} onChange={() => setScope("office")} className="mt-0.5 accent-[var(--accent)]" /><span><b>The whole office is closed</b><span className="block text-muted">No one can be booked online those days. Shows on everyone&rsquo;s calendar.{!canOffice && " (Needs the settings permission.)"}</span></span></label>
+          <label className={`flex cursor-pointer items-start gap-2 rounded-xl border p-3 text-[13.5px] ${scope === "person" ? "border-accent bg-accent-soft/40" : "border-line"}`}><input type="radio" name="bd-scope" checked={scope === "person"} onChange={() => setScope("person")} className="mt-0.5 accent-[var(--accent)]" /><span><b>Just one person&rsquo;s calendar</b><span className="block text-muted">Time off — that person can&rsquo;t be booked those days.</span></span></label>
+          {scope === "person" && d.canAll && <select aria-label="Whose calendar" value={memberId} onChange={(e) => setMemberId(e.target.value)} className={input}>{d.members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select>}
+        </fieldset>
+        <p className="text-[12px] text-muted">Existing appointments on those days aren&rsquo;t cancelled — move or cancel them yourself. Office closed days can also be managed in Settings → Firm.</p>
+      </div>
+    </Modal>
   );
 }

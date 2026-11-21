@@ -54,6 +54,7 @@ const when = (iso: string) => new Date(iso).toLocaleString("en-US", { weekday: "
 
 /* ================================================================ the calendar */
 /** Everything between `from` and `to` for the chosen calendars, plus open tasks and follow-ups that are overdue. */
+const addDayIso = (iso: string, n: number) => new Date(Date.parse(iso.length === 10 ? `${iso}T12:00:00Z` : iso) + n * 864e5).toISOString().slice(0, 10);
 export async function getCalendar(env: AppEnv, a: Actor, q: { from?: string; to?: string; members?: string }) {
   requirePermission(a, "communication", "view");
   requireStaff(a);
@@ -68,7 +69,9 @@ export async function getCalendar(env: AppEnv, a: Actor, q: { from?: string; to?
   const follow = await all<{ id: string; lead_id: string; at: string; note: string; owner_id: string; name: string }>(env.DB, `SELECT r.id, r.lead_id, r.at, r.note, r.owner_id, l.name FROM lead_reminders r JOIN leads l ON l.id = r.lead_id WHERE r.done = 0 AND l.status = 'open' AND r.owner_id IN (${ph}) AND r.at < ? ORDER BY r.at`, ...ids, to);
   const types = await all<TypeRow>(env.DB, "SELECT * FROM appointment_types ORDER BY active DESC, position, name");
   const followUps: FollowUp[] = follow.map((r) => ({ id: r.id, kind: "lead_followup", title: r.note || "Follow up", dueAt: r.at, memberId: r.owner_id, contact: { type: "lead", id: r.lead_id, name: r.name }, href: `/leads/${r.lead_id}` }));
-  return { appointments: appts.map(toAppt), tasks: tasks.map(toTask), followUps, types: types.map(toType), members: team, selected: ids, canAll: canAll(a), meId: a.member.id };
+  // Office closed days (Settings → Firm, or Calendar → Block days) show on everyone's calendar.
+  const closures = await all<{ id: string; name: string; start_date: string; end_date: string }>(env.DB, "SELECT id, name, start_date, end_date FROM business_closures WHERE end_date >= ? AND start_date <= ? ORDER BY start_date", addDayIso(from, -1), addDayIso(to, 1));
+  return { appointments: appts.map(toAppt), tasks: tasks.map(toTask), followUps, types: types.map(toType), members: team, selected: ids, canAll: canAll(a), meId: a.member.id, closures: closures.map((c) => ({ id: c.id, name: c.name, start: c.start_date, end: c.end_date })) };
 }
 /** A lead's or client's appointments (their profile). */
 export async function contactCalendar(env: AppEnv, a: Actor, q: { type?: string; id?: string }) {
@@ -113,7 +116,8 @@ export async function saveAppointment(env: AppEnv, a: Actor, b: Record<string, u
   if (!(await one(env.DB, "SELECT 1 FROM members WHERE id = ? AND status = 'active'", memberId))) throw badRequest("Choose whose calendar.");
   const startsAt = s(b.startsAt, 40), endsAt = s(b.endsAt, 40);
   if (!ISO.test(startsAt) || !ISO.test(endsAt) || isNaN(Date.parse(startsAt)) || Date.parse(endsAt) <= Date.parse(startsAt)) throw badRequest("Choose a start and an end time after it.");
-  if (Date.parse(endsAt) - Date.parse(startsAt) > 24 * 3600e3) throw badRequest("An appointment can't be longer than a day.");
+  // Time off (blocks) can span days, up to two months; appointments stay within a day.
+  if (Date.parse(endsAt) - Date.parse(startsAt) > (kind === "block" ? 62 * 24 : 24) * 3600e3) throw badRequest(kind === "block" ? "Block up to two months at a time." : "An appointment can't be longer than a day.");
   const type = typeof b.typeId === "string" && b.typeId ? await one<TypeRow>(env.DB, "SELECT * FROM appointment_types WHERE id = ?", b.typeId) : null;
   const contact = kind === "appointment" ? await contactFrom(env, b.contact) : null;
   const title = s(b.title, 140) || (kind === "block" ? "Busy" : type ? `${type.name}${contact ? ` — ${contact.name}` : ""}` : contact?.name ?? "");
