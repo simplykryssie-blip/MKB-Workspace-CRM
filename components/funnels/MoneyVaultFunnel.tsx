@@ -179,7 +179,7 @@ export function MoneyVaultFunnel({ form, tracking, campaignId, taxYear, home, pr
             <h2 className="font-serif text-[28px] font-medium tracking-tight">Who prepares your return</h2><div className="foil-rule" aria-hidden />
             <p className="mt-6 text-[16px] font-semibold">Krystal Esters <span className="font-normal text-ink-2">— Owner &amp; Principal Tax Professional, MKB Financial Group (Lake Charles, LA)</span></p>
             <ul className="mt-4 space-y-3.5 text-[15.5px]">
-              {["IRS-registered tax preparer (PTIN)", "IRS Annual Filing Season Program participant", "IRS Authorized e-file Provider", "QuickBooks Certified ProAdvisor", "Based in Lake Charles, LA — virtual service in Louisiana and Texas"].map((c) => (
+              {["IRS-registered tax preparer (PTIN)", "IRS Annual Filing Season Program participant", "IRS Authorized e-file Provider", "Based in Lake Charles, LA — virtual service in Louisiana and Texas"].map((c) => (
                 <li key={c} className="flex items-start gap-3"><BadgeCheck size={20} color={ICON} className="mt-0.5 shrink-0" />{c}</li>
               ))}
             </ul>
