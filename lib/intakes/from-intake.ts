@@ -16,6 +16,7 @@ const rows = (a: Answers, id: string): Row[] => (Array.isArray(a[id]) ? (a[id] a
 const NEED_SERVICE: Record<string, string> = {
   [BIZ_NEED.llc]: "llc",
   [BIZ_NEED.corp]: "corp",
+  [BIZ_NEED.nonprofit]: "nonprofit",
   [BIZ_NEED.pkgFormation]: "pkg-formation",
   [BIZ_NEED.pkgComplete]: "pkg-complete",
   [BIZ_NEED.ein]: "ein",
@@ -33,7 +34,6 @@ const NEED_SERVICE: Record<string, string> = {
   [BIZ_NEED.resolutions]: "resolutions",
   [BIZ_NEED.records]: "records",
   "Form a new LLC": "llc",
-  "Form a nonprofit": "corp",
   "IRS EIN application": "ein",
   "Register in another state": "foreign",
   "Annual report": "annual",

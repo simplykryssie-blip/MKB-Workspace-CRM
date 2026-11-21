@@ -109,6 +109,7 @@ const pFinish: Section = {
 export const BIZ_NEED = {
   llc: "Form an LLC",
   corp: "Form a corporation",
+  nonprofit: "Form a nonprofit",
   pkgFormation: "Formation Package (formation, operating agreement, resolutions, digital record book)",
   pkgComplete: "Formation Complete (Formation Package plus physical record book, one DBA, license report and year 1 of the Good Standing Plan)",
   ein: "EIN application",
@@ -128,7 +129,7 @@ export const BIZ_NEED = {
 } as const;
 const N = BIZ_NEED;
 const any = (...xs: string[]) => (a: Answers) => xs.some((x) => has("need", x)(a));
-const forming = any(N.llc, N.corp, N.pkgFormation, N.pkgComplete);
+const forming = any(N.llc, N.corp, N.nonprofit, N.pkgFormation, N.pkgComplete);
 const goodStanding = any(N.goodStanding, N.goodStandingPremium, N.pkgComplete);
 const existing = any(N.ein, N.dba, N.foreign, N.amend, N.dissolve, N.annual, N.txPir, N.license, N.licenseReport, N.goodStanding, N.goodStandingPremium, N.oa, N.resolutions, N.records);
 const bNeed: Section = {

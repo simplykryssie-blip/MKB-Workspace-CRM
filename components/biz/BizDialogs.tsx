@@ -143,7 +143,7 @@ export function NewRequestDialog({ open, onClose, onCreated, preset }: { open: b
     if (clientId && !preset?.entityId) setEntityId(biz.entities.find((e) => e.clientId === clientId)?.id ?? "new");
   }, [clientId]); // eslint-disable-line react-hooks/exhaustive-deps
   const svc = biz.catalog.find((s) => s.id === serviceId);
-  useEffect(() => setPrice(svc ? String(svc.price) : ""), [serviceId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setPrice(svc && !svc.quoted ? String(svc.price) : ""), [serviceId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const errors = {
     client: who === "client" && !clientId ? "Choose the client" : null,
@@ -237,7 +237,7 @@ export function NewRequestDialog({ open, onClose, onCreated, preset }: { open: b
           </div>
           <SelectField id="nr-staff" label="Assigned staff" value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)} options={staffOptsNow()} />
           <div>
-            <TextField id="nr-price" label="Quoted MKB fee ($)" type="number" min={0} step="0.01" required value={price} onChange={(e) => setPrice(e.target.value)} hint={svc?.filingFeeEstimate ? `+ ${usd(svc.filingFeeEstimate)} filing est.` : undefined} />
+            <TextField id="nr-price" label="Quoted MKB fee ($)" type="number" min={0} step="0.01" required value={price} onChange={(e) => setPrice(e.target.value)} hint={svc?.quoted ? "No set price — enter the fee quoted in writing" : svc?.filingFeeEstimate ? `+ ${usd(svc.filingFeeEstimate)} filing est.` : undefined} />
             <Err show={tried} msg={errors.price} />
           </div>
         </div>
@@ -997,6 +997,7 @@ export function ServiceDialog({ svc, open, onClose }: { svc?: CatalogService; op
           <Checkbox label="Available for new requests" checked={v.active} onChange={() => setV({ ...v, active: !v.active })} />
           <Checkbox label="Renews every year" hint="Next year's renewal goes on the compliance calendar when the year's work is done" checked={!!v.recurring} onChange={() => setV({ ...v, recurring: !v.recurring })} />
           <Checkbox label="Show on the website price list" checked={v.web !== false} onChange={() => setV({ ...v, web: v.web === false })} />
+          <Checkbox label="No set price — quoted in writing" checked={!!v.quoted} onChange={() => setV({ ...v, quoted: !v.quoted })} />
         </div>
       </div>
     </Modal>

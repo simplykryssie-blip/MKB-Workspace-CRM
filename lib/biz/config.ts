@@ -70,6 +70,8 @@ export type CatalogService = {
   includes?: string[];
   /** Renews every year: when the year's work is complete, next year's renewal is put on the compliance calendar. */
   recurring?: boolean;
+  /** No set price yet: quoted in writing for each client (the website shows "Quoted in writing"; staff enter the fee on the request). */
+  quoted?: boolean;
   /** Shown on the website price list (when active). */
   web?: boolean;
   active: boolean;
@@ -123,6 +125,7 @@ export const DEFAULT_CATALOG: CatalogService[] = [
   // Business Formation
   svc("llc", "Business Formation", "LLC formation", "administrative", 495, { description: "Name availability check, articles prepared and submitted to the state, and your EIN included.", agency: true, formation: true, turnaroundDays: 21, needs: FORMATION_NEEDS, deliverables: ["Filed articles of organization", "State filing confirmation", "EIN confirmation letter"], steps: STEPS.formation }),
   svc("corp", "Business Formation", "Corporation formation", "administrative", 495, { description: "Name availability check, articles of incorporation prepared and submitted, and your EIN included.", agency: true, formation: true, turnaroundDays: 21, needs: FORMATION_NEEDS, deliverables: ["Filed articles of incorporation", "State filing confirmation", "EIN confirmation letter"], steps: STEPS.formation }),
+  svc("nonprofit", "Business Formation", "Nonprofit formation", "administrative", 0, { quoted: true, description: "Name availability check, nonprofit articles of incorporation prepared and submitted to the state, and your EIN included.", agency: true, formation: true, turnaroundDays: 28, needs: [...FORMATION_NEEDS.filter((x) => !/^Owners/.test(x)), "Initial directors and officers", "Nonprofit purpose"], deliverables: ["Filed nonprofit articles of incorporation", "State filing confirmation", "EIN confirmation letter"], steps: STEPS.formation.map((x) => (x === "Collect owners/members and structure" ? "Collect directors, officers and nonprofit purpose" : x)) }),
   svc("ein", "Business Formation", "EIN application (standalone)", "administrative", 125, { description: "IRS EIN application for an existing business.", agency: true, turnaroundDays: 5, needs: ["Legal business name and entity type", "Business address", "Responsible party details (Social Security number collected securely in the client portal only)"], deliverables: ["EIN confirmation letter"], steps: STEPS.ein }),
   svc("dba", "Business Formation", "Trade name / DBA", "administrative", 175, { unit: "per filing", description: "Trade name registration with the state, plus the parish or county filing where required.", agency: true, turnaroundDays: 14, needs: ["Trade name you want", "Parish(es) or county where you do business"], deliverables: ["State trade name certificate", "Parish/county filing confirmation"], steps: STEPS.dba }),
   svc("foreign", "Business Formation", "Foreign registration", "administrative", 395, { description: "Register your existing business to operate in another state.", agency: true, turnaroundDays: 21, needs: ["State where the business will operate", "Your registered agent in that state", "Formation documents"], deliverables: ["Certificate of good standing (home state)", "Foreign registration approval", "State filing confirmation"], steps: STEPS.foreign }),
@@ -167,13 +170,17 @@ export const DEFAULT_CATALOG: CatalogService[] = [
  * built-ins (registered agent coordination) are removed.
  */
 export function upgradeCatalog(saved: CatalogService[]): CatalogService[] {
-  if (saved.some((x) => x.id === "good-standing")) return saved.map((x) => ({ ...x, steps: x.steps ?? [] }));
+  if (saved.some((x) => x.id === "good-standing")) {
+    // Built-in services added since this catalog was saved (e.g. nonprofit formation) are added once.
+    const have = new Set(saved.map((x) => x.id));
+    return [...saved.map((x) => ({ ...x, steps: x.steps ?? [] })), ...structuredClone(DEFAULT_CATALOG.filter((x) => !have.has(x.id)))];
+  }
   const builtIn = new Set(DEFAULT_CATALOG.map((x) => x.id));
   const custom = saved.filter((x) => !builtIn.has(x.id) && x.id !== "agent").map((x) => ({ ...x, steps: x.steps ?? [] }));
   return [...structuredClone(DEFAULT_CATALOG), ...custom];
 }
 /** "$175 per filing", "$349/yr". */
-export const svcPrice = (x: Pick<CatalogService, "price" | "unit">) => `$${x.price.toLocaleString("en-US")}${x.unit === "per year" ? "/yr" : x.unit ? ` ${x.unit}` : ""}`;
+export const svcPrice = (x: Pick<CatalogService, "price" | "unit" | "quoted">) => x.quoted ? "Quoted in writing" : `$${x.price.toLocaleString("en-US")}${x.unit === "per year" ? "/yr" : x.unit ? ` ${x.unit}` : ""}`;
 
 /* ------------------------------------------------------------------ */
 /* Request workflow                                                    */
