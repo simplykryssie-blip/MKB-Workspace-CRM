@@ -209,6 +209,32 @@ const addMonths = (iso: string, m: number) => { const d = new Date(iso); d.setMo
 /* Actions                                                             */
 /* ------------------------------------------------------------------ */
 
+const normName = (x?: string) => (x ?? "").toLowerCase().replace(/\b(llc|l\.l\.c|inc|corp|corporation|co|company)\b/g, "").replace(/[^a-z0-9]/g, "");
+const digits = (x?: string) => (x ?? "").replace(/\D/g, "").slice(-10);
+/**
+ * The person's OTHER businesses (not this one), for the second-business discount: businesses
+ * on file for the client, plus the businesses on their other requests — matched by client
+ * record or, for prospects (leads not yet clients), by email or phone. Cancelled requests and
+ * dissolved businesses don't count. Returns the other business names.
+ */
+export function otherBusinesses(st: Pick<State, "requests" | "entities">, who: { clientId?: string; email?: string; phone?: string; businessName: string; entityId?: string; excludeRequestId?: string }): string[] {
+  const me = normName(who.businessName);
+  const email = (who.email ?? "").trim().toLowerCase();
+  const phone = digits(who.phone);
+  const same = (r: ServiceRequest) =>
+    (who.clientId && r.clientId === who.clientId) ||
+    (!!email && (r.prospect?.email ?? "").trim().toLowerCase() === email) ||
+    (phone.length >= 7 && digits(r.prospect?.phone) === phone);
+  // Each business the person has, with when it first appeared. Their FIRST business is never discounted.
+  const seen = new Map<string, { name: string; at: string }>();
+  const add = (name: string, at: string) => { const k = normName(name); if (!k) return; const cur = seen.get(k); if (!cur || at < cur.at) seen.set(k, { name, at }); };
+  for (const e of st.entities) if (who.clientId && e.clientId === who.clientId && e.status !== "dissolved") add(e.legalName, e.createdAt);
+  for (const r of st.requests) if (r.id !== who.excludeRequestId && r.status !== "Cancelled" && same(r)) add(r.businessName, r.createdAt);
+  const mine = seen.get(me);
+  // A business seen before: only businesses that came before it count. A new business: all of them count.
+  return [...seen.entries()].filter(([k, x]) => k !== me && (!mine || x.at < mine.at)).map(([, x]) => x.name);
+}
+
 export type NewRequestInput = {
   intakeId?: string;
   clientId?: string;
@@ -284,8 +310,9 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
         entityId = createEntity({ clientId: input.clientId, legalName: input.businessName.trim(), entityType: input.structure, state: input.state, status: svc.formation ? "forming" : "active", principalAddress: "", ownerId: input.assignedTo });
       const lines: QuoteLine[] = [{ id: uid("q"), kind: "service", label: svc.name, amount: input.quotedPrice ?? svc.price }];
       // Second entity and beyond: the MKB fee is discounted (never state fees). Staff can remove the line before sending the quote.
-      const otherEntities = input.clientId ? st.entities.filter((e) => e.clientId === input.clientId && e.id !== entityId && e.status !== "dissolved") : [];
-      if (otherEntities.length && lines[0].amount > 0) lines.push({ id: uid("q"), kind: "discount", label: `Additional entity discount (${MULTI_ENTITY_DISCOUNT_PCT}% of MKB fee)`, amount: Math.round(lines[0].amount * MULTI_ENTITY_DISCOUNT_PCT) / 100 });
+      const person = input.clientId ? clients().clients.find((c) => c.id === input.clientId) : undefined;
+      const others = otherBusinesses(st, { clientId: input.clientId, email: person?.email ?? input.prospect?.email, phone: person?.phone ?? input.prospect?.phone, businessName: input.businessName, entityId });
+      if (others.length && lines[0].amount > 0) lines.push({ id: uid("q"), kind: "discount", label: `Additional entity discount (${MULTI_ENTITY_DISCOUNT_PCT}% of MKB fee)`, amount: Math.round(lines[0].amount * MULTI_ENTITY_DISCOUNT_PCT) / 100 });
       // State fees are never pre-filled from code; only an administrator-entered estimate is used, clearly labeled.
       if (svc.filingFeeEstimate) lines.push({ id: uid("q"), kind: "filing", label: `${input.state} filing fee (admin estimate — confirm with the ${input.state} agency)`, amount: svc.filingFeeEstimate });
       const formation: FormationDetails | undefined = svc.formation

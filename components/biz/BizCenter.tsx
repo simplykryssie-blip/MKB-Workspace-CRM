@@ -760,9 +760,9 @@ function CatalogTab() {
                 <li key={s.id} className={`flex flex-wrap items-center gap-3 px-5 py-3 sm:px-6 ${s.active ? "" : "opacity-60"}`}>
                   <div className="min-w-0 flex-1 basis-[60%] sm:basis-0">
                     <div className="flex flex-wrap items-center gap-2 text-[14px] font-semibold text-ink">{s.name}{s.custom && <Badge tone="info">Custom</Badge>}{!s.active && <Badge tone="neutral">Unavailable</Badge>}</div>
-                    <div className="text-[12.5px] text-muted">{NATURE[s.nature].label}{s.agency ? " · agency filing" : ""}{s.formation ? " · formation workspace" : ""} · ~{s.turnaroundDays} days{s.description ? ` · ${s.description}` : ""}</div>
+                    <div className="text-[12.5px] text-muted">{NATURE[s.nature].label}{s.agency ? " · agency filing" : ""}{s.formation ? " · formation workspace" : ""}{s.turnaroundDays >= 365 ? " · covers a full plan year" : ` · ~${s.turnaroundDays}-day turnaround`}{s.recurring ? " · renews every year" : ""}{s.description ? ` · ${s.description}` : ""}</div>
                   </div>
-                  <div className="text-right"><div className="text-[14px] font-bold tabular-nums text-ink">{s.quoted ? "Quoted" : money(s.price)}</div>{s.filingFeeEstimate ? <div className="text-[11.5px] text-muted">+ ~{money(s.filingFeeEstimate)} filing</div> : null}</div>
+                  <div className="text-right"><div className="text-[14px] font-bold tabular-nums text-ink">{s.quoted ? "Quoted in writing" : `${money(s.price)}${s.unit === "per year" ? "/yr" : s.unit ? ` ${s.unit}` : ""}`}</div>{s.filingFeeEstimate ? <div className="text-[11.5px] text-muted">+ ~{money(s.filingFeeEstimate)} filing</div> : null}</div>
                   <div className="flex gap-1.5">
                     <Button size="sm" variant="ghost" disabled={!admin} onClick={() => { biz.toggleService(s.id); toast(s.active ? `${s.name} unavailable for new requests` : `${s.name} available`); }}>{s.active ? "Make unavailable" : "Make available"}</Button>
                     <Button size="sm" icon={Pencil} disabled={!admin} aria-label={`Edit ${s.name}`} onClick={() => setEdit(s)}>Edit</Button>

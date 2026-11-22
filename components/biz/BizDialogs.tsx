@@ -9,10 +9,11 @@ import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { STAFF, SAMPLE_NOW, staffById, meId, staffList } from "@/lib/sample/clients";
 import { useClients } from "@/lib/store/clients-store";
-import { checklistFor, entityStates, requestDocs, requestInvoices, useBiz, type NewRequestInput } from "@/lib/store/biz-store";
+import { checklistFor, entityStates, otherBusinesses, requestDocs, requestInvoices, useBiz, type NewRequestInput } from "@/lib/store/biz-store";
 import {
   AGENCY_KIND,
   AGENT_CHOICES,
+  MULTI_ENTITY_DISCOUNT_PCT,
   type FormationDetails,
   AGENT_TYPE,
   CATEGORIES,
@@ -143,6 +144,10 @@ export function NewRequestDialog({ open, onClose, onCreated, preset }: { open: b
     if (clientId && !preset?.entityId) setEntityId(biz.entities.find((e) => e.clientId === clientId)?.id ?? "new");
   }, [clientId]); // eslint-disable-line react-hooks/exhaustive-deps
   const svc = biz.catalog.find((s) => s.id === serviceId);
+  const person = who === "client" ? clients.find((c) => c.id === clientId) : undefined;
+  const secondBiz = businessName.trim() && (who === "prospect" ? prospect.email.trim() || prospect.phone.trim() : clientId)
+    ? otherBusinesses(biz, { clientId: who === "client" ? clientId : undefined, email: person?.email ?? (who === "prospect" ? prospect.email : undefined), phone: person?.phone ?? (who === "prospect" ? prospect.phone : undefined), businessName, entityId: who === "client" && entityId !== "new" ? entityId : undefined })
+    : [];
   useEffect(() => setPrice(svc && !svc.quoted ? String(svc.price) : ""), [serviceId]);
   // LLC-only packages: a new business is set up as an LLC.
   useEffect(() => { if (svc?.entityTypes?.length && entityId === "new" && !svc.entityTypes.includes(structure)) setStructure(svc.entityTypes[0]); }, [serviceId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -241,6 +246,7 @@ export function NewRequestDialog({ open, onClose, onCreated, preset }: { open: b
           <div>
             <TextField id="nr-price" label="Quoted MKB fee ($)" type="number" min={0} step="0.01" required value={price} onChange={(e) => setPrice(e.target.value)} hint={svc?.quoted ? "No set price — enter the fee quoted in writing" : svc?.filingFeeEstimate ? `+ ${usd(svc.filingFeeEstimate)} filing est.` : undefined} />
             <Err show={tried} msg={errors.price} />
+            {secondBiz.length > 0 && Number(price) > 0 && <p className="mt-1 text-[12px] font-medium text-success-ink">Additional business for this {who === "client" ? "client" : "person"} (also {secondBiz.slice(0, 2).join(", ")}{secondBiz.length > 2 ? "…" : ""}): {MULTI_ENTITY_DISCOUNT_PCT}% off MKB&rsquo;s fee is added to the quote (−{usd(Math.round(Number(price) * MULTI_ENTITY_DISCOUNT_PCT) / 100)}). You can remove it before sending.</p>}
           </div>
         </div>
         <FilePicker files={files} setFiles={setFiles} label="Supporting documents (optional)" />
