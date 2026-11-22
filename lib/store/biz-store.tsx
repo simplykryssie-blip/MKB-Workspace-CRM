@@ -607,7 +607,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       if (!svc || !e) return;
       const items = get().compliance.filter((i) => i.entityId === e.id && i.status !== "filed" && i.status !== "not_applicable");
       const base = r.completedAt ?? nowIso();
-      if (svc.formation && !items.some((i) => i.kind === "annual_report" || i.kind === "franchise_tax")) {
+      if ((svc.formation || svc.id === "reinstate") && !items.some((i) => i.kind === "annual_report" || i.kind === "franchise_tax")) {
         const tx = e.state === "TX";
         const due = tx ? nextAnnual(5, 15, new Date(addMonths(base, 3))) : addMonths(base, 12);
         a.addItem({ entityId: e.id, state: e.state, kind: tx ? "franchise_tax" : "annual_report", title: tx ? "TX franchise tax report / PIR" : `${e.state} annual report`, dueAt: due, source: `Set when ${r.number} (formation) was completed`, frequency: "annual", reminderDays: [...get().reminderDefaults], status: "upcoming", ownerId: r.assignedTo, serviceId: tx ? "tx-pir" : "annual",

@@ -117,6 +117,7 @@ export const BIZ_NEED = {
   foreign: "Register in another state (foreign registration)",
   amend: "Amendment or name change",
   dissolve: "Dissolution (closing the business)",
+  reinstate: "LLC reinstatement / reactivation (bring an inactive LLC back to good standing)",
   annual: "Louisiana annual report",
   txPir: "Texas franchise tax / Public Information Report",
   license: "Licenses & deadlines tracking (yearly)",
@@ -131,7 +132,7 @@ const N = BIZ_NEED;
 const any = (...xs: string[]) => (a: Answers) => xs.some((x) => has("need", x)(a));
 const forming = any(N.llc, N.corp, N.nonprofit, N.pkgFormation, N.pkgComplete);
 const goodStanding = any(N.goodStanding, N.goodStandingPremium, N.pkgComplete);
-const existing = any(N.ein, N.dba, N.foreign, N.amend, N.dissolve, N.annual, N.txPir, N.license, N.licenseReport, N.goodStanding, N.goodStandingPremium, N.oa, N.resolutions, N.records);
+const existing = any(N.ein, N.dba, N.foreign, N.amend, N.dissolve, N.reinstate, N.annual, N.txPir, N.license, N.licenseReport, N.goodStanding, N.goodStandingPremium, N.oa, N.resolutions, N.records);
 const bNeed: Section = {
   id: "need", title: "What you need", group: "About you", covers: ["Services"],
   intro: "Choose everything you'd like MKB to handle. You'll only see the questions for what you choose.",
@@ -236,6 +237,18 @@ const bAmend: Section = {
     { id: "newName", label: "New business name", type: "text", show: has("change", "Business name") },
     { id: "changeDetail", label: "Describe the change", type: "textarea" },
     { id: "changeDate", label: "Date the change should take effect", type: "date", optional: true },
+  ],
+};
+const bReinstate: Section = {
+  id: "reinstate", title: "Reinstating your LLC", group: "Services", covers: ["Reinstatement"], show: any(N.reinstate),
+  intro: "We check with the Secretary of State what's needed to bring your LLC back to good standing — usually past-due annual reports and fees — and file the reinstatement.",
+  questions: [
+    { id: "inactiveSince", label: "When did the LLC become inactive or revoked? (an estimate is fine)", type: "text", placeholder: "e.g. 2024" },
+    { id: "inactiveWhy", label: "Do you know why?", type: "choice", options: ["Annual report(s) not filed", "Registered agent issue", "Voluntarily closed", "Not sure"] },
+    { id: "membersChanged", label: "Have the members, managers or addresses changed since the last filing?", type: YN },
+    { id: "membersDetail", label: "What changed?", type: "textarea", show: yes("membersChanged") },
+    { id: "rAgentName", label: "Your registered agent's full name (or company) — MKB is not a registered agent", type: "text" },
+    { id: "rAgentAddress", label: "Registered agent's street address in the state (no P.O. boxes)", type: "text" },
   ],
 };
 const bDissolve: Section = {
@@ -356,7 +369,7 @@ const rAck: Section = {
 
 export const SERVICE_INTAKES: Record<ServiceIntakeKind, { label: string; title: string; sections: Section[]; module: "books" | "biz" | "exp"; service: "books" | "biz" | "expunge"; next: string }> = {
   payroll: { label: "Payroll", title: "Payroll Intake", sections: [pBusiness, pSetup, pPeople, pRoster, pTaxes, pFinish], module: "books", service: "books", next: "We review your answers, confirm your payroll setup and price, and schedule your first payroll." },
-  biz: { label: "Business Solutions", title: "Business Solutions Intake", sections: [bNeed, bBusiness, bOwners, bStructure, bAgent, bEin, bExisting, bDba, bForeign, bAmend, bDissolve, bAnnual, bLicenses, bOa, bResolutions, bRecords, bFinish], module: "biz", service: "biz", next: "We review your answers, confirm the state filing fees with you, and prepare your filings for your approval." },
+  biz: { label: "Business Solutions", title: "Business Solutions Intake", sections: [bNeed, bBusiness, bOwners, bStructure, bAgent, bEin, bExisting, bDba, bForeign, bAmend, bReinstate, bDissolve, bAnnual, bLicenses, bOa, bResolutions, bRecords, bFinish], module: "biz", service: "biz", next: "We review your answers, confirm the state filing fees with you, and prepare your filings for your approval." },
   relief: { label: "Expungement Relief", title: "Expungement Relief Intake", sections: [rAbout, rRecords, rSituation, rAck], module: "exp", service: "expunge", next: "We review your answers, go over our fees with you, and start requesting your records." },
 };
 export const SERVICE_INTAKE_KINDS = Object.keys(SERVICE_INTAKES) as ServiceIntakeKind[];

@@ -24,6 +24,7 @@ const NEED_SERVICE: Record<string, string> = {
   [BIZ_NEED.foreign]: "foreign",
   [BIZ_NEED.amend]: "amend",
   [BIZ_NEED.dissolve]: "dissolve",
+  [BIZ_NEED.reinstate]: "reinstate",
   [BIZ_NEED.annual]: "annual",
   [BIZ_NEED.txPir]: "tx-pir",
   [BIZ_NEED.license]: "license",
