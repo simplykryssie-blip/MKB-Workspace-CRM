@@ -68,7 +68,13 @@ export function TaxCenter() {
   const router = useRouter();
   const toast = useToast();
   const [tab, setTab] = useState<Tab>("overview");
-  const [year, setYear] = useState<number | "all">(2025);
+  // Open on all tax years so nothing in progress is hidden (e.g. a prior-year amendment); remember the
+  // year each person picks on this device.
+  const [year, setYearState] = useState<number | "all">("all");
+  useEffect(() => {
+    try { const v = localStorage.getItem("mkb.tax.year"); if (v === "all") setYearState("all"); else if (v && /^20\d\d$/.test(v)) setYearState(Number(v)); } catch { /* storage unavailable */ }
+  }, []);
+  const setYear = (v: number | "all") => { setYearState(v); try { localStorage.setItem("mkb.tax.year", String(v)); } catch { /* storage unavailable */ } };
   const [filters, setFilters] = useState<Filters>(EMPTY);
   const [newOpen, setNewOpen] = useState<{ clientId?: string } | null>(null);
 
