@@ -8,6 +8,7 @@
  * "Awaiting Documents", saves the signed PDFs, emails the client and rings
  * the tax team's bell. Server-only.
  */
+import { askTextOptIn } from "./sms";
 import { DEFAULT_SERVICE_FEES, feeWords } from "@/lib/fees/config";
 import { fillLetter, taxLetterFor } from "@/lib/engagement/letters";
 import { docsFor, type Answers } from "@/lib/tax/interview/engine";
@@ -237,5 +238,7 @@ export async function publicSubmitTaxInterview(env: AppEnv, token: string, ip: s
   const lead = c.status === "prospect";
   await notify(env, { module: "tax" }, { kind: "intake", title: `${c.name} submitted their ${r.taxYear} tax interview`, body: lead ? "A lead (not a client yet) — review it, then accept or decline on the lead" : `${requested.length} document${requested.length === 1 ? "" : "s"} requested · ready for your review`, href: lead ? `/leads/${(await one<{ lead_id: string | null }>(env.DB, "SELECT lead_id FROM clients WHERE id = ?", c.id))?.lead_id ?? ""}` : `/services/tax-preparation/returns/${r.id}`, ...{} });
   await audit(env.DB, actor, { action: "Record update", resource: `Tax return ${r.id}`, department: "tax", meta: `Interview submitted online and signed (drawn)${letterParts ? `; engagement letter v${engagement.version} signed` : ""}; ${requested.length} documents requested${to ? (emailed ? "; emailed" : "; email queued") : ""}` });
+  // One invitation to opt in to marketing texts (only recorded if they reply YES).
+  await askTextOptIn(env, "mkb", (typeof answers.phone === "string" && answers.phone) || c.phone, { type: "client", id: c.id });
   return { submitted: true, documents: outstanding, emailed, profileUpdated: profile?.updated ?? [], next: await nextStop(env, c.id) };
 }

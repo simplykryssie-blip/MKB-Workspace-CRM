@@ -4,6 +4,7 @@
  * requests the documents the answers call for, emails the client and alerts
  * the bookkeeping team. Server-only.
  */
+import { askTextOptIn } from "./sms";
 import { BOOKS_SECTIONS, pickableAddOns, quoteFor } from "@/lib/books/intake";
 import { booksLetterBody, proposalAsText, proposalFromQuote, proposalLetterVars, proposalTotals, recurring, type Proposal, type ProposalBilling, type ProposalLine } from "@/lib/books/proposal";
 import { fillLetter } from "@/lib/engagement/letters";
@@ -199,6 +200,8 @@ async function completeSubmit(env: AppEnv, who: Submitter, r: Row, c: ClientRow,
   await run(env.DB, "INSERT INTO client_activity (id, client_id, kind, text, actor, member_id, at) VALUES (?, ?, 'intake', ?, ?, ?, ?)", randomId("x"), c.id, `Bookkeeping intake submitted${who.kind === "link" ? " by the client (secure link)" : ""} — ${docs.length} document${docs.length === 1 ? "" : "s"} requested; waiting for MKB's price review`, by === "client" ? "client" : "staff", staffId, t);
   await notify(env, { module: "books", exceptId: staffId ?? undefined }, { kind: "intake", title: `${bizName} submitted their bookkeeping intake`, body: `Ready for review — check the price and send the proposal${who.kind === "link" ? " · completed online by the client" : ""}${answers.qboInvite === "I need help with this" ? " · needs help inviting MKB to QuickBooks" : answers.qboInvite === "I'll do it after this intake" ? " · QuickBooks invite not sent yet" : ""}`, href: `/services/bookkeeping/intake/${id}` });
   await audit(env.DB, auditActor, { action: "Record update", resource: `Bookkeeping intake ${id}`, meta: `Submitted${who.kind === "link" ? " through secure link" : ""}; signed (drawn); ${docs.length} documents requested${to ? (emailed ? "; emailed" : "; email queued") : ""}; proposal draft ${draft.plan} for review` });
+  // The client submitted it themselves: one invitation to opt in to marketing texts (recorded only if they reply YES).
+  if (who.kind === "link") await askTextOptIn(env, "mkb", (typeof answers.phone === "string" && answers.phone) || c.phone, { type: "client", id: c.id });
   return { intake: toIntake((await one<Row>(env.DB, `${SQL} WHERE i.id = ?`, id))!), documents: docs, emailed };
 }
 

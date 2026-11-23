@@ -4,6 +4,7 @@
  * rate-limited, checked against the published form, and can only create or add to
  * a lead — never read anything back. Server-only.
  */
+import { askTextOptIn } from "./sms";
 import { FIELD_TYPES, MAP_TARGETS, MOST_RECENT_YEAR, TAX_RETURN_CHOICES, TOUCH_KEYS, slugify, type Attribution, type AutoIntake, type FormField, type LeadForm, type Submission, type Touch } from "@/lib/forms/config";
 import { digits, extractLead, publishIssues, validateSubmission, visibleFields } from "@/lib/forms/logic";
 import { all, badRequest, HttpError, json, notFound, now, one, rateLimit, run, str, addMinutes, type AppEnv } from "./core";
@@ -181,6 +182,8 @@ async function process(env: AppEnv, f: LeadForm, raw: Record<string, unknown>, c
     if (L.email) await recordConsent(env, "mkb", "email", L.email, "subscribed", src, null);
     if (digits(L.phone).length === 10) await recordConsent(env, "mkb", "sms", digits(L.phone), "subscribed", src, null);
   }
+  // Everyone else gets one invitation to opt in to marketing texts (recorded only if they reply YES).
+  if (channel !== "Staff test") await askTextOptIn(env, "mkb", L.phone);
   const phoneDigits = digits(L.phone);
   const norm = "replace(replace(replace(replace(replace(phone, '(', ''), ')', ''), '-', ''), ' ', ''), '+1', '')";
   const client = await one<{ id: string }>(db, `SELECT id FROM clients WHERE status NOT IN ('prospect', 'declined') AND ((? != '' AND email = ?) OR (length(?) = 10 AND ${norm} = ?)) LIMIT 1`, L.email, L.email, phoneDigits, phoneDigits);

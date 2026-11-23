@@ -25,6 +25,26 @@ const e164 = (p: string) => `+1${phone10(p)}`;
 const NORM = "replace(replace(replace(replace(replace(replace(phone, '(', ''), ')', ''), '-', ''), ' ', ''), '+1', ''), '.', '')";
 const STOP = new Set(["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT", "REVOKE", "OPTOUT"]);
 const START = new Set(["START", "UNSTOP", "SUBSCRIBE"]);
+/** Replies that accept the one-time "Reply YES" invitation. */
+const YES = new Set(["YES", "Y", "YESPLEASE", "YEAH", "YEP"]);
+const OPTIN_MARK = "Reply YES to sign up";
+const daysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString();
+
+/**
+ * One text after someone submits an intake or a website form, inviting them to opt in to marketing texts
+ * (reminders, tips, offers). Consent is recorded only if they reply YES. Never sent if the number already
+ * opted in or out (or replied STOP), was invited in the last 180 days, or texting isn't set up. Never throws.
+ */
+export async function askTextOptIn(env: AppEnv, brand: Brand, phone: string | null | undefined, contact?: { type: string; id: string } | null) {
+  try {
+    const to = phone10(phone ?? "");
+    if (to.length !== 10) return;
+    if (await one(env.DB, "SELECT 1 FROM marketing_consent WHERE brand = ? AND channel = 'sms' AND address = ?", brand, to)) return;
+    if (await one(env.DB, "SELECT 1 FROM sms_messages WHERE brand = ? AND phone = ? AND direction = 'out' AND body LIKE ? AND created_at > ?", brand, to, `%${OPTIN_MARK}%`, daysAgo(180))) return;
+    const name = brand === "monarch" ? "Monarch Tax Suite" : "MKB Financial Group";
+    await sendText(env, { brand, to, contact: contact ?? null, body: `${name}: Thanks — we received your information! Want tax deadline reminders, tips and client offers by text? ${OPTIN_MARK}. Msg frequency varies. Msg & data rates may apply. Reply STOP to opt out.` });
+  } catch (e) { console.error("opt-in text", e instanceof Error ? e.message : e); }
+}
 
 /* ================================================================ settings */
 async function secret(env: AppEnv, key: string) {
@@ -183,13 +203,27 @@ export async function inboundText(env: AppEnv, req: Request) {
   if (from.length !== 10) return twiml();
   const brand: Brand = (await one<{ brand: Brand }>(env.DB, "SELECT brand FROM campaign_settings WHERE sms_number = ? AND sms_number != ''", e164(to)))?.brand ?? "mkb";
   const word = body.trim().toUpperCase().replace(/[^A-Z]/g, "");
+  let joined = false;
   if (STOP.has(word)) await recordConsent(env, brand, "sms", from, "unsubscribed", `Replied ${word} by text`, null);
   else if (START.has(word)) await recordConsent(env, brand, "sms", from, "subscribed", `Replied ${word} by text`, null);
+  else if (YES.has(word)) {
+    // YES to our opt-in invitation (sent in the last 30 days) — and they haven't opted out since.
+    const invited = await one<{ created_at: string }>(env.DB, "SELECT created_at FROM sms_messages WHERE brand = ? AND phone = ? AND direction = 'out' AND body LIKE ? AND created_at > ? ORDER BY created_at DESC LIMIT 1", brand, from, `%${OPTIN_MARK}%`, daysAgo(30));
+    const cur = await one<{ status: string }>(env.DB, "SELECT status FROM marketing_consent WHERE brand = ? AND channel = 'sms' AND address = ?", brand, from);
+    if (invited && cur?.status !== "subscribed" && cur?.status !== "unsubscribed") {
+      await recordConsent(env, brand, "sms", from, "subscribed", `Replied ${body.trim().slice(0, 20)} to the opt-in text sent ${invited.created_at.slice(0, 10)}`, null);
+      joined = true;
+    }
+  }
   // Unknown numbers stay in the Text inbox only; staff can save them as a lead/firm from the conversation.
   const c = await findContact(env, brand, from);
   const t = now();
   await run(env.DB, "INSERT INTO sms_messages (id, brand, direction, phone, body, status, provider_sid, contact_type, contact_id, created_at, updated_at) VALUES (?, ?, 'in', ?, ?, 'received', ?, ?, ?, ?, ?)", randomId("sms"), brand, from, body, params.get("MessageSid"), c?.type ?? null, c?.id ?? null, t, t);
-  await timeline(env, c, STOP.has(word) ? "Replied STOP — opted out of texts" : `Text received: “${body.slice(0, 120)}”`);
+  await timeline(env, c, STOP.has(word) ? "Replied STOP — opted out of texts" : joined ? "Replied YES — opted in to marketing texts" : `Text received: “${body.slice(0, 120)}”`);
+  if (joined) {
+    const name = brand === "monarch" ? "Monarch Tax Suite" : "MKB Financial Group";
+    await sendText(env, { brand, to: from, contact: c ? { type: c.type, id: c.id } : null, body: `${name}: You're signed up for tax reminders, tips and offers. Msg frequency varies. Msg & data rates may apply. Reply STOP to opt out, HELP for help.` }).catch(() => null);
+  }
   const base = brand === "monarch" ? "/monarch/texts" : "/texts";
   await notify(env, { module: brand === "monarch" ? "monarch" : "communication" }, { kind: "text", title: STOP.has(word) ? `${c?.name ?? fmtPhone(from)} opted out of texts` : `New text from ${c?.name ?? fmtPhone(from)}`, body: body.slice(0, 140), href: `${base}?phone=${from}` });
   return twiml();

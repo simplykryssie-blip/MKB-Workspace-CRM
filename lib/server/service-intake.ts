@@ -5,6 +5,7 @@
  * gets the signed PDF in Documents, the documents to upload are requested in
  * the portal, the profile is updated and the team is notified. Server-only.
  */
+import { askTextOptIn } from "./sms";
 import { SERVICE_INTAKES, isServiceIntakeKind, type ServiceIntakeKind } from "@/lib/intakes/service";
 import { canDo } from "@/lib/team/policy";
 import { docsFor, type Answers } from "@/lib/tax/interview/engine";
@@ -216,6 +217,8 @@ export async function publicSubmitServiceIntake(env: AppEnv, token: string, ip: 
     const out = await sendTemplate(env, "service_intake_received", { to, vars: { firstName: firstNameOf(c, answers), service: meta.label, date: longDate(t), next: meta.next }, documents: docs, attachments: [{ filename: fileName, content: pdf }] });
     emailed = out.sent;
   }
+  // One invitation to opt in to marketing texts (only recorded if they reply YES).
+  await askTextOptIn(env, "mkb", (typeof answers.phone === "string" && answers.phone) || c.phone, { type: "client", id: c.id });
   return { submitted: true, documents: docs, emailed, next: await nextStop(env, c.id) };
 }
 
