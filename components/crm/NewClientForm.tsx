@@ -13,6 +13,7 @@ import { useToast } from "@/components/ui/Toast";
 import { SERVICES, SERVICE_ORDER } from "@/lib/sample-data";
 import { STAFF, staffList } from "@/lib/sample/clients";
 import { useClients } from "@/lib/store/clients-store";
+import { BACKEND, pendingClientCreates } from "@/lib/sync/remote";
 import {
   digits,
   dobToIso,
@@ -57,6 +58,8 @@ export function NewClientForm() {
   const [staff, setStaff] = useState<string[]>([]);
   const [invite, setInvite] = useState(true);
   const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const taxRequired = services.includes("tax") && !deferTax;
 
@@ -90,9 +93,11 @@ export function NewClientForm() {
 
   const toggle = <T,>(arr: T[], v: T) => (arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (saving) return;
     setSubmitted(true);
+    setSaveError(null);
     if (!valid) {
       toast("Please fix the highlighted fields", "info");
       return;
@@ -124,6 +129,25 @@ export function NewClientForm() {
         category: "Tax ID",
         sensitive: true,
       });
+    }
+    if (BACKEND) {
+      // Wait for the server to confirm the new client before opening it. If it's refused (e.g. the email
+      // is already used), stay on this form with the reason — nothing typed is lost.
+      setSaving(true);
+      let reason = "";
+      const onNotice = (ev: Event) => { reason = String((ev as CustomEvent).detail ?? ""); };
+      window.addEventListener("mkb:notice", onNotice);
+      try {
+        for (let i = 0; i < 150 && !pendingClientCreates.has(id); i++) await new Promise((res) => setTimeout(res, 100));
+        const ok = pendingClientCreates.has(id) ? await pendingClientCreates.get(id) : true;
+        if (!ok) {
+          setSaveError(reason || "The client wasn't saved. Check the details and try again.");
+          setSaving(false);
+          return;
+        }
+      } finally {
+        window.removeEventListener("mkb:notice", onNotice);
+      }
     }
     toast(`${name.trim()} created${invite ? " — portal invitation sent" : ""}`);
     router.push(`/clients/${id}`);
@@ -297,8 +321,9 @@ export function NewClientForm() {
               </div>
             </fieldset>
             <Checkbox label="Send client portal invitation" hint="Client sets their own password and multi-factor authentication." checked={invite} onChange={() => setInvite((v) => !v)} />
-            <Button variant="primary" className="w-full" type="submit">
-              Create client
+            {saveError && <p role="alert" className="flex items-start gap-2 rounded-xl bg-danger-soft px-3 py-2 text-[13px] font-medium text-danger-ink"><AlertTriangle size={15} className="mt-0.5 shrink-0" />{saveError}</p>}
+            <Button variant="primary" className="w-full" type="submit" disabled={saving}>
+              {saving ? "Saving…" : "Create client"}
             </Button>
             <p className="flex items-start gap-1.5 text-[12px] text-muted">
               <ShieldCheck size={13} className="mt-px shrink-0" /> SSN, ITIN and EIN are stored separately from the client record and only shown masked. Full numbers require a logged reveal.

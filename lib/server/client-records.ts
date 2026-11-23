@@ -172,8 +172,12 @@ export async function createClient(env: AppEnv, a: Actor, c: ClientSnapshot, ids
   if (!/^c-[A-Za-z0-9_-]{3,40}$/.test(c.id ?? "")) throw badRequest("Invalid client ID.");
   if (await one(env.DB, "SELECT 1 FROM clients WHERE id = ?", c.id)) throw new HttpError(409, "That client already exists.", "exists");
   const core = cleanCore({ ...c, portal: "not_invited" }); // portal access starts only through a real invite
-  const dupe = core.email && (await one<{ id: string; name: string }>(env.DB, "SELECT id, name FROM clients WHERE email = ? LIMIT 1", core.email));
-  if (dupe) throw new HttpError(409, `${dupe.name} already uses this email.`, "duplicate");
+  const dupe = core.email && (await one<{ id: string; name: string; status: string; lead_id: string | null }>(env.DB, "SELECT id, name, status, lead_id FROM clients WHERE email = ? LIMIT 1", core.email));
+  if (dupe) {
+    // Leads that filled in an intake have a hidden "prospect" record that isn't in the Clients list.
+    if (dupe.status === "prospect" && dupe.lead_id) throw new HttpError(409, `This email belongs to the lead “${dupe.name}”. Open that lead in Leads and accept it to make them a client (their intake and history come with them), or use a different email.`, "duplicate");
+    throw new HttpError(409, `${dupe.name} already uses this email. Open their profile instead, or use a different email.`, "duplicate");
+  }
   const t = now();
   const stmts = [
     env.DB.prepare("INSERT INTO clients (id, type, name, contact_name, email, phone, preferred_contact, address, business, status, portal, tags, source, lead_id, since, last_activity_at, created_at, updated_at, module_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")

@@ -110,6 +110,17 @@ export function ClientProfile({ id }: { id: string }) {
   const open = useCallback((kind: DialogKind, arg?: unknown) => setDialog({ kind, arg }), []);
   const close = useCallback(() => setDialog(null), []);
 
+  // Live: the next appointment comes from the Calendar. (Every hook stays above the early returns below:
+  // a client can disappear while its page is open — e.g. a new client the server refused — and React
+  // crashes the whole app if the number of hooks changes between renders.)
+  const [liveNext, setLiveNext] = useState<{ at: string } | null | undefined>(undefined);
+  const cid = c?.id;
+  useEffect(() => {
+    if (!BACKEND || !cid) return;
+    call<{ appointments: { kind: string; status: string; startsAt: string }[] }>("GET", `/api/calendar/contact?type=client&id=${encodeURIComponent(cid)}`)
+      .then((r) => { const n = r.appointments.filter((a) => a.kind === "appointment" && a.status === "scheduled" && a.startsAt >= new Date().toISOString()).sort((x, y) => x.startsAt.localeCompare(y.startsAt))[0]; setLiveNext(n ? { at: n.startsAt } : null); })
+      .catch(() => setLiveNext(null));
+  }, [cid, calKey]);
   const gate = useClientGate(c?.id, "this client's profile");
   if (gate) return gate;
   if (!c && !store.ready) return <div className="grid min-h-[50vh] place-items-center text-[14px] text-muted" role="status">Loading…</div>;
@@ -148,14 +159,6 @@ export function ClientProfile({ id }: { id: string }) {
   const bal = balanceDue(c);
   const openReq = openRequirements(c) + (missingTaxInfo(c).length ? 1 : 0);
   const sampleNext = c.appointments.find((a) => a.status === "scheduled" && a.at >= SAMPLE_NOW.toISOString());
-  // Live: the next appointment comes from the Calendar.
-  const [liveNext, setLiveNext] = useState<{ at: string } | null | undefined>(undefined);
-  useEffect(() => {
-    if (!BACKEND) return;
-    call<{ appointments: { kind: string; status: string; startsAt: string }[] }>("GET", `/api/calendar/contact?type=client&id=${encodeURIComponent(c.id)}`)
-      .then((r) => { const n = r.appointments.filter((a) => a.kind === "appointment" && a.status === "scheduled" && a.startsAt >= new Date().toISOString()).sort((x, y) => x.startsAt.localeCompare(y.startsAt))[0]; setLiveNext(n ? { at: n.startsAt } : null); })
-      .catch(() => setLiveNext(null));
-  }, [c.id, calKey]);
   const next = BACKEND ? liveNext ?? undefined : sampleNext;
   const unread = c.messages.filter((m) => m.from === "client" && !m.read).length;
   const services = [...new Set(c.enrollments.map((e) => e.service))];
