@@ -38,7 +38,7 @@ export const toReturn = (r: Row): ReturnSnapshot => ({
   clientApprovedAt: r.client_approved_at ?? undefined, organizer: json(r.organizer, { status: "not_sent", answers: {} }), checklist: json(r.checklist, []), efile: json(r.efile, []),
   pricing: json(r.pricing, { lines: [], discount: 0 }), statusHistory: json(r.status_history, []), notes: json(r.notes, []), activity: json(r.activity, []),
   createdAt: r.created_at, completedAt: r.completed_at ?? undefined, rev: r.rev,
-  ...json<Pick<TaxReturn, "ownerApproval" | "dueDiligence" | "amendsReturnId" | "extensionOnly">>(r.extra, {}),
+  ...json<Pick<TaxReturn, "ownerApproval" | "dueDiligence" | "amendsReturnId" | "extensionOnly" | "amended">>(r.extra, {}),
 });
 
 /** Clients this staff member may open, decided by the same rules as the client list. */
@@ -78,7 +78,7 @@ async function checkStaff(db: Db, ...ids: string[]) {
   for (const id of ids) if (!(await one(db, "SELECT 1 FROM members WHERE id = ? AND status = 'active'", id))) throw badRequest("Preparer and reviewer must be active team members.");
 }
 function fields(r: TaxReturn) {
-  return [r.clientId, r.enrollmentId ?? null, r.taxYear, r.kind, r.form, r.filingStatus ?? null, big(r.states ?? []), r.status, r.preparerId, r.reviewerId, r.dueAt ?? null, r.extension ? big(r.extension) : null, r.reviewSignoff ? big(r.reviewSignoff) : null, r.approvalSignatureId ?? null, r.clientApprovedAt ?? null, big(r.organizer), big(r.checklist ?? []), big(r.efile ?? []), big(r.pricing), big(r.statusHistory ?? []), big(r.notes ?? []), big(r.activity ?? []), r.completedAt ?? null, big({ ownerApproval: r.ownerApproval, dueDiligence: r.dueDiligence, amendsReturnId: r.amendsReturnId, extensionOnly: r.extensionOnly || undefined })];
+  return [r.clientId, r.enrollmentId ?? null, r.taxYear, r.kind, r.form, r.filingStatus ?? null, big(r.states ?? []), r.status, r.preparerId, r.reviewerId, r.dueAt ?? null, r.extension ? big(r.extension) : null, r.reviewSignoff ? big(r.reviewSignoff) : null, r.approvalSignatureId ?? null, r.clientApprovedAt ?? null, big(r.organizer), big(r.checklist ?? []), big(r.efile ?? []), big(r.pricing), big(r.statusHistory ?? []), big(r.notes ?? []), big(r.activity ?? []), r.completedAt ?? null, big({ ownerApproval: r.ownerApproval, dueDiligence: r.dueDiligence, amendsReturnId: r.amendsReturnId, extensionOnly: r.extensionOnly || undefined, amended: r.amended || undefined })];
 }
 
 export async function createReturn(env: AppEnv, a: Actor, r: ReturnSnapshot) {

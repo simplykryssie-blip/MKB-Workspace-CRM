@@ -49,7 +49,7 @@ function Runner({ r, clientName, by, prefillSource }: { r: TaxReturn; clientName
   const sections = useMemo(() => sectionsFor(r.form), [r.form]);
   const initial = useMemo(() => applyPrefill(sections, { ...(r.organizer.interview?.answers ?? {}) }, prefillFrom(prefillSource)), []); // eslint-disable-line react-hooks/exhaustive-deps
   const [answers, setAnswers] = useState<Answers>(initial.answers);
-  const a: Answers = useMemo(() => ({ ...answers, __form: r.form, __year: String(r.taxYear) }), [answers, r.form, r.taxYear]);
+  const a: Answers = useMemo(() => ({ ...answers, __form: r.form, __year: String(r.taxYear), __amended: r.amended ? "1" : "" }), [answers, r.form, r.taxYear, r.amended]);
   const visible = sections.filter((s) => sectionVisible(s, a));
   const followUps = (r.organizer.followUps ?? []).filter((f) => f.status === "sent");
   const submitted = r.organizer.status === "submitted" || r.organizer.status === "reviewed";

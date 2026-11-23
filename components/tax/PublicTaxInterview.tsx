@@ -21,7 +21,7 @@ import type { TaxForm } from "@/lib/tax/config";
  */
 type Letter = { title: string; body: string; version: number };
 type Loaded = {
-  taxYear: number; form: TaxForm; kind: "individual" | "business"; name: string; firstName: string; expiresAt: string;
+  taxYear: number; form: TaxForm; kind: "individual" | "business"; amended?: boolean; name: string; firstName: string; expiresAt: string;
   answers: Answers; prefilled: string[]; rev: number;
   letter: { key: string; service: Letter; terms: Letter } | null;
 };
@@ -87,7 +87,7 @@ function Runner({ data, api, reload, onDone, onGone }: { data: Loaded; api: Api;
   const sections = useMemo(() => sectionsFor(data.form), [data.form]);
   const prefilled = useMemo(() => new Set(data.prefilled), [data.prefilled]);
   const [answers, setAnswers] = useState<Answers>(data.answers);
-  const a: Answers = useMemo(() => ({ ...answers, __form: data.form, __year: String(data.taxYear) }), [answers, data.form, data.taxYear]);
+  const a: Answers = useMemo(() => ({ ...answers, __form: data.form, __year: String(data.taxYear), __amended: data.amended ? "1" : "" }), [answers, data.form, data.taxYear, data.amended]);
   const rev = useRef(data.rev);
   const dirty = useRef(false);
   const saving = useRef<Promise<void> | null>(null);

@@ -111,14 +111,20 @@ export async function login(env: AppEnv, req: Request, email: string, password: 
     throw new HttpError(423, "This account is temporarily locked. Try again later or ask an administrator.", "locked");
   }
   const ok = await verifyPassword(password, user?.password_hash);
+  // The portal sign-in reminds first-time clients to use their invitation email (same message for every
+  // email address, so it never reveals whether an account exists).
+  const fail = audience === "client" ? `${GENERIC} First time here? Open the invitation email from MKB Financial Group and choose your password there.` : GENERIC;
   if (!user || !ok || user.status !== "active") {
-    if (user) {
+    // An invited client who hasn't set a password yet can't be "guessing": don't count it toward a lockout.
+    if (user && !(user.status === "pending" && !user.password_hash)) {
       const fails = user.failed_attempts + 1;
       const lock = fails >= sec.maxFailedAttempts ? (sec.lockoutMinutes ? addMinutes(t, sec.lockoutMinutes) : "9999-12-31T00:00:00.000Z") : null;
       await run(db, "UPDATE users SET failed_attempts = ?, locked_until = COALESCE(?, locked_until) WHERE id = ?", lock ? 0 : fails, lock, user.id);
       await audit(db, { kind: "anonymous", ip, userId: user.id, memberId: user.member_id ?? undefined }, { action: "Failed login", resource: "MKB Business Suite", meta: lock ? "Wrong password — account locked" : "Wrong password", success: false });
+    } else if (user) {
+      await audit(db, { kind: "anonymous", ip, userId: user.id }, { action: "Failed login", resource: "Client portal", meta: "Portal not set up yet — invitation not accepted", success: false });
     }
-    throw new HttpError(401, GENERIC, "bad_credentials");
+    throw new HttpError(401, fail, "bad_credentials");
   }
   // Each account signs in only on its own screen (never says which kind exists).
   if (user.kind !== audience) throw new HttpError(401, GENERIC, "bad_credentials");
@@ -245,6 +251,16 @@ export async function revokeAllSessions(env: AppEnv, userId: string) {
 /** Always answers the same way, whether or not the email exists. */
 export async function forgotPassword(env: AppEnv, req: Request, email: string) {
   if (!(await rateLimit(env.DB, `forgot-ip:${clientIp(req)}`, 10, 60))) throw new HttpError(429, "Too many requests. Try again later.", "rate_limited");
+  // An invited client who never set a password: send a fresh setup link instead (to the address MKB invited).
+  const invited = await one<UserRow>(env.DB, "SELECT * FROM users WHERE email = ? AND status = 'pending' AND kind = 'client' AND password_hash IS NULL", email.toLowerCase());
+  if (invited) {
+    if (!(await rateLimit(env.DB, `forgot-setup:${invited.id}`, 3, 60))) return;
+    const { token } = await issueInviteToken(env, invited.id, 7);
+    const link = `${portalOrigin(env)}/portal/welcome?token=${token}`;
+    await sendEmail(env, { to: invited.email, template: "portal_setup_link", subject: "Set up your MKB Financial Group client portal", text: `You haven't set up your client portal yet. Use this link within 7 days to choose your password:\n\n${link}\n\nIf you didn't ask for this, you can ignore this email.` });
+    await audit(env.DB, { kind: "anonymous", ip: clientIp(req), userId: invited.id }, { action: "Invitation", resource: invited.email, meta: "Portal setup link re-sent from the sign-in page" });
+    return;
+  }
   const user = await one<UserRow>(env.DB, "SELECT * FROM users WHERE email = ? AND status = 'active'", email.toLowerCase());
   if (!user) return;
   const token = randomToken();
@@ -296,6 +312,8 @@ export async function acceptInvite(env: AppEnv, req: Request, token: string, pas
   const stmts = [
     env.DB.prepare("UPDATE users SET password_hash = ?, password_changed_at = ?, status = 'active' WHERE id = ?").bind(await hashPassword(password), t, userId),
     env.DB.prepare("UPDATE auth_tokens SET used_at = ? WHERE token_hash = ?").bind(t, hash),
+    // Any other invitation links for this account stop working once a password is set.
+    env.DB.prepare("UPDATE auth_tokens SET used_at = ? WHERE user_id = ? AND purpose = 'invite' AND used_at IS NULL").bind(t, userId),
   ];
   if (u.member_id) {
     stmts.push(env.DB.prepare("UPDATE members SET status = 'active', onboarding = json_set(onboarding, '$.\"Invitation accepted\"', ?, '$.\"Account created\"', ?) WHERE id = ? AND status = 'invited'").bind(t, t, u.member_id));

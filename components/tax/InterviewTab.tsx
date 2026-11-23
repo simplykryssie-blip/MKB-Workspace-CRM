@@ -34,7 +34,7 @@ export function InterviewTab({ r }: { r: TaxReturn }) {
   const toast = useToast();
   const can = tax.access.edit;
   const sections = useMemo(() => sectionsFor(r.form), [r.form]);
-  const a: Answers = useMemo(() => ({ ...(r.organizer.interview?.answers ?? {}), __form: r.form, __year: String(r.taxYear) }), [r.organizer.interview?.answers, r.form, r.taxYear]);
+  const a: Answers = useMemo(() => ({ ...(r.organizer.interview?.answers ?? {}), __form: r.form, __year: String(r.taxYear), __amended: r.amended ? "1" : "" }), [r.organizer.interview?.answers, r.form, r.taxYear, r.amended]);
   const started = !!r.organizer.interview;
   const pg = progress(sections, a);
   const cov = coverage(sections, a);

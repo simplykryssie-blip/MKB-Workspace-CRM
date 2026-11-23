@@ -118,7 +118,7 @@ export async function publicTaxInterview(env: AppEnv, token: string, ip: string)
     const vars = { ...feeWords(fees), clientName: c.name, date: longDate(now()), taxYear: String(r.taxYear), service: "", fee: "" };
     letter = { key, service: { title: fillLetter(letters[key].title, vars), body: fillLetter(letters[key].body, vars), version: letters[key].version }, terms: { title: fillLetter(letters.terms.title, vars), body: fillLetter(letters.terms.body, vars), version: letters.terms.version } };
   }
-  return { taxYear: r.taxYear, form: r.form, kind: r.kind, name: c.name, firstName: firstOf(c), expiresAt: l.expiresAt, answers, prefilled: [...ids], rev: r.rev, letter };
+  return { taxYear: r.taxYear, form: r.form, kind: r.kind, amended: r.amended || undefined, name: c.name, firstName: firstOf(c), expiresAt: l.expiresAt, answers, prefilled: [...ids], rev: r.rev, letter };
 }
 
 export async function publicSaveTaxInterview(env: AppEnv, token: string, ip: string, b: { answers?: unknown; rev?: unknown }) {
@@ -136,7 +136,7 @@ const cleanAnswers = (v: unknown): Answers => {
   if (!v || typeof v !== "object" || Array.isArray(v)) throw badRequest("Invalid answers.");
   if (JSON.stringify(v).length > 250_000) throw new HttpError(413, "These answers are too large to save.");
   const out = { ...(v as Answers) };
-  delete out.__form; delete out.__year;
+  delete out.__form; delete out.__year; delete out.__amended;
   return out;
 };
 
@@ -179,7 +179,7 @@ export async function publicSubmitTaxInterview(env: AppEnv, token: string, ip: s
     letterParts = { l: lt, t: terms };
   }
   // The document checklist and requests (what the in-office screen does on submit).
-  const meta = { ...answers, __form: r.form, __year: String(r.taxYear) };
+  const meta = { ...answers, __form: r.form, __year: String(r.taxYear), __amended: r.amended ? "1" : "" };
   const docs = docsFor(sectionsFor(r.form), meta);
   const cur = await one<{ module_data: string | null }>(env.DB, "SELECT module_data FROM clients WHERE id = ?", c.id);
   const md = json<Record<string, Record<string, unknown>[]>>(cur?.module_data, {});

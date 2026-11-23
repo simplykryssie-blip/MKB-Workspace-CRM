@@ -53,8 +53,8 @@ const amended: Section = {
   id: "amend",
   title: "What needs to change",
   group: "Amendment",
-  show: form("1040-X"),
-  intro: "An amended return (Form 1040-X) corrects a return you already filed. Tell us what was missed or wrong — then confirm the rest of your information.",
+  show: (a) => form("1040-X")(a) || a.__amended === "1",
+  intro: "An amended return corrects a return that was already filed. Tell us what was missed or wrong — then confirm the rest of your information.",
   covers: ["Form 1040-X — explanation of changes", "Form 1040-X — original return figures"],
   questions: [
     { id: "amendYear", label: "Which tax year are you amending?", type: "year" },
@@ -762,7 +762,7 @@ const finish: Section = {
 /* ================================================================== */
 
 const INDIVIDUAL = [amended, you, filing, spouse, seniors, household, dependents, incomeScreen, w2s, investments, retirement, socialSecurity, rentals, k1s, otherIncome, schC, bizIncome, cogs, expenses, people, vehicleQ, vehicles, homeOffice, assets, schCOther, deductions, credits, payments, refund, finish];
-const BUSINESS = [entity, ownerRows, bizIncome, cogs, expenses, people, vehicleQ, vehicles, assets, balance, compliance, finish];
+const BUSINESS = [amended, entity, ownerRows, bizIncome, cogs, expenses, people, vehicleQ, vehicles, assets, balance, compliance, finish];
 
 /** Sections for a return's form, in interview order. */
 export function sectionsFor(f: TaxForm): Section[] {

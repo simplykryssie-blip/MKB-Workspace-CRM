@@ -47,8 +47,11 @@ export async function invitePortal(env: AppEnv, a: Actor, clientId: string, b: {
     const id = randomId("u");
     await run(env.DB, "INSERT INTO users (id, email, kind, client_id, status, created_at) VALUES (?, ?, 'client', ?, 'pending', ?)", id, email, clientId, t);
     u = { id, email, status: "pending", last_login_at: null, created_at: t };
+  } else if (u.status === "pending" && u.email === email) {
+    // Resending to the same address before they've set up: the earlier emails keep working too
+    // (until they expire or one is used), so whichever email the client opens gets them in.
   } else {
-    // Re-invite (or re-enable after revoking): older invitation links stop working.
+    // Re-enabling after revoking, or a new email address: older invitation links stop working.
     await env.DB.batch([
       env.DB.prepare("UPDATE users SET email = ?, status = 'pending', password_hash = NULL WHERE id = ?").bind(email, u.id),
       env.DB.prepare("UPDATE auth_tokens SET used_at = ? WHERE user_id = ? AND purpose = 'invite' AND used_at IS NULL").bind(t, u.id),

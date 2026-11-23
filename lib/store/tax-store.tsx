@@ -148,15 +148,19 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     reset: () => dispatch({ type: "reset" }),
     setPreset: (preset: AccessPreset) => dispatch({ type: "preset", preset }),
 
-    createReturn(input: { clientId: string; taxYear: number; form: TaxForm; filingStatus?: FilingStatus; preparerId: string; reviewerId: string; states: string[]; extension?: boolean; extensionOnly?: boolean; amendsReturnId?: string }): string {
+    createReturn(input: { clientId: string; taxYear: number; form: TaxForm; filingStatus?: FilingStatus; preparerId: string; reviewerId: string; states: string[]; extension?: boolean; extensionOnly?: boolean; amendsReturnId?: string; amended?: boolean }): string {
       const c = C(input.clientId)!;
+      // Amended business returns: from "Amend this return", or marked amended on a new return (original filed elsewhere).
+      const amendedBiz = c.type === "business" && (!!input.amendsReturnId || !!input.amended);
+      const isAmd = !!input.amendsReturnId || amendedBiz;
       const base = `TR-${input.clientId}-${input.taxYear}`;
       const taken = (x: string) => get().returns.some((r) => r.id === x);
-      let id = input.amendsReturnId ? `${base}-AMD` : `${base}${taken(base) ? `-${input.form.replace(/\W/g, "")}` : ""}`;
-      for (let n = 2; taken(id); n++) id = `${input.amendsReturnId ? `${base}-AMD` : base}-${n}`;
-      const { due, extended } = dueDates(input.form, input.taxYear);
+      let id = isAmd ? `${base}-AMD` : `${base}${taken(base) ? `-${input.form.replace(/\W/g, "")}` : ""}`;
+      for (let n = 2; taken(id); n++) id = `${isAmd ? `${base}-AMD` : base}-${n}`;
+      // Amended returns have no fixed filing deadline.
+      const { due, extended } = amendedBiz ? { due: undefined, extended: undefined } : dueDates(input.form, input.taxYear);
       // Link to an existing engagement for this year, or create one on the client profile.
-      const title = `${input.taxYear} ${c.type === "business" ? "Business" : input.form === "1040-X" ? "Amended" : "Individual"} return (${input.form})`;
+      const title = `${input.taxYear} ${amendedBiz ? "Amended business" : c.type === "business" ? "Business" : input.form === "1040-X" ? "Amended" : "Individual"} return (${input.form})`;
       // Reuse the Tax service already on the profile: same tax year first, else one with no year in its title.
       const free = c.enrollments.filter((e) => e.service === "tax" && e.status !== "complete" && e.status !== "cancelled" && !get().returns.some((r) => r.enrollmentId === e.id));
       const existing = free.find((e) => e.title.startsWith(String(input.taxYear))) ?? free.find((e) => !/\b(19|20)\d{2}\b/.test(e.title));
@@ -165,10 +169,10 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       const priced = (code: string, qty = 1, fallback?: { label: string; price: number }): PriceLine[] => { const f = fees.find((x) => x.code === code) ?? (fallback ? { code, ...fallback } : undefined); return f ? [{ id: uid("p"), code, description: f.label, qty, unit: f.price }] : []; };
       const lines: PriceLine[] = input.extensionOnly
         ? priced(c.type === "business" ? "EXT-B" : "EXT-I", 1, { label: c.type === "business" ? "Extension (Form 7004)" : "Extension (Form 4868)", price: c.type === "business" ? 75 : 50 })
-        : input.amendsReturnId && c.type === "business"
+        : amendedBiz
           ? priced("PRIOR", 1, { label: "Prior-year / amended review", price: 125 }).map((l) => ({ ...l, description: `Amended ${input.form} return` }))
           : defaultPricing(input.form).flatMap((p) => priced(p.code, p.code === "STATE" || p.code === "STATE-B" ? Math.max(1, input.states.length) : p.qty));
-      const checklist: ChecklistItem[] = baseChecklist(c.type, { hasEin: !!c.business?.einLast4, form: input.form }).map((s) => ({ id: uid("ci"), ...s, required: true, source: "standard" }));
+      const checklist: ChecklistItem[] = baseChecklist(c.type, { hasEin: !!c.business?.einLast4, form: input.form, amended: amendedBiz }).map((s) => ({ id: uid("ci"), ...s, required: true, source: "standard" }));
       const at = nowIso();
       const r: TaxReturn = {
         id,
@@ -186,13 +190,14 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
         extension: input.extension && extended ? { filedAt: at, dueAt: extended } : undefined,
         extensionOnly: input.extensionOnly || undefined,
         amendsReturnId: input.amendsReturnId,
+        amended: amendedBiz || undefined,
         organizer: { status: "not_sent", answers: {} },
         checklist,
         efile: [],
         pricing: { lines, discount: 0 },
         statusHistory: [{ status: "Intake", at, by: meId() }],
         notes: [],
-        activity: [{ id: uid("x"), kind: "intake", text: `Return created — TY ${input.taxYear} ${input.form}${input.amendsReturnId ? ` (amends ${input.amendsReturnId})` : ""}${input.extensionOnly ? " — extension only" : ""}`, at, actor: "staff" }],
+        activity: [{ id: uid("x"), kind: "intake", text: `Return created — TY ${input.taxYear} ${input.form}${input.amendsReturnId ? ` (amends ${input.amendsReturnId})` : amendedBiz ? " — amended (original filed elsewhere)" : ""}${input.extensionOnly ? " — extension only" : ""}`, at, actor: "staff" }],
         createdAt: at,
       };
       dispatch({ type: "add", r });
@@ -297,7 +302,7 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
     },
     submitInterview(id: string, answers: Answers, by: "client" | "staff", consentName: string, opts: { brought?: string[]; request?: boolean; engagement?: EngagementAcceptance } = {}) {
       const r = R(id);
-      const docs = docsFor(sectionsFor(r.form), { ...answers, __form: r.form, __year: String(r.taxYear) });
+      const docs = docsFor(sectionsFor(r.form), { ...answers, __form: r.form, __year: String(r.taxYear), __amended: r.amended ? "1" : "" });
       const added: ChecklistItem[] = docs.filter((d) => !r.checklist.some((i) => i.name === d.name)).map((d) => ({ id: uid("ci"), ...d, required: true, source: "organizer" as const }));
       // In the office: papers the client brought are recorded as received; the rest can be requested right away.
       const brought = new Set(opts.brought ?? []);

@@ -175,7 +175,7 @@ export function ReturnDetail({ id }: { id: string }) {
                 <ReturnStatusBadge status={r.status} />
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-muted">
-                <span className="inline-flex items-center gap-1.5">{r.kind === "business" ? <Building2 size={14} /> : <User size={14} />}{FORM_LABEL[r.form]}</span>
+                <span className="inline-flex items-center gap-1.5">{r.kind === "business" ? <Building2 size={14} /> : <User size={14} />}{FORM_LABEL[r.form]}{r.amended ? " — amended" : ""}</span>
                 {r.filingStatus && <span>{r.filingStatus}</span>}
                 <span>States: {r.states.join(", ") || "none"}</span>
                 <span className="font-mono text-[11.5px] text-faint">{r.id}</span>
@@ -368,7 +368,7 @@ function OverviewTab({ r, client, otherYears }: { r: TaxReturn; client: Client; 
         <CardHeader icon={ClipboardList} title="Return details" />
         <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2.5 px-5 pb-5 text-[13.5px] sm:px-6">
           <dt className="text-muted">Tax year</dt><dd className="font-medium text-ink">{r.taxYear}</dd>
-          <dt className="text-muted">Form</dt><dd className="font-medium text-ink">{FORM_LABEL[r.form]}</dd>
+          <dt className="text-muted">Form</dt><dd className="font-medium text-ink">{FORM_LABEL[r.form]}{r.amended ? " — amended" : ""}</dd>
           {r.kind === "individual" && (
             <>
               <dt className="text-muted">Filing status</dt>

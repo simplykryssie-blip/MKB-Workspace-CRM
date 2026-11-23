@@ -196,12 +196,14 @@ export const ORGANIZERS: Record<ClientType, { title: string; questions: Organize
 };
 
 /** Checklist every return starts with (organizer answers add more). */
-export function baseChecklist(kind: ClientType, opts: { hasEin: boolean; form: TaxForm }): DocSpec[] {
+export function baseChecklist(kind: ClientType, opts: { hasEin: boolean; form: TaxForm; amended?: boolean }): DocSpec[] {
   if (kind === "business")
     return [
       ...(opts.hasEin ? [] : [{ name: "EIN confirmation letter (CP 575 / 147C)", category: "Tax ID", sensitive: true }]),
       { name: "Year-end profit & loss and balance sheet", category: "Financials", sensitive: false },
-      { name: "Prior-year business return", category: "Tax return", sensitive: true },
+      ...(opts.amended
+        ? [{ name: "Originally filed business return", category: "Tax return", sensitive: true }, { name: "Documents supporting the amendment", category: "Supporting", sensitive: false }]
+        : [{ name: "Prior-year business return", category: "Tax return", sensitive: true }]),
       { name: "Responsible party photo ID", category: "Identity", sensitive: true },
     ];
   return [
@@ -357,6 +359,8 @@ export type TaxReturn = {
   dueDiligence?: DueDiligence;
   /** This return amends an earlier return (1040-X, or an amended business return). */
   amendsReturnId?: string;
+  /** An amended business return (1065, 1120-S, 1120…), including ones whose original MKB didn't file. */
+  amended?: boolean;
   /** Only the extension is being filed for now; the full return comes later. */
   extensionOnly?: boolean;
   approvalSignatureId?: string;

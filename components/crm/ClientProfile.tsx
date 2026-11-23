@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useClientGate } from "@/components/team/AccessGuard";
 import Link from "next/link";
 import {
@@ -114,6 +114,7 @@ export function ClientProfile({ id }: { id: string }) {
   // a client can disappear while its page is open — e.g. a new client the server refused — and React
   // crashes the whole app if the number of hooks changes between renders.)
   const [liveNext, setLiveNext] = useState<{ at: string } | null | undefined>(undefined);
+  const inviting = useRef(false);
   const cid = c?.id;
   useEffect(() => {
     if (!BACKEND || !cid) return;
@@ -140,11 +141,14 @@ export function ClientProfile({ id }: { id: string }) {
   const portalInvite = async () => {
     if (!BACKEND) { store.sendInvite(c.id); toast(`Portal invitation sent to ${c.email}`); return; }
     if (!c.email) { toast("Add the client's email first", "info"); return; }
+    if (inviting.current) return; // a double tap sends one invitation, not two
+    inviting.current = true;
     try {
       const r = await call<{ emailed: boolean }>("POST", `/api/clients/${c.id}/portal`, {});
       toast(r.emailed ? `Portal invitation sent to ${c.email}` : "Portal access created, but the email didn't send — check Settings → Email, then resend the invite.", r.emailed ? "success" : "info");
       window.dispatchEvent(new CustomEvent("mkb:client-changed", { detail: c.id }));
     } catch (e) { toast(e instanceof Error ? e.message : "Couldn't send the invitation", "info"); }
+    finally { inviting.current = false; }
   };
   const portalRevoke = async () => {
     if (!confirm(`Turn off portal access for ${c.name}? They're signed out right away. You can invite them again later.`)) return;

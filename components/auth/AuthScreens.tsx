@@ -101,7 +101,7 @@ export function LoginFlow({ portal = false }: { portal?: boolean }) {
         <Err msg={err} />
         <button className={primary} disabled={busy || !email || !password}>{busy ? "Signing in…" : "Sign in"}</button>
         <button type="button" className="w-full text-[13.5px] font-semibold text-accent hover:underline" onClick={() => { setErr(null); setStep("forgot"); }}>Forgot your password?</button>
-        {portal && <p className="text-center text-[12.5px] text-muted">New here? Your MKB team emails you an invitation to set up your portal.</p>}
+        {portal && <p className="text-center text-[12.5px] text-muted"><b>First time here?</b> You don&rsquo;t have a password yet. Open the invitation email from MKB and tap the button to choose one. Can&rsquo;t find it? Tap &ldquo;Forgot your password?&rdquo; and we&rsquo;ll email you a new setup link.</p>}
       </form>
     </Shell>
   );

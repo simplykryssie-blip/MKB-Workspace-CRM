@@ -37,6 +37,7 @@ export function NewReturnDialog({ open, onClose, defaultYear, clientId: presetCl
   const [states, setStates] = useState<string[]>(["GA"]);
   const [extension, setExtension] = useState(false);
   const [extOnly, setExtOnly] = useState(false);
+  const [amended, setAmended] = useState(false);
   const client = clients.find((c) => c.id === clientId);
 
   useEffect(() => {
@@ -53,13 +54,15 @@ export function NewReturnDialog({ open, onClose, defaultYear, clientId: presetCl
     if (client.address.state && client.address.state.length === 2) setStates([client.address.state]);
   }, [client]);
 
-  const duplicate = tax.returns.find((r) => r.clientId === clientId && r.taxYear === year && r.form === form);
-  const { due, extended } = dueDates(form, year);
+  const isBiz = client?.type === "business";
+  const amd = isBiz && amended;
+  const duplicate = tax.returns.find((r) => r.clientId === clientId && r.taxYear === year && r.form === form && !!r.amended === amd && !r.amendsReturnId);
+  const { due, extended } = amd ? { due: undefined, extended: undefined } : dueDates(form, year);
   const valid = !!client && !duplicate;
 
   const create = () => {
     if (!valid) return;
-    const id = tax.createReturn({ clientId, taxYear: year, form, filingStatus: client!.type === "individual" ? filingStatus : undefined, preparerId: preparer, reviewerId: reviewer, states, extension, extensionOnly: extOnly });
+    const id = tax.createReturn({ clientId, taxYear: year, form, filingStatus: client!.type === "individual" ? filingStatus : undefined, preparerId: preparer, reviewerId: reviewer, states, extension: amd ? false : extension, extensionOnly: amd ? false : extOnly, amended: amd || undefined });
     toast(`TY ${year} ${form} return created for ${client!.name}`);
     onCreated(id);
   };
@@ -95,6 +98,7 @@ export function NewReturnDialog({ open, onClose, defaultYear, clientId: presetCl
           </div>
         </div>
         {preparer === reviewer && <p className="flex items-center gap-1.5 rounded-xl bg-warning-soft px-3 py-2 text-[12.5px] text-warning-ink"><AlertTriangle size={14} /> Preparer and reviewer are the same person — a second reviewer is recommended.</p>}
+        {isBiz && <Checkbox label="Amended return — corrects a business return already filed" hint="Use this when the original was filed by another preparer (or before MKB used this system). If MKB filed it here, open that return and use “Amend this return” instead." checked={amended} onChange={() => { setAmended((v) => !v); setExtOnly(false); setExtension(false); }} />}
         <div className="rounded-xl bg-surface-2 px-3.5 py-2.5 text-[13px] text-ink-2 ring-1 ring-line">
           {due ? <>Due {fmtDate(due)}{extended && <> · extended deadline {fmtDate(extended)}</>}</> : "Amended returns have no fixed filing deadline."}
         </div>
@@ -102,7 +106,7 @@ export function NewReturnDialog({ open, onClose, defaultYear, clientId: presetCl
         {due && !extOnly && <Checkbox label="Extension already filed" checked={extension} onChange={() => setExtension((v) => !v)} />}
         {duplicate && (
           <p className="flex items-center gap-1.5 rounded-xl border border-danger/30 bg-danger-soft px-3 py-2 text-[13px] text-danger-ink">
-            <AlertTriangle size={14} /> {client?.name} already has a TY {year} {form} return.{" "}
+            <AlertTriangle size={14} /> {client?.name} already has a TY {year} {amd ? "amended " : ""}{form} return.{" "}
             <Link href={`/services/tax-preparation/returns/${duplicate.id}`} className="font-semibold underline">Open it</Link>
           </p>
         )}
