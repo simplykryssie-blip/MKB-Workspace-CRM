@@ -451,6 +451,22 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       const it = R(id).checklist.find((i) => i.id === itemId)!;
       up(id, (x) => log({ ...x, checklist: x.checklist.map((i) => (i.id === itemId ? { ...i, waivedReason: reason } : i)) }, "upload", reason ? `Marked not needed: ${it.name} (${reason})` : `Restored to checklist: ${it.name}`));
     },
+    /** A wrong file was re-filed and requested again: checklist items that pointed at it follow the new request. */
+    relinkDoc(clientId: string, oldDocId: string, newDocId: string) {
+      get().returns.filter((r) => r.clientId === clientId && r.checklist.some((i) => i.docId === oldDocId)).forEach((r) =>
+        up(r.id, (x) => log({ ...x, checklist: x.checklist.map((i) => (i.docId === oldDocId ? { ...i, docId: newDocId } : i)) }, "upload", "Wrong file uploaded — the client was asked again")));
+    },
+    /** Use a document already on the client's profile for a checklist item. */
+    linkItemDoc(id: string, itemId: string, docId: string) {
+      const r = R(id);
+      const it = r.checklist.find((i) => i.id === itemId)!;
+      const c = C(r.clientId);
+      const d = c?.documents.find((x) => x.id === docId);
+      up(id, (x) => log({ ...x, checklist: x.checklist.map((i) => (i.id === itemId ? { ...i, docId } : i)) }, "upload", `"${d?.name ?? "Profile document"}" used for: ${it.name}`));
+      // The open request this item had (if any) is no longer needed.
+      const prev = it.docId && c?.documents.find((x) => x.id === it.docId);
+      if (prev && (prev.status === "requested" || prev.status === "rejected")) clients().removeRequest(r.clientId, prev.id);
+    },
     removeItem(id: string, itemId: string) {
       const it = R(id).checklist.find((i) => i.id === itemId)!;
       up(id, (x) => log({ ...x, checklist: x.checklist.filter((i) => i.id !== itemId) }, "upload", `Removed "${it.name}" from checklist`));

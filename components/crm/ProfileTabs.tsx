@@ -1,5 +1,6 @@
 "use client";
 
+import { RenameDocDialog, WrongDocDialog } from "./DocFixDialogs";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -536,6 +537,8 @@ export function DocumentsTab({ c, act }: { c: Client; act: Act }) {
   const toast = useToast();
   const [svc, setSvc] = useState<ServiceKey | "all">("all");
   const [state, setState] = useState<"all" | "requested" | "on_file">("all");
+  const [renaming, setRenaming] = useState<ClientDocument | null>(null);
+  const [wrong, setWrong] = useState<ClientDocument | null>(null);
   const [canSensitive, setCanSensitive] = useState(true);
   const docs = c.documents.filter((d) => (svc === "all" || d.service === svc) && (state === "all" || (state === "requested" ? d.status === "requested" || d.status === "rejected" : d.status === "received" || d.status === "reviewed")));
   const services = [...new Set([...c.documents.map((d) => d.service), ...c.enrollments.map((e) => e.service)])];
@@ -581,7 +584,7 @@ export function DocumentsTab({ c, act }: { c: Client; act: Act }) {
                     {outstanding && <Badge tone={dueOf(d) < new Date().toISOString() ? "danger" : "neutral"}>{dueOf(d) < new Date().toISOString() ? "Overdue · was due" : "Due"} {fmtDate(dueOf(d))}</Badge>}
                   </div>
                   <div className="mt-0.5 text-[12px] text-muted">
-                    {d.taxYear ? `TY ${d.taxYear} · ` : ""}{d.category} · {d.uploadedAt && !outstanding ? `Uploaded ${relTime(d.uploadedAt)} by ${d.uploadedBy}${d.sizeKb ? ` · ${fileSize(d.sizeKb)}` : ""}` : `Requested ${relTime(d.requestedAt)}`}
+                    {outstanding && d.note ? <span className="font-medium text-warning-ink">Note to client: {d.note} · </span> : null}{d.taxYear ? `TY ${d.taxYear} · ` : ""}{d.category} · {d.uploadedAt && !outstanding ? `Uploaded ${relTime(d.uploadedAt)} by ${d.uploadedBy}${d.sizeKb ? ` · ${fileSize(d.sizeKb)}` : ""}` : `Requested ${relTime(d.requestedAt)}`}
                   </div>
                 </div>
                 <ServiceTag service={d.service} short />
@@ -601,7 +604,8 @@ export function DocumentsTab({ c, act }: { c: Client; act: Act }) {
                         trigger={({ toggle }) => <IconAction icon={MoreHorizontal} label="More actions" disabled={locked} onClick={toggle} />}
                         items={[
                           { label: "Mark reviewed", icon: CheckCircle2, onSelect: () => setStatus(d, "reviewed"), disabled: d.status === "reviewed" },
-                          { label: "Ask client to re-upload", icon: RefreshCcw, onSelect: () => setStatus(d, "rejected"), danger: true },
+                          { label: "Rename / edit details…", icon: PenLine, onSelect: () => setRenaming(d) },
+                          { label: "Wrong or unreadable file…", icon: RefreshCcw, onSelect: () => setWrong(d), danger: true },
                         ]}
                       />
                     </>
@@ -668,6 +672,8 @@ export function DocumentsTab({ c, act }: { c: Client; act: Act }) {
       <p className="flex items-center gap-1.5 border-t border-line px-5 py-3 text-[12px] text-muted sm:px-6">
         <Lock size={12} className="shrink-0" /> Restricted files (IDs, tax returns, court records) need the sensitive-documents permission. Every view and download is recorded in the audit log.
       </p>
+      <RenameDocDialog c={c} doc={renaming} open={!!renaming} onClose={() => setRenaming(null)} />
+      <WrongDocDialog c={c} doc={wrong} open={!!wrong} onClose={() => setWrong(null)} />
     </Card>
   );
 }

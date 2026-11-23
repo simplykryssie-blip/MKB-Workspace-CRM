@@ -63,6 +63,8 @@ export type ClientDocument = {
   /** Bookkeeping documents are tagged by business workspace and month ("2026-10"). */
   workspaceId?: string;
   period?: string;
+  /** A note to the client about this request (e.g. why we need it again). Shown in the portal. */
+  note?: string;
   /** Business services: the business entity and service request the file belongs to. */
   entityId?: string;
   bizRequestId?: string;

@@ -400,6 +400,42 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
     setDocInternal(id: string, docId: string, internal: boolean) {
       up(id, (c) => ({ ...c, documents: c.documents.map((x) => (x.id === docId ? { ...x, internal: internal || undefined } : x)) }));
     },
+    /** Correct an uploaded file's details (name, tax year, category). The file itself doesn't change. */
+    updateDocument(id: string, docId: string, patch: { name?: string; taxYear?: number | null; category?: string }) {
+      up(id, (c) => {
+        const d = c.documents.find((x) => x.id === docId);
+        if (!d) return c;
+        const next: ClientDocument = { ...d, ...(patch.name?.trim() ? { name: patch.name.trim().slice(0, 160) } : {}), ...(patch.category?.trim() ? { category: patch.category.trim().slice(0, 60) } : {}), ...(patch.taxYear === null ? { taxYear: undefined } : patch.taxYear ? { taxYear: patch.taxYear } : {}) };
+        const what = [next.name !== d.name && `renamed "${d.name}" to "${next.name}"`, next.taxYear !== d.taxYear && `tax year ${next.taxYear ?? "removed"}`, next.category !== d.category && `category ${next.category}`].filter(Boolean).join(", ");
+        return what ? log({ ...c, documents: c.documents.map((x) => (x.id === docId ? next : x)) }, "upload", `Document details changed: ${what}`) : c;
+      });
+    },
+    /**
+     * The client uploaded the wrong file (or an unreadable one). "different": the file is kept under what it
+     * really is, and the original request goes back to the client as a new request. "unreadable": the same
+     * request is reopened. Either way the client sees the note in their portal and gets a message.
+     * Returns the id of the open request (new or reopened).
+     */
+    wrongDocument(id: string, d: ClientDocument, o: { kind: "different" | "unreadable"; actualName?: string; note: string }): string {
+      const note = o.note.trim().slice(0, 400);
+      if (o.kind === "unreadable") {
+        up(id, (x) => log({ ...x, documents: x.documents.map((y) => (y.id === d.id ? { ...y, status: "rejected" as const, note: note || undefined } : y)) }, "upload", `Asked client to re-upload "${d.name}"${note ? ` (${note})` : ""}`));
+        return d.id;
+      }
+      const openId = uid("d");
+      const actual = (o.actualName?.trim() || `${d.name} (wrong file)`).slice(0, 160);
+      const request: ClientDocument = { id: openId, name: d.name, service: d.service, category: d.category, sensitive: d.sensitive, taxYear: d.taxYear, workspaceId: d.workspaceId, period: d.period, entityId: d.entityId, bizRequestId: d.bizRequestId, expMatterId: d.expMatterId, expCaseId: d.expCaseId, status: "requested", requestedAt: nowIso(), dueAt: new Date(Date.now() + 7 * 86400000).toISOString(), note: note || undefined };
+      up(id, (x) => log({ ...x, documents: [request, ...x.documents.map((y) => (y.id === d.id ? { ...y, name: actual, status: "reviewed" as const, note: undefined } : y))] }, "upload", `Wrong document: the file uploaded for "${d.name}" is "${actual}" — asked the client again${note ? ` (${note})` : ""}`));
+      return openId;
+    },
+    /** Cancel an open document request (only one still waiting for a file). */
+    removeRequest(id: string, docId: string) {
+      up(id, (c) => {
+        const d = c.documents.find((x) => x.id === docId);
+        if (!d || !(d.status === "requested" || d.status === "rejected") || d.hasFile) return c;
+        return log({ ...c, documents: c.documents.filter((x) => x.id !== docId) }, "upload", `Request for "${d.name}" no longer needed`);
+      });
+    },
     setDocStatus(id: string, docId: string, status: ClientDocument["status"]) {
       up(id, (c) => {
         const d = c.documents.find((x) => x.id === docId)!;

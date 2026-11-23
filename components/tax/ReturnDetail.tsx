@@ -1,5 +1,8 @@
 "use client";
 
+import { RenameDocDialog, WrongDocDialog } from "@/components/crm/DocFixDialogs";
+import type { ClientDocument } from "@/lib/types";
+
 import Link from "next/link";
 import { useClientGate } from "@/components/team/AccessGuard";
 import { useEffect, useMemo, useState } from "react";
@@ -447,7 +450,15 @@ function DocumentsTab({ r, client, onAdd, onWaive }: { r: TaxReturn; client: Cli
   const tax = useTax();
   const toast = useToast();
   const [filter, setFilter] = useState<"all" | "outstanding" | "in">("all");
+  const [renaming, setRenaming] = useState<ClientDocument | null>(null);
+  const [wrong, setWrong] = useState<ClientDocument | null>(null);
   const can = tax.access.edit;
+  const docOf = (i: { docId?: string }) => (i.docId ? client.documents.find((d) => d.id === i.docId) ?? null : null);
+  // Tax documents for this year that are on the client's profile but not tied to a checklist item
+  // (e.g. uploaded straight to the profile): shown here so they can be used for an item.
+  const linked = new Set(r.checklist.map((i) => i.docId).filter(Boolean));
+  const others = client.documents.filter((d) => d.service === "tax" && (d.taxYear === r.taxYear || !d.taxYear) && !linked.has(d.id) && (d.status === "received" || d.status === "reviewed"));
+  const openItems = r.checklist.filter((i) => !i.archived && !i.waivedReason && ["needed", "requested", "rejected"].includes(itemStatus(i, client)));
   const items = r.checklist.filter((i) => {
     const s = itemStatus(i, client);
     return filter === "all" || (filter === "outstanding" ? ["needed", "requested", "rejected"].includes(s) && i.required : ["received", "reviewed"].includes(s));
@@ -525,7 +536,10 @@ function DocumentsTab({ r, client, onAdd, onWaive }: { r: TaxReturn; client: Cli
                   label={`More for ${i.name}`}
                   trigger={({ toggle }) => <button onClick={toggle} disabled={!can} aria-label={`More actions for ${i.name}`} className="grid h-8 w-8 place-items-center rounded-lg text-muted hover:bg-surface-hover hover:text-ink disabled:opacity-30"><MoreHorizontal size={16} /></button>}
                   items={[
-                    ...(s === "received" || s === "reviewed" ? [{ label: "Ask client to re-upload", icon: RotateCcw, onSelect: () => { tax.reviewItem(r.id, i.id, false); toast("Re-upload requested"); } }] : []),
+                    ...((s === "received" || s === "reviewed") && docOf(i) ? [
+                      { label: "Rename / edit details…", icon: FilePlus2, onSelect: () => setRenaming(docOf(i)) },
+                      { label: "Wrong or unreadable file…", icon: RotateCcw, onSelect: () => setWrong(docOf(i)) },
+                    ] : []),
                     s === "waived" ? { label: "Restore to checklist", icon: RotateCcw, onSelect: () => { tax.waiveItem(r.id, i.id, undefined); toast("Restored"); } } : { label: "Mark not needed…", icon: XCircle, onSelect: () => onWaive(i.id) },
                     ...(i.source === "custom" ? [{ label: "Remove item", icon: Trash2, danger: true, onSelect: () => { tax.removeItem(r.id, i.id); toast("Removed"); } }] : []),
                   ]}
@@ -535,6 +549,28 @@ function DocumentsTab({ r, client, onAdd, onWaive }: { r: TaxReturn; client: Cli
           );
         })}
       </ul>
+      {others.length > 0 && (
+        <div className="border-t border-line">
+          <p className="px-5 pt-4 text-[13px] font-semibold text-ink sm:px-6">Other TY {r.taxYear} tax documents on {client.name}&rsquo;s profile</p>
+          <p className="px-5 pb-2 text-[12px] text-muted sm:px-6">Uploaded outside this checklist. Use one for a checklist item, or fix its name.</p>
+          <ul className="divide-y divide-line">
+            {others.map((d) => (
+              <li key={d.id} className="flex flex-wrap items-center gap-2.5 px-5 py-2.5 sm:px-6">
+                <span className="min-w-0 flex-1"><span className="block truncate text-[13.5px] font-medium text-ink">{d.sensitive && !tax.access.sensitiveDocs ? "Restricted document" : d.name}</span><span className="block text-[12px] text-muted">{d.category}{d.uploadedAt ? ` · uploaded ${fmtDate(d.uploadedAt)} by ${d.uploadedBy ?? "staff"}` : ""}</span></span>
+                {can && openItems.length > 0 && (
+                  <select aria-label={`Use ${d.name} for a checklist item`} value="" onChange={(e) => { if (!e.target.value) return; const it = r.checklist.find((x) => x.id === e.target.value); tax.linkItemDoc(r.id, e.target.value, d.id); toast(`Used for: ${it?.name}`); }} className="h-8 max-w-[260px] rounded-lg border border-line bg-surface px-2 text-[12.5px] text-ink">
+                    <option value="">Use for…</option>
+                    {openItems.map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}
+                  </select>
+                )}
+                {can && <Button size="sm" variant="ghost" onClick={() => setRenaming(d)}>Rename</Button>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <RenameDocDialog c={client} doc={renaming} open={!!renaming} onClose={() => setRenaming(null)} />
+      <WrongDocDialog c={client} doc={wrong} open={!!wrong} onClose={() => setWrong(null)} />
       <p className="flex items-center gap-1.5 border-t border-line px-5 py-3 text-[12px] text-muted sm:px-6"><Lock size={12} className="shrink-0" /> No real tax documents exist in the preview. Restricted items need the sensitive-documents permission; every view is logged.</p>
     </Card>
   );

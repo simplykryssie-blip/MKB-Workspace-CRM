@@ -93,7 +93,8 @@ export async function portalHome(env: AppEnv, a: Actor) {
   for (const e of await all<{ service: string; title: string; stage: string; status: string }>(env.DB, "SELECT service, title, stage, status FROM client_enrollments WHERE client_id = ? AND service IN ('biz', 'expunge') AND status != 'cancelled'", c.id))
     services.push({ service: e.service, name: SERVICE_NAME[e.service] ?? e.service, title: e.title, status: e.status === "complete" ? "Complete" : e.stage });
   // Documents MKB asked for
-  for (const d of (md.documents ?? []).filter((x) => x.status === "requested" && !secureForm(x))) todos.push({ id: `doc-${d.id}`, kind: "upload", title: `Upload: ${d.name}`, detail: d.taxYear ? `For your ${d.taxYear} tax return` : SERVICE_NAME[d.service], service: d.service, ref: d.id });
+  // Requests waiting on the client — including ones MKB asked for again ("rejected"), with MKB's note.
+  for (const d of (md.documents ?? []).filter((x) => (x.status === "requested" || x.status === "rejected") && !secureForm(x))) todos.push({ id: `doc-${d.id}`, kind: "upload", title: `${d.status === "rejected" ? "Upload again" : "Upload"}: ${d.name}`, detail: [d.note, d.taxYear ? `For your ${d.taxYear} tax return` : SERVICE_NAME[d.service]].filter(Boolean).join(" · "), service: d.service, ref: d.id });
   for (const d of (md.documents ?? []).filter((x) => x.status === "requested" && ssnRequest(x))) todos.push({ id: `doc-${d.id}`, kind: "upload", title: `Enter securely: ${d.name.replace(/\s*\(secure form\)/i, "")}`, detail: `${SERVICE_NAME[d.service] ?? ""} · on the Documents tab`, service: d.service, ref: d.id });
   // Invoices to pay
   for (const r of await all<InvoiceRow>(env.DB, "SELECT * FROM invoices WHERE client_id = ? AND status IN ('open', 'partial') AND payment_mode = 'upfront'", c.id)) {
@@ -164,9 +165,9 @@ export async function portalDocuments(env: AppEnv, a: Actor) {
   const c = await me(env, a);
   const stored = new Set((await all<{ id: string }>(env.DB, "SELECT id FROM client_files WHERE client_id = ?", c.id)).map((f) => f.id));
   const docs = (json<MD>(c.module_data, {}).documents ?? []).filter((d) => !d.internal).map((d) => (stored.has(d.id) ? { ...d, hasFile: true } : d));
-  const shape = (d: ClientDocument & { hasFile?: boolean; fileName?: string }) => ({ id: d.id, name: d.name, fileName: d.fileName, secureForm: secureForm(d), ssnForm: ssnRequest(d), service: d.service, serviceName: SERVICE_NAME[d.service] ?? "", category: d.category, taxYear: d.taxYear, requestedAt: d.requestedAt, uploadedAt: d.uploadedAt, uploadedBy: d.uploadedBy, status: d.status, hasFile: !!d.hasFile });
+  const shape = (d: ClientDocument & { hasFile?: boolean; fileName?: string }) => ({ id: d.id, name: d.name, fileName: d.fileName, secureForm: secureForm(d), ssnForm: ssnRequest(d), note: d.status === "rejected" || d.status === "requested" ? d.note : undefined, again: d.status === "rejected" || undefined, service: d.service, serviceName: SERVICE_NAME[d.service] ?? "", category: d.category, taxYear: d.taxYear, requestedAt: d.requestedAt, uploadedAt: d.uploadedAt, uploadedBy: d.uploadedBy, status: d.status, hasFile: !!d.hasFile });
   return {
-    requested: docs.filter((d) => d.status === "requested").map(shape),
+    requested: docs.filter((d) => d.status === "requested" || d.status === "rejected").map(shape),
     files: (docs as (ClientDocument & { hasFile?: boolean })[]).filter((d) => d.hasFile && d.status !== "requested" && d.status !== "rejected").map(shape),
   };
 }
@@ -194,13 +195,13 @@ export async function portalUpload(env: AppEnv, a: Actor, req: Request, q: { doc
   const docs = md.documents ?? [];
   const t = now();
   let doc = q.doc ? docs.find((d) => d.id === q.doc) : undefined;
-  if (q.doc && (!doc || doc.status !== "requested")) throw badRequest("That request was already completed — upload it as an extra document instead.");
+  if (q.doc && (!doc || (doc.status !== "requested" && doc.status !== "rejected"))) throw badRequest("That request was already completed — upload it as an extra document instead.");
   if (doc && secureForm(doc)) throw badRequest("That information is collected through a secure form, not an upload. Upload this file as an extra document instead.");
   const service = (doc?.service ?? (["tax", "books", "biz", "expunge"].includes(q.service ?? "") ? q.service : "tax")) as ServiceKey;
   const fileId = doc?.id ?? randomId("d");
   const key = `clients/${c.id}/${fileId}.${ext}`;
   await env.FILES.put(key, bytes, { httpMetadata: { contentType: type }, customMetadata: { uploadedBy: "client", originalName: rawName } });
-  const entry = { ...(doc ?? { id: fileId, name: (q.note?.trim().slice(0, 120) || rawName.replace(/\.[^.]+$/, "")), service, category: "Uploaded by client", sensitive: true, requestedAt: t }), status: "received" as const, uploadedAt: t, uploadedBy: "client" as const, sizeKb: Math.max(1, Math.round(bytes.length / 1024)), fileName: rawName, hasFile: true };
+  const entry = { ...(doc ? { ...doc, note: undefined } : { id: fileId, name: (q.note?.trim().slice(0, 120) || rawName.replace(/\.[^.]+$/, "")), service, category: "Uploaded by client", sensitive: true, requestedAt: t }), status: "received" as const, uploadedAt: t, uploadedBy: "client" as const, sizeKb: Math.max(1, Math.round(bytes.length / 1024)), fileName: rawName, hasFile: true };
   md.documents = doc ? docs.map((d) => (d.id === fileId ? entry : d)) : [entry as ClientDocument, ...docs];
   doc = entry as ClientDocument;
   const res = await run(env.DB, "UPDATE clients SET module_data = ?, rev = rev + 1, updated_at = ?, last_activity_at = ? WHERE id = ? AND rev = ?", JSON.stringify(md), t, t, c.id, c.rev);

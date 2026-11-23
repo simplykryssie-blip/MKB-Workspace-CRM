@@ -26,7 +26,7 @@ const money = (n: number) => n.toLocaleString("en-US", { style: "currency", curr
 type Me = { client: { name: string; firstName: string; type: string; email: string }; unread: number };
 type Todo = { id: string; kind: "tax_interview" | "books_intake" | "proposal" | "upload" | "books_task" | "pay"; title: string; detail?: string; service: string; ref: string; extra?: { taskId?: string; type?: string; period?: string } };
 type Home = Me & { services: { service: string; name: string; title: string; status: string; detail?: string }[]; todos: Todo[] };
-type Doc = { id: string; name: string; fileName?: string; secureForm?: boolean; ssnForm?: boolean; service: string; serviceName: string; category?: string; taxYear?: number; requestedAt?: string; uploadedAt?: string; uploadedBy?: string; status: string; hasFile: boolean };
+type Doc = { id: string; name: string; fileName?: string; secureForm?: boolean; ssnForm?: boolean; note?: string; again?: boolean; service: string; serviceName: string; category?: string; taxYear?: number; requestedAt?: string; uploadedAt?: string; uploadedBy?: string; status: string; hasFile: boolean };
 type Invoice = { id: string; number: string; description: string; service: string; issuedAt: string; dueAt: string; amount: number; paid: number; owed: number; status: string; bankProduct: boolean };
 type Msg = { id: string; from: "staff" | "client"; author: string; body: string; at: string; service?: string };
 
@@ -282,7 +282,7 @@ function DocumentsTab() {
         {data.requested.length ? data.requested.map((d) => (
           <Row key={d.id}>
             <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-warning-soft text-warning-ink"><Upload size={17} /></span>
-            <span className="min-w-0 flex-1"><span className="block text-[14.5px] font-semibold text-ink">{d.name}</span><span className="block text-[12.5px] text-muted">{d.taxYear ? `${d.taxYear} · ` : ""}{d.serviceName}{d.requestedAt ? ` · requested ${date(d.requestedAt)}` : ""}</span></span>
+            <span className="min-w-0 flex-1"><span className="block text-[14.5px] font-semibold text-ink">{d.again ? "Upload again: " : ""}{d.name}</span>{d.note && <span className="mt-0.5 block text-[13px] font-medium text-warning-ink">Note from MKB: {d.note}</span>}<span className="block text-[12.5px] text-muted">{d.taxYear ? `${d.taxYear} · ` : ""}{d.serviceName}{d.requestedAt ? ` · requested ${date(d.requestedAt)}` : ""}</span></span>
             <span className="ml-12 sm:ml-0">{d.ssnForm ? <SecureSsn doc={d.id} onDone={load} /> : d.secureForm ? <span className="text-[12.5px] text-muted">No upload needed — collected through your secure tax interview or form</span> : <UploadButton doc={d.id} onDone={load} />}</span>
           </Row>
         )) : <Empty icon={CheckCircle2}>Nothing requested right now.</Empty>}
