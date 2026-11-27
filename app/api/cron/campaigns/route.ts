@@ -5,7 +5,7 @@ import { processBookings } from "@/lib/server/booking";
 import { continueFileBackup } from "@/lib/server/backup";
 
 /**
- * Every 15 minutes (the worker's cron trigger, never a browser): starts
+ * Every 5 minutes (the worker's cron trigger, never a browser): starts
  * scheduled campaigns and sends what fits under today's email cap, then
  * frees unpaid booking holds and sends appointment reminders. It proves
  * itself with a key derived from the server's encryption key, so it needs no

@@ -32,6 +32,17 @@ export const fillIn = (t: string, vars: Record<string, string>) => t.replace(/\{
 
 export type CampaignStatus = "draft" | "scheduled" | "sending" | "sent" | "cancelled";
 export const STATUS_LABEL: Record<CampaignStatus, string> = { draft: "Draft", scheduled: "Scheduled", sending: "Sending", sent: "Sent", cancelled: "Cancelled" };
+/**
+ * What to show for a campaign: a finished campaign whose sends all failed is "Failed", and one with some
+ * failures is "Sent with errors" (not just "Sent").
+ */
+export function campaignBadge(status: CampaignStatus, stats?: { sent?: number; failed?: number }): { label: string; tone: "neutral" | "info" | "warning" | "success" | "danger" } {
+  const failed = stats?.failed ?? 0, sent = stats?.sent ?? 0;
+  if ((status === "sent" || status === "cancelled") && failed > 0 && sent === 0) return { label: "Failed", tone: "danger" };
+  if (status === "sent" && failed > 0) return { label: `Sent with errors (${failed} failed)`, tone: "warning" };
+  const tone = ({ draft: "neutral", scheduled: "info", sending: "warning", sent: "success", cancelled: "neutral" } as const)[status];
+  return { label: STATUS_LABEL[status], tone };
+}
 
 export type Campaign = {
   id: string; brand: Brand; channel: "email" | "sms"; name: string; content: Content; filters: Filters; status: CampaignStatus;

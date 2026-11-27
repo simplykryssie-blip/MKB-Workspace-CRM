@@ -140,10 +140,11 @@ export default {
     if (bridge.includes(url.hostname) && !CALC_PATH.test(url.pathname)) return fetch(request);
     return worker.fetch(request, { ...env, ASSETS: assetsFor(env) }, ctx);
   },
-  // Cron triggers. Every 15 minutes: campaigns (start scheduled ones, send what fits under the daily email cap),
+  // Cron triggers. Every 5 minutes: campaigns (start scheduled ones, send a capped batch per run — Cloudflare allows
+  // 50 outgoing requests per invocation — within the daily email cap), appointment reminders,
   // proven by a key derived from ENCRYPTION_KEY. Daily: automatic monthly bookkeeping invoices, proven by CRON_SECRET.
   async scheduled(event, env, ctx) {
-    if (event.cron === "*/15 * * * *") {
+    if (event.cron === "*/5 * * * *") {
       if (!env.ENCRYPTION_KEY) return;
       const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("cron-campaigns:" + env.ENCRYPTION_KEY));
       const key = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -174,7 +175,7 @@ const deployConfig = {
   r2_buckets: [...preview.r2_buckets, { binding: "STATIC", bucket_name: STATIC_BUCKET }],
   vars: preview.vars,
   // Once a day, 6:23 am Central (12:23 UTC): automatic monthly invoices. Every 15 minutes: campaigns.
-  triggers: { crons: ["23 12 * * *", "*/15 * * * *"] },
+  triggers: { crons: ["23 12 * * *", "*/5 * * * *"] },
 };
 writeFileSync(join(ROOT, `.open-next/wrangler.${ENV}.json`), JSON.stringify(deployConfig, null, 2));
 const deployArgs = ["wrangler", "deploy", "-c", `.open-next/wrangler.${ENV}.json`];

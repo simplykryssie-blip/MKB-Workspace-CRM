@@ -8,7 +8,7 @@
  *    mail apps through the List-Unsubscribe header) and the mailing address.
  *  - Sending stays inside the email provider's daily cap, keeping a reserve for
  *    intake links, receipts and other system emails. What doesn't fit today goes
- *    out with the next runs (every 15 minutes) as the cap allows.
+ *    out with the next runs (every 5 minutes, at most 40 sends per run) as the cap allows.
  *  - Only staff with Campaigns "Approve" can send or schedule (the Owner by default).
  * Server-only.
  */
@@ -479,8 +479,30 @@ export async function cancelCampaign(env: AppEnv, a: Actor, id: string) {
 }
 
 /**
- * Starts due campaigns (takes their audience) and sends queued emails within
- * today's room under the daily cap. Called on "Send now" and every 15 minutes.
+ * Outgoing requests (Resend / Twilio) one run may make. Cloudflare allows 50 per Worker invocation, and the
+ * same run also sends appointment reminders, so campaigns use at most 40; the rest wait for the next run
+ * (every 5 minutes). Before this cap, one run tried to send everything and the sends past the 50th failed.
+ */
+const SEND_BUDGET = 40;
+/** Cloudflare refused the request before it left: the message was never sent, so it can safely wait for the next run. */
+const notSent = (e: string | null) => !!e && /too many subrequests/i.test(e);
+type Rcpt = { id: string; address: string; name: string; contact_type: string; contact_id: string; vars: string };
+
+/**
+ * Claims up to n queued recipients for this run (so two runs never send the same message). A claim is the
+ * run's token in provider_id; claims older than 10 minutes (a run that crashed) can be taken again.
+ */
+async function claim(env: AppEnv, campaignId: string, n: number) {
+  const token = `claim:${now()}:${randomId("k")}`;
+  const stale = `claim:${new Date(Date.now() - 10 * 60e3).toISOString()}`;
+  await run(env.DB, "UPDATE campaign_recipients SET provider_id = ? WHERE id IN (SELECT id FROM campaign_recipients WHERE campaign_id = ? AND status = 'queued' AND (provider_id IS NULL OR provider_id < ?) ORDER BY rowid LIMIT ?)", token, campaignId, stale, n);
+  const rows = await all<Rcpt>(env.DB, "SELECT id, address, name, contact_type, contact_id, vars FROM campaign_recipients WHERE provider_id = ? AND status = 'queued'", token);
+  return { token, rows, release: () => run(env.DB, "UPDATE campaign_recipients SET provider_id = NULL WHERE provider_id = ? AND status = 'queued'", token) };
+}
+
+/**
+ * Starts due campaigns (takes their audience) and sends queued messages: within today's email room, and at
+ * most SEND_BUDGET outgoing requests per run. Called on "Send now" and every 5 minutes.
  */
 export async function processCampaigns(env: AppEnv, onlyId?: string) {
   const t = now();
@@ -494,46 +516,73 @@ export async function processCampaigns(env: AppEnv, onlyId?: string) {
   }
   const sending = await all<Row>(env.DB, `SELECT * FROM campaigns WHERE status = 'sending'${onlyId ? " AND id = ?" : ""} ORDER BY started_at`, ...(onlyId ? [onlyId] : []));
   let room = (await usageToday(env)).campaignRoom;
+  const budget = { left: SEND_BUDGET };
   for (const r of sending) {
     const s = await settingsFor(env, r.brand);
     const content = json<Content>(r.content, EMPTY_CONTENT);
-    if (r.channel === "sms") {
-      await sendTexts(env, r, content, s);
-    } else if (room > 0) {
-      const batch = await all<{ id: string; address: string; name: string; contact_type: string; contact_id: string; vars: string }>(env.DB, "SELECT id, address, name, contact_type, contact_id, vars FROM campaign_recipients WHERE campaign_id = ? AND status = 'queued' LIMIT ?", r.id, Math.min(room, 200));
+    if (budget.left > 0 && r.channel === "sms") {
+      await sendTexts(env, r, content, s, budget);
+    } else if (budget.left > 0 && room > 0) {
+      const c = await claim(env, r.id, Math.min(room, budget.left));
       const unsub = new Set((await all<{ address: string }>(env.DB, "SELECT address FROM marketing_consent WHERE brand = ? AND channel = 'email' AND status = 'unsubscribed'", r.brand)).map((x) => x.address));
-      for (const p of batch) {
-        if (unsub.has(p.address)) { await run(env.DB, "UPDATE campaign_recipients SET status = 'skipped', error = 'Unsubscribed' WHERE id = ?", p.id); continue; }
+      for (const p of c.rows) {
+        if (budget.left <= 0 || room <= 0) break;
+        if (unsub.has(p.address)) { await run(env.DB, "UPDATE campaign_recipients SET status = 'skipped', error = 'Unsubscribed', provider_id = NULL WHERE id = ?", p.id); continue; }
         const v = json<{ firstName?: string; businessName?: string }>(p.vars, {});
         const m = await renderFor(env, r.brand, content, s, { email: p.address, name: p.name, firstName: v.firstName ?? "", businessName: v.businessName ?? "", rid: p.id });
         const out = await deliver(env, s, p.address, `campaign:${r.id}`, m);
+        budget.left--;
+        if (notSent(out.error)) { budget.left = 0; break; } // stays queued for the next run
         room--;
         const at = now();
         await run(env.DB, "UPDATE campaign_recipients SET status = ?, error = ?, provider_id = ?, sent_at = ? WHERE id = ?", out.ok ? "sent" : "failed", out.error, out.providerId, out.ok ? at : null, p.id);
         if (out.ok) await timeline(env, p.contact_type, p.contact_id, `Marketing email sent: “${r.name}”`, at);
-        if (room <= 0) break;
       }
+      await c.release();
     }
     const left = (await one<{ n: number }>(env.DB, "SELECT count(*) AS n FROM campaign_recipients WHERE campaign_id = ? AND status = 'queued'", r.id))?.n ?? 0;
-    if (!left) await run(env.DB, "UPDATE campaigns SET status = 'sent', finished_at = ?, updated_at = ?, rev = rev + 1 WHERE id = ?", now(), now(), r.id);
+    if (!left) await run(env.DB, "UPDATE campaigns SET status = 'sent', finished_at = ?, updated_at = ?, rev = rev + 1 WHERE id = ? AND status = 'sending'", now(), now(), r.id);
   }
 }
 /** Text campaign: only people still opted in, only between 8am and 9pm where they live (the rest wait for the next run). */
-async function sendTexts(env: AppEnv, r: Row, content: Content, s: CampaignSettings) {
-  const batch = await all<{ id: string; address: string; name: string; contact_type: string; contact_id: string; vars: string }>(env.DB, "SELECT id, address, name, contact_type, contact_id, vars FROM campaign_recipients WHERE campaign_id = ? AND status = 'queued' LIMIT 300", r.id);
+async function sendTexts(env: AppEnv, r: Row, content: Content, s: CampaignSettings, budget: { left: number }) {
+  const c = await claim(env, r.id, Math.min(150, budget.left));
   const subscribed = new Set((await all<{ address: string }>(env.DB, "SELECT address FROM marketing_consent WHERE brand = ? AND channel = 'sms' AND status = 'subscribed'", r.brand)).map((x) => x.address));
-  let sent = 0;
-  for (const p of batch) {
-    if (!subscribed.has(p.address)) { await run(env.DB, "UPDATE campaign_recipients SET status = 'skipped', error = 'No longer opted in to texts' WHERE id = ?", p.id); continue; }
+  for (const p of c.rows) {
+    if (budget.left <= 0) break;
+    if (!subscribed.has(p.address)) { await run(env.DB, "UPDATE campaign_recipients SET status = 'skipped', error = 'No longer opted in to texts', provider_id = NULL WHERE id = ?", p.id); continue; }
     const v = json<{ firstName?: string; businessName?: string; state?: string }>(p.vars, {});
-    if (!quietHoursOk(v.state ?? "")) continue;
+    if (!quietHoursOk(v.state ?? "")) continue; // released below; goes out in a later run
     const body = smsText(fillIn(content.body, { "first name": v.firstName || "there", name: p.name || "there", "business name": v.businessName || p.name || "" }), s.fromName);
     const out = await sendText(env, { brand: r.brand, to: p.address, body, contact: { type: p.contact_type, id: p.contact_id }, campaignId: r.id, recipientId: p.id });
+    budget.left--;
+    if (notSent(out.error)) { budget.left = 0; break; } // stays queued for the next run
     const at = now();
-    await run(env.DB, "UPDATE campaign_recipients SET status = ?, error = ?, sent_at = ? WHERE id = ?", out.ok ? "sent" : "failed", out.error, out.ok ? at : null, p.id);
+    await run(env.DB, "UPDATE campaign_recipients SET status = ?, error = ?, provider_id = NULL, sent_at = ? WHERE id = ?", out.ok ? "sent" : "failed", out.error, out.ok ? at : null, p.id);
     if (out.ok) await timeline(env, p.contact_type, p.contact_id, `Marketing text sent: “${r.name}”`, at);
-    if (++sent >= 150) break;
   }
+  await c.release();
+}
+
+/**
+ * Staff choice only (never automatic): send again to the recipients whose send failed. Their consent is
+ * checked again when they're sent (opted-out people are skipped).
+ */
+export async function retryFailed(env: AppEnv, a: Actor, id: string) {
+  requirePermission(a, "campaigns", "approve");
+  requireStaff(a);
+  const r = await campaignRow(env, id);
+  if (r.status !== "sent" && r.status !== "sending") throw badRequest("Only a sent campaign's failed messages can be retried.");
+  const n = (await one<{ n: number }>(env.DB, "SELECT count(*) AS n FROM campaign_recipients WHERE campaign_id = ? AND status = 'failed'", id))?.n ?? 0;
+  if (!n) throw badRequest("Nothing failed — there's nothing to retry.");
+  const t = now();
+  await env.DB.batch([
+    env.DB.prepare("UPDATE campaign_recipients SET status = 'queued', error = NULL, provider_id = NULL, sent_at = NULL WHERE campaign_id = ? AND status = 'failed'").bind(id),
+    env.DB.prepare("UPDATE campaigns SET status = 'sending', finished_at = NULL, updated_at = ?, rev = rev + 1 WHERE id = ?").bind(t, id),
+  ]);
+  await audit(env.DB, a, { action: "Record update", resource: `Campaign ${r.name}`, meta: `Retrying ${n} failed ${r.channel === "sms" ? "text" : "email"}${n === 1 ? "" : "s"}` });
+  await processCampaigns(env, id);
+  return getCampaign(env, a, id);
 }
 async function timeline(env: AppEnv, type: string, id: string, text: string, at: string) {
   if (type === "lead") await run(env.DB, "INSERT INTO lead_activity (id, lead_id, kind, text, actor, at) VALUES (?, ?, 'lead', ?, 'system', ?)", randomId("x"), id, text, at);

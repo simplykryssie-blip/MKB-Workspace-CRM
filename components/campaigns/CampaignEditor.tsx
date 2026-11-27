@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CalendarClock, Copy, FlaskConical, Save, Send, Trash2, XCircle } from "lucide-react";
+import { CalendarClock, Copy, RotateCcw, FlaskConical, Save, Send, Trash2, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -13,7 +13,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useTeam } from "@/lib/store/team-store";
 import { call } from "@/lib/sync/remote";
 import { fmtDateTime } from "@/lib/format";
-import { BRANDS, FILL_INS, STATUS_LABEL, fillIn, fmtPhone, smsSegments, smsText, type Brand, type Campaign, type CampaignSettings, type Content, type Filters } from "@/lib/campaigns/config";
+import { BRANDS, FILL_INS, STATUS_LABEL, campaignBadge, fillIn, fmtPhone, smsSegments, smsText, type Brand, type Campaign, type CampaignSettings, type Content, type Filters } from "@/lib/campaigns/config";
 import { AudienceBuilder } from "./AudienceBuilder";
 import { campaignHref } from "./CampaignsCenter";
 
@@ -204,6 +204,11 @@ function Results({ d, base, reload }: { d: Loaded; base: string; reload: () => P
     if (!window.confirm(c.status === "scheduled" ? "Cancel the schedule? It goes back to a draft." : "Stop sending? Emails already sent can't be recalled; the rest won't go out.")) return;
     try { await call("POST", `/api/campaigns/${c.id}/cancel`); await reload(); } catch (e) { toast(e instanceof Error ? e.message : "Couldn't stop", "info"); }
   };
+  const retry = async () => {
+    const what = sms ? `text${s.failed === 1 ? "" : "s"}` : `email${s.failed === 1 ? "" : "s"}`;
+    if (!window.confirm(`Send again to the ${s.failed} ${what} that failed?${sms ? " They'll get this same text message." : ""} People who opted out are skipped. Anyone already sent this isn't sent it again.`)) return;
+    try { await call("POST", `/api/campaigns/${c.id}/retry`); toast(`Retrying ${s.failed} failed ${what}`); await reload(); } catch (e) { toast(e instanceof Error ? e.message : "Couldn't retry", "info"); }
+  };
   const copy = async () => {
     try { const r = await call<{ campaign: Campaign }>("POST", "/api/campaigns", { brand: c.brand, name: `${c.name} (copy)`, copyOf: c.id }); router.push(campaignHref(c.brand, r.campaign.id)); } catch (e) { toast(e instanceof Error ? e.message : "Couldn't copy", "info"); }
   };
@@ -213,13 +218,14 @@ function Results({ d, base, reload }: { d: Loaded; base: string; reload: () => P
   const href = (r: Recipient) => (r.contact_type === "lead" ? `/leads/${r.contact_id}` : r.contact_type === "client" ? `/clients/${r.contact_id}` : r.contact_type === "office" ? `/monarch/offices/${r.contact_id}` : null);
   return (
     <>
-      <PageHeader title={c.name} subtitle={<span className="flex flex-wrap items-center gap-2"><Badge tone={TONE[c.status]}>{STATUS_LABEL[c.status]}</Badge>{c.status === "scheduled" && c.scheduledAt ? `Goes out ${fmtDateTime(c.scheduledAt)}` : c.finishedAt ? `Finished ${fmtDateTime(c.finishedAt)}` : c.startedAt ? `Started ${fmtDateTime(c.startedAt)}` : ""} · {sms ? "Text message" : `Subject: ${c.content.subject}`}</span>}
+      <PageHeader title={c.name} subtitle={<span className="flex flex-wrap items-center gap-2">{(() => { const b = campaignBadge(c.status, s); return <Badge tone={b.tone}>{b.label}</Badge>; })()}{c.status === "scheduled" && c.scheduledAt ? `Goes out ${fmtDateTime(c.scheduledAt)}` : c.finishedAt ? `Finished ${fmtDateTime(c.finishedAt)}` : c.startedAt ? `Started ${fmtDateTime(c.startedAt)}` : ""} · {sms ? "Text message" : `Subject: ${c.content.subject}`}</span>}
         crumbs={[{ label: "Campaigns", href: base }, { label: c.name }]}
         actions={<div className="flex flex-wrap gap-2">
           {(c.status === "scheduled" || c.status === "sending") && team.can("campaigns", "approve") && <Button icon={XCircle} onClick={() => void stop()}>{c.status === "scheduled" ? "Cancel schedule" : "Stop sending"}</Button>}
+          {c.status === "sent" && s.failed > 0 && team.can("campaigns", "approve") && <Button icon={RotateCcw} onClick={() => void retry()}>Retry {s.failed} failed</Button>}
           {team.can("campaigns", "create") && <Button icon={Copy} onClick={() => void copy()}>Copy to new campaign</Button>}
         </div>} />
-      {c.status === "sending" && s.queued > 0 && <p className="mb-4 rounded-xl border border-line bg-surface px-4 py-2.5 text-[13px] text-ink-2">{s.queued} still waiting — they go out automatically {sms ? "between 8am and 9pm where each person lives" : "as your daily email limit allows"} (checked every 15 minutes).</p>}
+      {c.status === "sending" && s.queued > 0 && <p className="mb-4 rounded-xl border border-line bg-surface px-4 py-2.5 text-[13px] text-ink-2">{s.queued} still waiting — they go out automatically {sms ? "between 8am and 9pm where each person lives" : "as your daily email limit allows"} (checked every 5 minutes).</p>}
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-6">
         {(sms ? ([["Recipients", s.total], ["Sent", s.sent], ["Delivered", `${s.delivered ?? 0} · ${pct(s.delivered ?? 0)}`], ["Replied", s.replied ?? 0], ["Waiting", s.queued], ["Failed / skipped", s.failed + s.skipped]] as const) : ([["Recipients", s.total], ["Sent", s.sent], ["Opened", `${s.opened} · ${pct(s.opened)}`], ["Clicked", `${s.clicked} · ${pct(s.clicked)}`], ["Unsubscribed", s.unsubscribed], ["Failed / skipped", s.failed + s.skipped]] as const)).map(([l, v]) => <Card key={l} className="p-4"><p className="text-[12px] text-muted">{l}</p><p className="mt-1 text-[20px] font-bold text-ink">{v}</p></Card>)}
       </div>

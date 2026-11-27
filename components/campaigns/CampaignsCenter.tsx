@@ -16,11 +16,10 @@ import { Kpi } from "@/components/biz/BizBits";
 import { useTeam } from "@/lib/store/team-store";
 import { BACKEND, call } from "@/lib/sync/remote";
 import { fmtDateTime, relTime } from "@/lib/format";
-import { BRANDS, DEFAULT_FILTERS, STATUS_LABEL, type Brand, type Campaign, type CampaignSettings, type Content, type Filters } from "@/lib/campaigns/config";
+import { BRANDS, DEFAULT_FILTERS, campaignBadge, type Brand, type Campaign, type CampaignSettings, type Content, type Filters } from "@/lib/campaigns/config";
 import { AudienceBuilder, audienceSummary } from "./AudienceBuilder";
 
 export const campaignHref = (brand: Brand, id: string) => `${brand === "monarch" ? "/monarch" : ""}/campaigns/${id}`;
-const TONE = { draft: "neutral", scheduled: "info", sending: "warning", sent: "success", cancelled: "neutral" } as const;
 type Usage = { sentToday: number; dailyLimit: number; reserve: number; campaignRoom: number };
 const pct = (n: number, d: number) => (d ? `${Math.round((n / d) * 100)}%` : "—");
 
@@ -75,7 +74,7 @@ function CampaignList({ brand, list, loading }: { brand: Brand; list: Campaign[]
                 <span className="block truncate text-[12.5px] text-muted">{c.channel === "sms" ? c.content.body.slice(0, 60) || "No message yet" : c.content.subject || "No subject yet"} · {c.status === "scheduled" && c.scheduledAt ? `scheduled ${fmtDateTime(c.scheduledAt)}` : c.status === "sent" && c.finishedAt ? `sent ${relTime(c.finishedAt)}` : `edited ${relTime(c.updatedAt)}`}</span>
               </span>
               {c.stats && c.stats.total > 0 && <span className="text-[12.5px] text-muted">{c.stats.sent}/{c.stats.total} sent · {c.channel === "sms" ? `${c.stats.delivered ?? 0} delivered · ${c.stats.replied ?? 0} replied` : `${pct(c.stats.opened, c.stats.sent)} opened · ${pct(c.stats.clicked, c.stats.sent)} clicked`}</span>}
-              <Badge tone={TONE[c.status]}>{STATUS_LABEL[c.status]}</Badge>
+              {(() => { const b = campaignBadge(c.status, c.stats); return <Badge tone={b.tone}>{b.label}</Badge>; })()}
             </Link>
           </li>
         ))}
