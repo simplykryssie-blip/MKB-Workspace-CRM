@@ -1,8 +1,9 @@
 "use client";
 
+import { ImagePicker } from "./ImagePicker";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CalendarClock, Copy, RotateCcw, FlaskConical, Save, Send, Trash2, XCircle } from "lucide-react";
+import { CalendarClock, Copy, ImagePlus, RotateCcw, FlaskConical, Save, Send, Trash2, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -67,6 +68,7 @@ function Draft({ d, base, reload, setD }: { d: Loaded; base: string; reload: () 
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [picking, setPicking] = useState<null | "top" | "body">(null);
   const [testTo, setTestTo] = useState("");
   const [sending, setSending] = useState<null | "now" | "later">(null);
   const [when, setWhen] = useState("");
@@ -77,6 +79,15 @@ function Draft({ d, base, reload, setD }: { d: Loaded; base: string; reload: () 
   const sms = c.channel === "sms";
   useEffect(() => { call<{ audiences: typeof audiences }>("GET", `/api/campaigns/audiences?brand=${c.brand}`).then((r) => setAudiences(r.audiences)).catch(() => {}); }, [c.brand]);
   const set = (patch: Partial<Content>) => { setContent((x) => ({ ...x, ...patch })); setDirty(true); };
+  /** Puts a photo line where the cursor is in the message (on its own line, with blank lines around it). */
+  const insertPhoto = (url: string, alt: string) => {
+    const el = document.getElementById("ce-body") as HTMLTextAreaElement | null;
+    const body = content.body;
+    const at = el && el.selectionStart != null ? el.selectionStart : body.length;
+    const before = body.slice(0, at).replace(/\s+$/, ""), after = body.slice(at).replace(/^\s+/, "");
+    const line = `![${alt.replace(/[\[\]\n]/g, " ").trim()}](${url})`;
+    set({ body: [before, line, after].filter(Boolean).join("\n\n") });
+  };
 
   const save = async (quiet = false) => {
     try {
@@ -145,19 +156,30 @@ function Draft({ d, base, reload, setD }: { d: Loaded; base: string; reload: () 
           </Card>
           ) : (
           <Card>
-            <CardHeader title="2. The email" subtitle={`Fill-ins: ${FILL_INS.map((x) => `{${x}}`).join(" ")}. Blank line = new paragraph · "- " = bullet · **bold**`} />
+            <CardHeader title="2. The email" subtitle={`Fill-ins: ${FILL_INS.map((x) => `{${x}}`).join(" ")}. Blank line = new paragraph · "- " = bullet · **bold** · photos: Insert photo`} />
             <fieldset disabled={!canEdit} className="min-w-0 space-y-3 border-t border-line px-5 py-4 sm:px-6">
               <TextField label="Campaign name (only you see this)" value={name} onChange={(e) => { setName(e.target.value); setDirty(true); }} />
               <TextField label="Subject line" required value={content.subject} onChange={(e) => set({ subject: e.target.value })} placeholder="e.g. {first name}, tax season is open" />
               <TextField label="Preview text (shown after the subject in the inbox)" value={content.preheader ?? ""} onChange={(e) => set({ preheader: e.target.value })} />
               <TextField label="Headline" value={content.heading ?? ""} onChange={(e) => set({ heading: e.target.value })} />
-              <label className="block"><span className="mb-1.5 block text-[13px] font-medium text-ink-2">Message <span className="text-danger">*</span></span>
-                <textarea value={content.body} onChange={(e) => set({ body: e.target.value })} rows={12} className="w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-[14px] leading-relaxed text-ink focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15" placeholder={"Hi {first name},\n\nWrite your message here.\n\n- A bullet point\n- Another one"} /></label>
+              <div className="flex items-end justify-between gap-2"><span className="text-[13px] font-medium text-ink-2">Message <span className="text-danger">*</span></span>{canEdit && <Button size="sm" icon={ImagePlus} onClick={() => setPicking("body")}>Insert photo</Button>}</div>
+              <label className="block"><span className="sr-only">Message</span>
+                <textarea id="ce-body" value={content.body} onChange={(e) => set({ body: e.target.value })} rows={12} className="w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-[14px] leading-relaxed text-ink focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/15" placeholder={"Hi {first name},\n\nWrite your message here.\n\n- A bullet point\n- Another one"} /></label>
               <div className="grid gap-3 sm:grid-cols-2">
                 <TextField label="Button text" value={content.buttonLabel ?? ""} onChange={(e) => set({ buttonLabel: e.target.value })} placeholder="e.g. Book a consultation" />
                 <TextField label="Button link (https://…)" value={content.buttonUrl ?? ""} onChange={(e) => set({ buttonUrl: e.target.value })} placeholder="https://www.mkbfinancialgroup.com/book-consultation" />
               </div>
-              <TextField label="Picture at the top (optional) — paste a link from Website → Media library" value={content.image ?? ""} onChange={(e) => set({ image: e.target.value })} placeholder="https://www.mkbfinancialgroup.com/site/media/…" />
+              <div>
+                <span className="mb-1.5 block text-[13px] font-medium text-ink-2">Picture at the top (optional)</span>
+                {content.image ? (
+                  <div className="flex flex-wrap items-center gap-3 rounded-xl border border-line p-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={content.image} alt={content.imageAlt || "Top picture"} className="h-16 w-28 rounded-lg object-cover" />
+                    <span className="min-w-0 flex-1 truncate text-[12.5px] text-muted">{content.imageAlt || "No description"}</span>
+                    {canEdit && <><Button size="sm" onClick={() => setPicking("top")}>Change</Button><Button size="sm" variant="ghost" onClick={() => set({ image: "", imageAlt: "" })}>Remove</Button></>}
+                  </div>
+                ) : canEdit && <Button icon={ImagePlus} onClick={() => setPicking("top")}>Choose a picture</Button>}
+              </div>
             </fieldset>
           </Card>
           )}
@@ -171,6 +193,7 @@ function Draft({ d, base, reload, setD }: { d: Loaded; base: string; reload: () 
         </div>
       </div>
 
+      <ImagePicker brand={c.brand} open={!!picking} title={picking === "top" ? "Picture at the top" : "Insert a photo"} onClose={() => setPicking(null)} onPick={(url, alt) => (picking === "top" ? set({ image: url, imageAlt: alt }) : insertPhoto(url, alt))} />
       <Modal open={testing} onClose={() => setTesting(false)} title="Send a test" description={sms ? "A copy marked [Test] to your mobile. Tests don't count as sends." : "A copy marked [Test] — to your email unless you enter another address. Tests don't count as sends."}
         footer={<><Button onClick={() => setTesting(false)}>Cancel</Button><Button variant="primary" icon={FlaskConical} disabled={busy} onClick={() => void test()}>{busy ? "Sending…" : "Send test"}</Button></>}>
         {sms ? <TextField label="Your mobile number" type="tel" value={testTo} onChange={(e) => setTestTo(e.target.value)} placeholder="(318) 555-0123" /> : <TextField label="Send the test to (leave blank for you)" type="email" value={testTo} onChange={(e) => setTestTo(e.target.value)} />}

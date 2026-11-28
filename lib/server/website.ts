@@ -200,7 +200,7 @@ const IMAGE_TYPES: Record<string, string> = { "image/png": "png", "image/jpeg": 
 const MEDIA_MAX = 10_000_000;
 export type MediaItem = { key: string; url: string; name: string; contentType: string; size: number; uploadedAt: string; updatedAt?: string };
 
-async function readImage(req: Request) {
+export async function readImage(req: Request) {
   const type = (req.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
   const ext = IMAGE_TYPES[type];
   if (!ext) throw new HttpError(415, "Upload a PNG, JPG, WebP or GIF image.", "bad_type");

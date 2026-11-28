@@ -23,7 +23,7 @@ export const DEFAULT_FILTERS: Record<Brand, Filters> = {
 };
 
 /** The email: written in plain words; blank lines start new paragraphs, "- " starts a bullet, **bold**. */
-export type Content = { subject: string; preheader?: string; heading?: string; body: string; buttonLabel?: string; buttonUrl?: string; image?: string };
+export type Content = { subject: string; preheader?: string; heading?: string; body: string; buttonLabel?: string; buttonUrl?: string; image?: string; /** Describes the top picture (shown when email images are turned off). */ imageAlt?: string };
 export const EMPTY_CONTENT: Content = { subject: "", preheader: "", heading: "", body: "", buttonLabel: "", buttonUrl: "", image: "" };
 
 /** Personal fill-ins: {first name}, {name}, {business name}. */
@@ -62,11 +62,26 @@ const inline = (s: string) => esc(s)
   .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
   .replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)])/g, '<a href="$1" style="color:#8a5f1d">$1</a>');
 
-/** Paragraphs and bullet lists from plain text. */
+/** A photo on its own line: ![description](https://…). The editor's "Insert photo" writes these. */
+export const PHOTO_LINE = /^!\[([^\]\n]*)\]\((https:\/\/[^)\s]+)\)$/;
+const photoHtml = (alt: string, src: string) =>
+  `<p style="margin:0 0 16px"><img src="${esc(src)}" width="552" alt="${esc(alt)}" style="display:block;width:100%;max-width:552px;height:auto;border:0;border-radius:8px"></p>`;
+/** Plain-text version of a message: photos become "[Photo: description]". */
+export const bodyText = (body: string) => body.replace(/^!\[([^\]\n]*)\]\((https:\/\/[^)\s]+)\)$/gm, (_m, alt: string) => (alt.trim() ? `[Photo: ${alt.trim()}]` : "[Photo]"));
+
+/** Paragraphs, bullet lists and photos from plain text. */
 function bodyHtml(body: string) {
   return body.split(/\n\s*\n/).map((block) => {
     const lines = block.split("\n").map((l) => l.trim()).filter(Boolean);
     if (!lines.length) return "";
+    // Photo lines can sit next to text in the same block: each becomes its own photo.
+    if (lines.some((l) => PHOTO_LINE.test(l))) {
+      const out: string[] = []; let para: string[] = [];
+      const flush = () => { if (para.length) out.push(`<p style="margin:0 0 14px">${para.map(inline).join("<br>")}</p>`); para = []; };
+      for (const l of lines) { const m = l.match(PHOTO_LINE); if (m) { flush(); out.push(photoHtml(m[1], m[2])); } else para.push(l); }
+      flush();
+      return out.join("");
+    }
     if (lines.every((l) => /^[-•]\s+/.test(l))) return `<ul style="margin:0 0 14px;padding-left:20px">${lines.map((l) => `<li style="margin:0 0 6px">${inline(l.replace(/^[-•]\s+/, ""))}</li>`).join("")}</ul>`;
     return `<p style="margin:0 0 14px">${lines.map(inline).join("<br>")}</p>`;
   }).join("");
@@ -92,7 +107,7 @@ ${c.preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden">
 <tr><td style="background:#0b0b0b;padding:20px 24px">${logo}</td></tr>
 <tr><td style="height:4px;background:#b87912;background-image:linear-gradient(115deg,#6e4105,#b87912,#f7d77f,#a96808,#ffe7a1,#b87912,#6e4105)"></td></tr>
-${c.image ? `<tr><td><img src="${esc(c.image)}" width="600" alt="" style="display:block;width:100%;height:auto;border:0"></td></tr>` : ""}
+${c.image ? `<tr><td><img src="${esc(c.image)}" width="600" alt="${esc(c.imageAlt ?? "")}" style="display:block;width:100%;height:auto;border:0"></td></tr>` : ""}
 <tr><td style="padding:26px 24px;font-size:15px;line-height:1.6">
 ${c.heading ? `<h1 style="font:500 26px/1.2 Georgia,serif;margin:0 0 14px">${esc(f(c.heading))}</h1>` : ""}
 ${body}${btn}
@@ -100,7 +115,7 @@ ${body}${btn}
 <tr><td style="background:#0b0b0b;color:#aaaaaa;font-size:12px;padding:16px 24px;line-height:1.6"><b style="color:#f6d37a">${esc(o.settings.fromName)}</b><br>${esc(o.settings.mailingAddress).replace(/\n/g, "<br>")}<br><br>${esc(reason)} <a href="${esc(o.unsubscribeUrl)}" style="color:#f6d37a">Unsubscribe</a></td></tr>
 </table></td></tr></table>${o.openPixelUrl ? `<img src="${esc(o.openPixelUrl)}" width="1" height="1" alt="" style="display:block;border:0">` : ""}</body></html>`;
   const text = [
-    ...(c.heading ? [f(c.heading), ""] : []), f(c.body), "",
+    ...(c.heading ? [f(c.heading), ""] : []), bodyText(f(c.body)), "",
     ...(c.buttonLabel && c.buttonUrl ? [`${f(c.buttonLabel)}: ${c.buttonUrl}`, ""] : []),
     "—", o.settings.fromName, o.settings.mailingAddress, "", `${reason} Unsubscribe: ${o.unsubscribeUrl}`,
   ].join("\n");

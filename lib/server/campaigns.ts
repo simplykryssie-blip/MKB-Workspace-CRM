@@ -12,6 +12,7 @@
  *  - Only staff with Campaigns "Approve" can send or schedule (the Owner by default).
  * Server-only.
  */
+import { readImage } from "./website";
 import { BRANDS, DEFAULT_FILTERS, EMPTY_CONTENT, fillIn, quietHoursOk, renderCampaign, smsText, type Brand, type Campaign, type CampaignSettings, type Content, type Filters } from "@/lib/campaigns/config";
 import { all, badRequest, HttpError, isDev, json, notFound, now, one, run, type AppEnv } from "./core";
 import { randomId, sha256 } from "./crypto";
@@ -261,12 +262,42 @@ export async function deleteAudience(env: AppEnv, a: Actor, id: string) {
   return listAudiences(env, a, r.brand);
 }
 
+/* ---- campaign images (stored in the website media library, served publicly at /site/media/) */
+/** Where email images are served from: the website domain in production; this app's own address on preview (which has no website domain). */
+function mediaBase(env: AppEnv) {
+  if (env.WEBSITE_HOSTS) return publicAssetOrigin(env);
+  return ((env as { APP_ORIGINS?: string }).APP_ORIGINS ?? "").split(",")[0]?.trim() || env.APP_ORIGIN || publicAssetOrigin(env);
+}
+type MediaRow = { key: string; name: string; content_type: string; size: number; uploaded_at: string };
+const imageOut = (env: AppEnv, r: MediaRow) => ({ key: r.key, name: r.name, contentType: r.content_type, size: r.size, uploadedAt: r.uploaded_at, url: `${mediaBase(env)}/site/media/${r.key}` });
+/** Photos to pick from: everything in this brand's media library (newest first). */
+export async function campaignImages(env: AppEnv, a: Actor, brand: string) {
+  requirePermission(a, "campaigns", "view");
+  if (!isBrand(brand)) throw badRequest("Unknown brand.");
+  const rows = await all<MediaRow>(env.DB, "SELECT key, name, content_type, size, uploaded_at FROM website_media WHERE site = ? AND deleted_at IS NULL AND content_type LIKE 'image/%' ORDER BY uploaded_at DESC LIMIT 300", brand);
+  return { images: rows.map((r) => imageOut(env, r)) };
+}
+/** Upload a photo for a campaign (raw image body, x-file-name header). It's added to the brand's media library too. */
+export async function uploadCampaignImage(env: AppEnv, a: Actor, req: Request, brand: string) {
+  requirePermission(a, "campaigns", "edit");
+  requireStaff(a);
+  if (!isBrand(brand)) throw badRequest("Unknown brand.");
+  const { type, ext, buf } = await readImage(req);
+  const key = `${randomId("img").replace("img_", "").replace(/[^A-Za-z0-9_-]/g, "x")}.${ext}`;
+  await env.FILES.put(`website/${key}`, buf, { httpMetadata: { contentType: type, cacheControl: "public, max-age=300" } });
+  const name = decodeURIComponent(req.headers.get("x-file-name") ?? "").replace(/[\u0000-\u001f]/g, "").trim().slice(0, 200) || key;
+  const t = now();
+  await run(env.DB, "INSERT INTO website_media (key, content_type, size, name, uploaded_at, uploaded_by, site) VALUES (?, ?, ?, ?, ?, ?, ?)", key, type, buf.byteLength, name, t, a.member.id, brand);
+  await audit(env.DB, a, { action: "Record update", resource: `Campaign image ${name}`, meta: `Uploaded (${Math.round(buf.byteLength / 1024)} KB) for email campaigns` });
+  return { image: imageOut(env, { key, name, content_type: type, size: buf.byteLength, uploaded_at: t }) };
+}
+
 /* ---- templates */
 function cleanContent(v: unknown): Content {
   const o = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
   const s = (k: string, max: number) => (typeof o[k] === "string" ? (o[k] as string).slice(0, max) : "");
   const url = (k: string) => { const u = s(k, 1000).trim(); return /^https:\/\/[^\s]+$/i.test(u) || u === "" ? u : "INVALID"; };
-  const c: Content = { subject: s("subject", 200), preheader: s("preheader", 200), heading: s("heading", 200), body: s("body", 20_000), buttonLabel: s("buttonLabel", 60), buttonUrl: url("buttonUrl"), image: url("image") };
+  const c: Content = { subject: s("subject", 200), preheader: s("preheader", 200), heading: s("heading", 200), body: s("body", 20_000), buttonLabel: s("buttonLabel", 60), buttonUrl: url("buttonUrl"), image: url("image"), imageAlt: s("imageAlt", 200) };
   if (c.buttonUrl === "INVALID") throw badRequest("The button link must start with https://");
   if (c.image === "INVALID") throw badRequest("The image link must start with https:// (copy it from the Media library).");
   return c;
