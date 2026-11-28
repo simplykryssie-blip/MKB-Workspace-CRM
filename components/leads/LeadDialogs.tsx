@@ -599,7 +599,8 @@ export function ConvertDialog({ lead, open, onClose, onConverted }: { lead: Lead
             <li className="flex items-center gap-1.5"><User size={13} className="text-muted" /> Contact {lead.type === "business" ? "& business" : ""} details</li>
             <li className="flex items-center gap-1.5"><Tag size={13} className="text-muted" /> Source: {lead.source}{lead.sourceDetail ? ` — ${lead.sourceDetail}` : ""}</li>
             <li className="flex items-center gap-1.5"><NotebookPen size={13} className="text-muted" /> {pinned} note{pinned === 1 ? "" : "s"}</li>
-            <li className="flex items-center gap-1.5"><History size={13} className="text-muted" /> {lead.activity.length} activity entries (also kept on the lead)</li>
+            <li className="flex items-center gap-1.5"><History size={13} className="text-muted" /> {lead.activity.length} activity entries</li>
+            <li className="flex items-start gap-1.5 sm:col-span-2"><ArrowRight size={13} className="mt-0.5 shrink-0 text-muted" /> Texts, tasks, appointments and campaign history move to the client too. The lead then becomes part of the client — no separate lead contact is kept.</li>
           </ul>
         </div>
 

@@ -181,6 +181,13 @@ export async function moneyVaultReport(env: AppEnv, a: Actor) {
   const leadIds = [...new Set(subs.map((x) => x.lead_id).filter((x): x is string => !!x))];
   const inList = (n: number) => Array(n).fill("?").join(",") || "''";
   const leads = leadIds.length ? await all<{ id: string; status: string; stage_position: number; converted_client_id: string | null }>(db, `SELECT l.id, l.status, COALESCE(s.position, 0) AS stage_position, l.converted_client_id FROM leads l LEFT JOIN lead_stages s ON s.id = l.stage_id WHERE l.id IN (${inList(leadIds.length)})`, ...leadIds) : [];
+  // Leads who became clients were folded into the client; their conversions stand in for them.
+  const have = new Set(leads.map((l) => l.id));
+  const gone = leadIds.filter((x) => !have.has(x));
+  for (let i = 0; i < gone.length; i += 90) {
+    const ids = gone.slice(i, i + 90);
+    for (const c of await all<{ lead_id: string; client_id: string }>(db, `SELECT lead_id, client_id FROM lead_conversions WHERE lead_id IN (${inList(ids.length)})`, ...ids)) leads.push({ id: c.lead_id, status: "converted", stage_position: 0, converted_client_id: c.client_id });
+  }
   const qualifiedPos = (await one<{ position: number }>(db, "SELECT position FROM lead_stages WHERE lower(name) = 'qualified'"))?.position ?? 2;
   const stages = await all<{ id: string; name: string; position: number }>(db, "SELECT id, name, position FROM lead_stages ORDER BY position");
   // Clients: converted leads, plus existing clients who came back through the page.

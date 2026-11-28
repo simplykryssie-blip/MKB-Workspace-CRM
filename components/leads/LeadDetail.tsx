@@ -5,7 +5,7 @@ import { ContactCalendar } from "@/components/calendar/ContactCalendar";
 import { LeadIntakesCard, useLeadIntakes } from "./LeadIntakes";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AtSign,
   BellPlus,
@@ -60,8 +60,12 @@ export function LeadDetail({ id }: { id: string }) {
   const [kind, setKind] = useState<ActivityKind | "all">("all");
   const [showDone, setShowDone] = useState(false);
   const intakes = useLeadIntakes(id);
+  const conversion = store.conversions.find((c) => c.leadId === id);
+  useEffect(() => { if (!lead && conversion) router.replace(`/clients/${conversion.clientId}`); }, [lead, conversion, router]);
 
   if (!lead && !store.ready) return <div className="grid min-h-[50vh] place-items-center text-[14px] text-muted" role="status">Loading…</div>;
+  // A converted lead is part of its client now: old links open the client.
+  if (!lead && conversion) return <div className="grid min-h-[50vh] place-items-center text-[14px] text-muted" role="status">This lead is now a client — opening their profile…</div>;
   if (!lead)
     return (
       <div className="grid min-h-[50vh] place-items-center text-center">

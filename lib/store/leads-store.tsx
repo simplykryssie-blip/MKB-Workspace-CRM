@@ -11,11 +11,11 @@ import { DEFAULT_SOURCES, DEFAULT_STAGES, LEADS } from "@/lib/sample/leads";
 import { staffById, meId } from "@/lib/sample/clients";
 import { DEFAULT_FEES, defaultTitleFor, nowIso, useClients, type NewClientInput } from "@/lib/store/clients-store";
 import { SERVICES } from "@/lib/sample-data";
-import type { ActivityItem, ActivityKind, Lead, LeadPriority, LeadStage, Note, ServiceKey } from "@/lib/types";
+import type { ActivityItem, ActivityKind, Lead, LeadConversion, LeadPriority, LeadStage, Note, ServiceKey } from "@/lib/types";
 
 const uid = (p: string) => `${p}-${Math.random().toString(36).slice(2, 9)}`;
 
-type State = { leads: Lead[]; stages: LeadStage[]; sources: string[]; pendingRemap?: { from: string; to: string } };
+type State = { leads: Lead[]; stages: LeadStage[]; sources: string[]; conversions: LeadConversion[]; pendingRemap?: { from: string; to: string } };
 type Action =
   | { type: "reset" }
   | { type: "add"; lead: Lead }
@@ -23,12 +23,13 @@ type Action =
   | { type: "updateMany"; ids: string[]; fn: (l: Lead) => Lead }
   | { type: "stages"; stages: LeadStage[]; remap?: { from: string; to: string } }
   | { type: "sources"; sources: string[] }
-  | { type: "hydrate"; leads: Lead[]; stages: LeadStage[]; sources: string[]; known: Set<string> }
+  | { type: "hydrate"; leads: Lead[]; stages: LeadStage[]; sources: string[]; conversions: LeadConversion[]; known: Set<string> }
+  | { type: "absorbed"; conversion: LeadConversion }
   | { type: "replace"; lead: Lead }
   | { type: "remove"; id: string };
 
 // With the backend on, leads load from the server after sign-in (never sample data).
-const init = (): State => (BACKEND ? { leads: [], stages: structuredClone(DEFAULT_STAGES), sources: [...DEFAULT_SOURCES] } : { leads: structuredClone(LEADS), stages: structuredClone(DEFAULT_STAGES), sources: [...DEFAULT_SOURCES] });
+const init = (): State => (BACKEND ? { leads: [], stages: structuredClone(DEFAULT_STAGES), sources: [...DEFAULT_SOURCES], conversions: [] } : { leads: structuredClone(LEADS), stages: structuredClone(DEFAULT_STAGES), conversions: [], sources: [...DEFAULT_SOURCES] });
 
 function reducer(s: State, a: Action): State {
   switch (a.type) {
@@ -43,8 +44,11 @@ function reducer(s: State, a: Action): State {
     case "hydrate": {
       // Keep leads created here that haven't reached the server yet.
       const local = s.leads.filter((l) => !a.leads.some((x) => x.id === l.id) && !a.known.has(l.id));
-      return { leads: [...local, ...a.leads], stages: a.stages, sources: a.sources };
+      return { leads: [...local, ...a.leads], stages: a.stages, sources: a.sources, conversions: a.conversions };
     }
+    case "absorbed":
+      // The lead became part of its client: it leaves the leads list (only the conversion stays, for reports and old links).
+      return { ...s, leads: s.leads.filter((l) => l.id !== a.conversion.leadId), conversions: [a.conversion, ...s.conversions.filter((c) => c.leadId !== a.conversion.leadId)] };
     case "remove":
       return { ...s, leads: s.leads.filter((l) => l.id !== a.id) };
     case "replace":
@@ -186,7 +190,8 @@ function makeActions(dispatch: React.Dispatch<Action>, get: () => State, clients
       const lead = get().leads.find((l) => l.id === id)!;
       const existing = clients.clients.find((c) => c.id === clientId);
       services.forEach((s) => clients.enroll(clientId, { service: s, title: titles?.[s]?.trim() || defaultTitleFor(s, existing?.type, existing?.business?.entityType), staffId, fee: DEFAULT_FEES[s] }));
-      lead.notes.forEach((n) => clients.addNote(clientId, `From lead ${lead.id}: ${n.body}`));
+      // With the backend on, the server copies the lead's notes and history onto the client when it merges them.
+      if (!BACKEND) lead.notes.forEach((n) => clients.addNote(clientId, `From lead ${lead.id}: ${n.body}`));
       up(id, (l) => log({ ...l, status: "converted", convertedClientId: clientId, convertedAt: nowIso(), reminders: l.reminders.map((r) => ({ ...r, done: true })) }, "lead", "Merged into existing client record"));
     },
 
@@ -264,10 +269,10 @@ function useLeadSync(state: State, dispatch: React.Dispatch<Action>, clientsRef:
 
   const reloadAll = useCallback(async () => {
     try {
-      const r = await call<{ leads: RevLead[]; stages: LeadStage[]; sources: string[] }>("GET", "/api/leads");
+      const r = await call<{ leads: RevLead[]; stages: LeadStage[]; sources: string[]; conversions?: LeadConversion[] }>("GET", "/api/leads");
       r.leads.forEach((l) => { revs.current.set(l.id, l.rev ?? 1); synced.current.set(l.id, l); });
       // "known" = leads the server had before: if they're gone now (e.g. no longer visible), drop them.
-      dispatch({ type: "hydrate", leads: r.leads, stages: r.stages, sources: r.sources, known: new Set(revs.current.keys()) });
+      dispatch({ type: "hydrate", leads: r.leads, stages: r.stages, sources: r.sources, conversions: r.conversions ?? [], known: new Set(revs.current.keys()) });
       settingsSynced.current = { stages: r.stages, sources: r.sources };
       return r;
     } catch (e) {
@@ -292,16 +297,19 @@ function useLeadSync(state: State, dispatch: React.Dispatch<Action>, clientsRef:
         if (l.status === "converted" && prev?.status !== "converted" && l.convertedClientId) {
           // Wait for the new client to exist on the server, then record the conversion.
           const client = clientsRef.current?.clients.find((c) => c.id === l.convertedClientId);
-          const convert = () => call<{ lead: RevLead }>("POST", `/api/leads/${id}/convert`, { clientId: l.convertedClientId, merged: client?.leadId !== id });
-          let r: { lead: RevLead } | undefined;
+          const convert = () => call<{ converted: true; clientId: string }>("POST", `/api/leads/${id}/convert`, { clientId: l.convertedClientId, merged: client?.leadId !== id });
+          let r: { converted: true; clientId: string } | undefined;
           // The new client's own save may not have started yet: wait for it, and retry while it's still being created.
           for (let i = 0; !r; i++) {
             await new Promise((ok) => setTimeout(ok, i ? 1500 : 0));
             await pendingClientCreates.get(l.convertedClientId);
             try { r = await convert(); } catch (e) { if (!(e instanceof RemoteError && e.status === 404) || i >= 5) throw e; }
           }
-          revs.current.set(id, r.lead.rev ?? 1);
-          synced.current.set(id, { ...l, status: "converted" });
+          // The server folded the lead into the client and removed the lead record.
+          revs.current.delete(id);
+          synced.current.delete(id);
+          dispatch({ type: "absorbed", conversion: { leadId: id, clientId: r.clientId, merged: client?.leadId !== id, source: l.sourceDetail ? `${l.source} — ${l.sourceDetail}` : l.source, createdAt: l.createdAt, convertedAt: l.convertedAt ?? nowIso() } });
+          return;
         }
         const r = await call<{ lead: RevLead }>("PUT", `/api/leads/${id}`, { lead: { ...l, rev: revs.current.get(id) } });
         revs.current.set(id, r.lead.rev ?? 1);

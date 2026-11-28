@@ -4,5 +4,5 @@ import { markConverted } from "@/lib/server/leads";
 
 export const POST = handle<{ id: string }>(async (req, env, { id }) => {
   const b = await body(req);
-  return jsonResponse({ lead: await markConverted(env, await authenticate(env, req), id, str(b.clientId, 60), b.merged === true) });
+  return jsonResponse(await markConverted(env, await authenticate(env, req), id, str(b.clientId, 60), b.merged === true));
 });

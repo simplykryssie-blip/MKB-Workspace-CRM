@@ -31,7 +31,8 @@ export function FormsCenter() {
   const [creating, setCreating] = useState(false);
   const recent = forms.submissions.filter((s) => SAMPLE_NOW.getTime() - new Date(s.at).getTime() < 30 * 86400000);
   const leadIds = new Set(forms.submissions.filter((s) => s.leadId && s.outcome !== "spam").map((s) => s.leadId!));
-  const converted = leads.leads.filter((l) => leadIds.has(l.id) && l.status === "converted").length;
+  // Converted leads are folded into their client, so count them from the conversions as well.
+  const converted = new Set([...leads.leads.filter((l) => leadIds.has(l.id) && l.status === "converted").map((l) => l.id), ...leads.conversions.filter((c) => leadIds.has(c.leadId)).map((c) => c.leadId)]).size;
   const canEdit = team.can("leads", "edit");
   return (
     <>

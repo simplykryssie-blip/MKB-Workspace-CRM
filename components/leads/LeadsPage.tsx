@@ -48,7 +48,7 @@ export function LeadsPage() {
   const clientStore = useClients();
   const router = useRouter();
   const toast = useToast();
-  const { leads, stages, sources } = store;
+  const { leads, stages, sources, conversions } = store;
 
   const [view, setView] = useState<View>("board");
   const [q, setQ] = useState("");
@@ -128,8 +128,10 @@ export function LeadsPage() {
   const weekAgo = new Date(SAMPLE_NOW);
   weekAgo.setDate(weekAgo.getDate() - 7);
   const newThisWeek = leads.filter((l) => l.createdAt >= weekAgo.toISOString()).length;
-  const closed = leads.filter((l) => l.status !== "open");
-  const convRate = closed.length ? Math.round((leads.filter((l) => l.status === "converted").length / closed.length) * 100) : 0;
+  // Converted leads are folded into their client (they leave this list); their conversions still count here.
+  const convertedCount = conversions.length + leads.filter((l) => l.status === "converted").length;
+  const closedCount = convertedCount + leads.filter((l) => l.status === "lost").length;
+  const convRate = closedCount ? Math.round((convertedCount / closedCount) * 100) : 0;
   const pipeline = open.reduce((s, l) => s + l.estValue, 0);
 
   const exportCsv = (rows: Lead[]) => {
@@ -157,7 +159,7 @@ export function LeadsPage() {
     { label: "Follow-ups due", value: String(due.length), icon: BellRing, tone: due.length ? "text-warning-ink" : "", onClick: () => { reset(); setFollow("due"); } },
     // Intake tracker: every lead received in the last 7 days, whatever happened to it since.
     { label: "Leads received (7 days)", value: String(newThisWeek), icon: Sparkles, onClick: () => { reset(); setStatus("all"); setSort("newest"); } },
-    { label: "Conversion rate", value: `${convRate}%`, icon: Percent, onClick: () => { reset(); setStatus("converted"); } },
+    { label: `Conversion rate · ${convertedCount} became clients`, value: `${convRate}%`, icon: Percent, onClick: () => router.push("/clients") },
     { label: "Pipeline value", value: usd(pipeline), icon: CircleDollarSign, onClick: () => { reset(); setSort("value"); } },
   ];
 
@@ -217,7 +219,7 @@ export function LeadsPage() {
             <Sel label="Sort" icon value={sort} onChange={(v) => setSort(v as SortKey)} options={[["follow", "Follow-up"], ["priority", "Priority"], ["newest", "Newest"], ["value", "Value"], ["name", "Name A–Z"]]} />
           </div>
           <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-            <Sel label="Status" value={status} onChange={(v) => setStatus(v as LeadStatus | "all")} options={[["open", "Open"], ["converted", "Converted"], ["lost", "Lost"], ["all", "All statuses"]]} />
+            <Sel label="Status" value={status} onChange={(v) => setStatus(v as LeadStatus | "all")} options={[["open", "Open"], ...(leads.some((l) => l.status === "converted") ? [["converted", "Converted"] as [string, string]] : []), ["lost", "Lost"], ["all", "All statuses"]]} />
             {view === "list" && <Sel label="Stage" value={stage} onChange={setStage} options={[["all", "All stages"], ...stages.map((s) => [s.id, s.name] as [string, string])]} />}
             <Sel label="Source" value={source} onChange={setSource} options={[["all", "All sources"], ...[...new Set([...sources, ...leads.map((l) => l.source)])].map((s) => [s, s] as [string, string])]} />
             <Sel label="Assigned to" value={owner} onChange={setOwner} options={[["all", "All staff"], ...staffList().map((s) => [s.id, s.name] as [string, string])]} />
@@ -236,7 +238,7 @@ export function LeadsPage() {
           <span className="inline-flex items-center gap-1.5">
             <Filter size={13} /> Showing <strong className="text-ink-2">{filtered.length}</strong> {status === "all" ? "" : `${status} `}lead{filtered.length === 1 ? "" : "s"}
             {status !== "all" && leads.length - leads.filter((l) => l.status === status).length > 0 && (
-              <span>· {leads.length - leads.filter((l) => l.status === status).length} {status === "open" ? "converted or lost" : "other"} hidden by the Status filter</span>
+              <span>· {leads.length - leads.filter((l) => l.status === status).length} {status === "open" ? "lost" : "other"} hidden by the Status filter</span>
             )}
           </span>
           {view === "board" && <span className="hidden sm:inline">Drag cards between stages, or use a card&rsquo;s ⋯ menu</span>}

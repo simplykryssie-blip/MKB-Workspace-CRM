@@ -216,7 +216,7 @@ function makeStore(dispatch: React.Dispatch<Action>, getNextInvoice: () => numbe
           ...(input.fromLead ? [{ id: uid("x"), kind: "lead" as const, text: `Converted from lead ${input.fromLead.leadId}`, at, actor: "staff" as const }] : []),
           ...(input.invite ? [{ id: uid("x"), kind: "message" as const, text: "Portal invitation sent", at, actor: "system" as const }] : []),
           { id: uid("x"), kind: "intake", text: "Client record created", at, actor: "staff" },
-          // Full lead history travels with the client (and stays on the lead too).
+          // Full lead history travels with the client (the server then folds the lead into the client).
           ...(input.fromLead ? input.fromLead.activity.map((a) => ({ ...a, id: uid("x"), text: `Lead: ${a.text}` })) : []),
         ],
       };

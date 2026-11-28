@@ -270,3 +270,6 @@ export type Lead = {
   convertedClientId?: string;
   convertedAt?: string;
 };
+
+/** A lead who became a client. The lead record itself is folded into the client; only this remains (for reports and old links). */
+export type LeadConversion = { leadId: string; clientId: string; merged: boolean; source: string; createdAt: string; convertedAt: string };

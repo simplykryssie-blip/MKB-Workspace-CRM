@@ -3,7 +3,7 @@
  * owner "assign"; pipeline stages and sources "settings". Converting a lead needs
  * Leads "edit" plus permission to create (or edit) the client. Server-only.
  */
-import type { ActivityItem, Lead, LeadReminder, LeadStage, Note, ServiceKey } from "@/lib/types";
+import type { ActivityItem, Lead, LeadConversion, LeadReminder, LeadStage, Note, ServiceKey } from "@/lib/types";
 import { canDo } from "@/lib/team/policy";
 import { all, badRequest, forbidden, HttpError, json, notFound, now, one, type AppEnv, type Db } from "./core";
 import { audit, requirePermission, type Actor } from "./identity";
@@ -41,12 +41,14 @@ async function loadLeads(db: Db, where = "", ...args: unknown[]): Promise<LeadSn
 
 export async function listLeads(env: AppEnv, a: Actor) {
   requirePermission(a, "leads", "view");
-  const [leads, stages, sources] = await Promise.all([
+  const [leads, stages, sources, conv] = await Promise.all([
     loadLeads(env.DB),
     all<LeadStage & { position: number }>(env.DB, "SELECT id, name, position FROM lead_stages ORDER BY position"),
     all<{ name: string }>(env.DB, "SELECT name FROM lead_sources ORDER BY position"),
+    all<{ lead_id: string; client_id: string; merged: number; source: string; lead_created_at: string; converted_at: string }>(env.DB, "SELECT lead_id, client_id, merged, source, lead_created_at, converted_at FROM lead_conversions ORDER BY converted_at DESC"),
   ]);
-  return { leads, stages: stages.map(({ id, name }) => ({ id, name })), sources: sources.map((x) => x.name) };
+  const conversions: LeadConversion[] = conv.map((r) => ({ leadId: r.lead_id, clientId: r.client_id, merged: r.merged === 1, source: r.source, createdAt: r.lead_created_at, convertedAt: r.converted_at }));
+  return { leads, stages: stages.map(({ id, name }) => ({ id, name })), sources: sources.map((x) => x.name), conversions };
 }
 async function getLead(env: AppEnv, a: Actor, id: string) {
   requirePermission(a, "leads", "view");
@@ -154,26 +156,58 @@ export async function saveLead(env: AppEnv, a: Actor, id: string, next: LeadSnap
 }
 
 /**
- * Marks a lead converted to a client that already exists (created from this
- * lead, or an existing client the lead was merged into).
+ * A lead who became a client is folded into the client, so the person has one contact, not a visible
+ * client plus a hidden lead. Notes and history are copied (skipping ones the conversion already copied);
+ * texts, tasks, appointments, campaign sends, form submissions, prizes and bell links move to the client;
+ * then the lead record is removed. Only the conversion itself is kept (lead_conversions — no contact
+ * details) for reports and to send old lead links to the client.
+ */
+export function absorbStatements(db: Db, leadId: string, clientId: string, merged: boolean, t = now()): D1PreparedStatement[] {
+  return [
+    db.prepare("INSERT OR IGNORE INTO lead_conversions (lead_id, client_id, merged, source, stage_id, tags, interests, owner_id, lead_created_at, converted_at) SELECT id, ?, ?, source, stage_id, tags, interests, owner_id, created_at, COALESCE(converted_at, ?) FROM leads WHERE id = ?").bind(clientId, merged ? 1 : 0, t, leadId),
+    db.prepare("INSERT OR IGNORE INTO client_notes (id, client_id, author_id, body, service, pinned, at) SELECT 'n_' || n.id, ?, n.author_id, n.body, NULL, n.pinned, n.at FROM lead_notes n WHERE n.lead_id = ? AND n.deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM client_notes c WHERE c.client_id = ? AND c.deleted_at IS NULL AND (c.body = n.body OR c.body = 'From lead ' || n.lead_id || ': ' || n.body))").bind(clientId, leadId, clientId),
+    db.prepare("INSERT OR IGNORE INTO client_activity (id, client_id, kind, text, actor, member_id, at) SELECT 'la_' || x.id, ?, 'lead', 'Lead: ' || x.text, x.actor, x.member_id, x.at FROM lead_activity x WHERE x.lead_id = ? AND NOT EXISTS (SELECT 1 FROM client_activity c WHERE c.client_id = ? AND c.text = 'Lead: ' || x.text AND c.at = x.at)").bind(clientId, leadId, clientId),
+    db.prepare("UPDATE form_submissions SET client_id = COALESCE(client_id, ?) WHERE lead_id = ?").bind(clientId, leadId),
+    db.prepare("UPDATE funnel_prizes SET client_id = COALESCE(client_id, ?) WHERE lead_id = ?").bind(clientId, leadId),
+    ...["sms_messages", "tasks", "appointments", "campaign_recipients"].map((tb) => db.prepare(`UPDATE ${tb} SET contact_type = 'client', contact_id = ? WHERE contact_type = 'lead' AND contact_id = ?`).bind(clientId, leadId)),
+    db.prepare("UPDATE notifications SET href = ? WHERE href = ?").bind(`/clients/${clientId}`, `/leads/${leadId}`),
+    db.prepare("DELETE FROM lead_reminders WHERE lead_id = ?").bind(leadId),
+    db.prepare("DELETE FROM lead_notes WHERE lead_id = ?").bind(leadId),
+    db.prepare("DELETE FROM lead_activity WHERE lead_id = ?").bind(leadId),
+    db.prepare("DELETE FROM leads WHERE id = ?").bind(leadId),
+  ];
+}
+
+/** Where a merged lead went (for old links and a late "convert" call). */
+export async function conversionOf(env: AppEnv, a: Actor, id: string) {
+  requirePermission(a, "leads", "view");
+  const r = await one<{ client_id: string; converted_at: string }>(env.DB, "SELECT client_id, converted_at FROM lead_conversions WHERE lead_id = ?", id);
+  return r ? { leadId: id, clientId: r.client_id, convertedAt: r.converted_at } : null;
+}
+
+/**
+ * Converts a lead to a client that already exists (created from this lead, or an existing client the
+ * lead was merged into): the lead is folded into the client and removed.
  */
 export async function markConverted(env: AppEnv, a: Actor, id: string, clientId: string, merged: boolean) {
   requirePermission(a, "leads", "edit");
   if (a.kind !== "staff") throw forbidden();
   requirePermission(a, "crm", merged ? "edit" : "create");
+  const done = await conversionOf(env, a, id);
+  if (done) return { converted: true as const, clientId: done.clientId };
   const lead = await getLead(env, a, id);
-  if (lead.status === "converted") return lead;
   const client = await one<{ id: string; lead_id: string | null }>(env.DB, "SELECT id, lead_id FROM clients WHERE id = ?", clientId);
   if (!client) throw notFound("Client not found.");
-  if (!merged && client.lead_id !== id) throw badRequest("That client wasn't created from this lead.");
+  if (lead.status === "converted") clientId = lead.convertedClientId ?? clientId;
+  else if (!merged && client.lead_id !== id) throw badRequest("That client wasn't created from this lead.");
   const t = now();
   await env.DB.batch([
-    env.DB.prepare("UPDATE leads SET status = 'converted', converted_client_id = ?, converted_at = ?, rev = rev + 1, last_activity_at = ? WHERE id = ?").bind(clientId, t, t, id),
-    env.DB.prepare("UPDATE lead_reminders SET done = 1 WHERE lead_id = ?").bind(id),
-    env.DB.prepare("INSERT INTO lead_activity (id, lead_id, kind, text, actor, member_id, at) VALUES (?, ?, 'lead', ?, 'staff', ?, ?)").bind(`x_${crypto.randomUUID()}`, id, merged ? `Merged into existing client ${clientId}` : `Converted to client ${clientId}`, a.member.id, t),
+    env.DB.prepare("UPDATE leads SET status = 'converted', converted_client_id = ?, converted_at = COALESCE(converted_at, ?), rev = rev + 1, last_activity_at = ? WHERE id = ?").bind(clientId, t, t, id),
+    ...(lead.status === "converted" ? [] : [env.DB.prepare("INSERT INTO lead_activity (id, lead_id, kind, text, actor, member_id, at) VALUES (?, ?, 'lead', ?, 'staff', ?, ?)").bind(`x_${crypto.randomUUID()}`, id, merged ? "Merged into an existing client" : "Converted to client", a.member.id, t)]),
+    ...absorbStatements(env.DB, id, clientId, merged, t),
   ]);
-  await audit(env.DB, a, { action: "Record update", resource: `Lead ${id}`, meta: merged ? `Merged into client ${clientId}` : `Converted to client ${clientId}` });
-  return getLead(env, a, id);
+  await audit(env.DB, a, { action: "Record update", resource: `Lead ${id}`, meta: merged ? `Merged into client ${clientId}; lead record removed` : `Converted to client ${clientId}; lead record removed` });
+  return { converted: true as const, clientId };
 }
 
 /** Pipeline stages and sources. Removing a stage moves its leads to another stage. */

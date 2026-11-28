@@ -150,6 +150,10 @@ async function contacts(env: AppEnv, brand: Brand, f: Filters): Promise<Contact[
       const rows = await all<{ id: string; type: string; name: string; contact_name: string | null; email: string; phone: string; address: string | null; tags: string; interests: string; stage_id: string; status: string; converted_client_id: string | null }>(env.DB, "SELECT id, type, name, contact_name, email, phone, address, tags, interests, stage_id, status, converted_client_id FROM leads");
       // A lead who became a client is that client: use the client's current email, phone and details (the
       // lead record keeps whatever it had when they converted — e.g. an email later corrected on the client).
+      // Leads who converted were folded into their client; the conversion keeps the lead's stage, tags and
+      // interests so a lead audience still reaches them (as the client).
+      const folded = await all<{ lead_id: string; client_id: string; stage_id: string | null; tags: string; interests: string }>(env.DB, "SELECT lead_id, client_id, stage_id, tags, interests FROM lead_conversions");
+      for (const c of folded) rows.push({ id: c.lead_id, type: "individual", name: "", contact_name: null, email: "", phone: "", address: null, tags: c.tags, interests: c.interests, stage_id: c.stage_id ?? "", status: "converted", converted_client_id: c.client_id });
       const convertedIds = [...new Set(rows.map((r) => r.converted_client_id).filter((x): x is string => !!x))];
       const conv = new Map<string, { id: string; type: string; name: string; contact_name: string | null; email: string | null; phone: string | null; address: string | null; status: string }>();
       for (let i = 0; i < convertedIds.length; i += 90) {
@@ -157,15 +161,16 @@ async function contacts(env: AppEnv, brand: Brand, f: Filters): Promise<Contact[
         for (const c of await all<{ id: string; type: string; name: string; contact_name: string | null; email: string | null; phone: string | null; address: string | null; status: string }>(env.DB, `SELECT id, type, name, contact_name, email, phone, address, status FROM clients WHERE id IN (${ids.map(() => "?").join(",")})`, ...ids)) conv.set(c.id, c);
       }
       for (const r of rows) {
-        const st = json<Record<string, string>>(r.address, {}).state ?? "";
-        if (!any(f.leads.statuses, [r.status]) || !any(f.leads.stages, [r.stage_id]) || !any(f.leads.tags, json<string[]>(r.tags, [])) || !any(f.leads.services, json<string[]>(r.interests, [])) || !inStates(f, st)) continue;
         const cl = r.converted_client_id ? conv.get(r.converted_client_id) : undefined;
+        const st = (cl ? json<Record<string, string>>(cl.address, {}).state : undefined) || (json<Record<string, string>>(r.address, {}).state ?? "");
+        if (!any(f.leads.statuses, [r.status]) || !any(f.leads.stages, [r.stage_id]) || !any(f.leads.tags, json<string[]>(r.tags, [])) || !any(f.leads.services, json<string[]>(r.interests, [])) || !inStates(f, st)) continue;
         if (cl) {
           if (cl.status === "declined") continue;
           const person = cl.type === "business" ? cl.contact_name || cl.name : cl.name;
-          out.push({ type: "client", id: cl.id, name: person, firstName: firstOf(person), businessName: cl.type === "business" ? cl.name : "", email: cl.email ?? "", phone: cl.phone ?? "", state: json<Record<string, string>>(cl.address, {}).state ?? st });
+          out.push({ type: "client", id: cl.id, name: person, firstName: firstOf(person), businessName: cl.type === "business" ? cl.name : "", email: cl.email ?? "", phone: cl.phone ?? "", state: st });
           continue;
         }
+        if (!r.email && !r.phone) continue; // a folded lead whose client no longer exists
         const person = r.type === "business" ? r.contact_name || r.name : r.name;
         out.push({ type: "lead", id: r.id, name: person, firstName: firstOf(person), businessName: r.type === "business" ? r.name : "", email: r.email, phone: r.phone, state: st });
       }
