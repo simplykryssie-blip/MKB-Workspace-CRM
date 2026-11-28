@@ -147,10 +147,25 @@ async function contacts(env: AppEnv, brand: Brand, f: Filters): Promise<Contact[
   const out: Contact[] = [];
   if (brand === "mkb") {
     if (f.leads?.on) {
-      const rows = await all<{ id: string; type: string; name: string; contact_name: string | null; email: string; phone: string; address: string | null; tags: string; interests: string; stage_id: string; status: string }>(env.DB, "SELECT id, type, name, contact_name, email, phone, address, tags, interests, stage_id, status FROM leads");
+      const rows = await all<{ id: string; type: string; name: string; contact_name: string | null; email: string; phone: string; address: string | null; tags: string; interests: string; stage_id: string; status: string; converted_client_id: string | null }>(env.DB, "SELECT id, type, name, contact_name, email, phone, address, tags, interests, stage_id, status, converted_client_id FROM leads");
+      // A lead who became a client is that client: use the client's current email, phone and details (the
+      // lead record keeps whatever it had when they converted — e.g. an email later corrected on the client).
+      const convertedIds = [...new Set(rows.map((r) => r.converted_client_id).filter((x): x is string => !!x))];
+      const conv = new Map<string, { id: string; type: string; name: string; contact_name: string | null; email: string | null; phone: string | null; address: string | null; status: string }>();
+      for (let i = 0; i < convertedIds.length; i += 90) {
+        const ids = convertedIds.slice(i, i + 90);
+        for (const c of await all<{ id: string; type: string; name: string; contact_name: string | null; email: string | null; phone: string | null; address: string | null; status: string }>(env.DB, `SELECT id, type, name, contact_name, email, phone, address, status FROM clients WHERE id IN (${ids.map(() => "?").join(",")})`, ...ids)) conv.set(c.id, c);
+      }
       for (const r of rows) {
         const st = json<Record<string, string>>(r.address, {}).state ?? "";
         if (!any(f.leads.statuses, [r.status]) || !any(f.leads.stages, [r.stage_id]) || !any(f.leads.tags, json<string[]>(r.tags, [])) || !any(f.leads.services, json<string[]>(r.interests, [])) || !inStates(f, st)) continue;
+        const cl = r.converted_client_id ? conv.get(r.converted_client_id) : undefined;
+        if (cl) {
+          if (cl.status === "declined") continue;
+          const person = cl.type === "business" ? cl.contact_name || cl.name : cl.name;
+          out.push({ type: "client", id: cl.id, name: person, firstName: firstOf(person), businessName: cl.type === "business" ? cl.name : "", email: cl.email ?? "", phone: cl.phone ?? "", state: json<Record<string, string>>(cl.address, {}).state ?? st });
+          continue;
+        }
         const person = r.type === "business" ? r.contact_name || r.name : r.name;
         out.push({ type: "lead", id: r.id, name: person, firstName: firstOf(person), businessName: r.type === "business" ? r.name : "", email: r.email, phone: r.phone, state: st });
       }
@@ -199,8 +214,8 @@ async function resolve(env: AppEnv, brand: Brand, f: Filters, channel: "email" |
       if (ph.length !== 10) { sk.noPhone++; continue; }
       if (out.has(ph)) { sk.unsubscribed++; continue; }
       if (!sub.has(ph)) { sk.notSubscribed++; continue; }
-      if (seenP.has(ph)) { sk.duplicate++; continue; }
-      seenP.add(ph);
+      if (seenP.has(ph) || seenP.has(`${c.type}:${c.id}`)) { sk.duplicate++; continue; }
+      seenP.add(ph); seenP.add(`${c.type}:${c.id}`);
       sendP.push({ ...c, email: ph });
     }
     return { send: sendP, skipped: sk };
@@ -214,8 +229,9 @@ async function resolve(env: AppEnv, brand: Brand, f: Filters, channel: "email" |
     const e = c.email.trim().toLowerCase();
     if (!EMAIL_RE.test(e)) { skipped.noEmail++; continue; }
     if (unsub.has(e)) { skipped.unsubscribed++; continue; }
-    if (seen.has(e)) { skipped.duplicate++; continue; }
-    seen.add(e);
+    // The same person once (a client reached through both filters), and the same address once.
+    if (seen.has(e) || seen.has(`${c.type}:${c.id}`)) { skipped.duplicate++; continue; }
+    seen.add(e); seen.add(`${c.type}:${c.id}`);
     send.push({ ...c, email: e });
   }
   return { send, skipped };
