@@ -17,6 +17,8 @@ const OLD_PATHS: Record<string, string> = {
   "/about-mkb": "/about", "/about-us": "/about", "/mkb-financial-group": "/",
   // Retired pages: the old calculator page (now part of /tax-calculator), resources and the WISP builder (sold by Monarch Tax Suite).
   "/calculator": "/tax-calculator", "/resources": "/", "/wisp-builder": "https://www.monarchtaxsuite.com/store",
+  // The printed flyers' QR code opens a Jotform "choose your pathway" page that sends people to these old pages.
+  "/individual-schedule-c": "/f/start-tax-prep", "/corporate-business-return": "/f/start-tax-prep", "/book-a-consultation": "/book-consultation",
 };
 const STAFF_FREE = /^\/(api|embed\/|login|portal(\/|$)|campaigns\/|f\/|i\/|u\/|w\/|site(\/|$)|msite(\/|$)|_next|brand|favicon|icon|apple-icon)/;
 
